@@ -71,6 +71,14 @@ Use runtime schemas such as Zod or Valibot. JSON responses in UAT should validat
 
 Use real Postgres. Use `vercel-labs/emulate` for GitHub, Slack, and AWS when testing external service behavior.
 
+Current local policy:
+
+- `pnpm test` runs deterministic tests without Postgres.
+- `pnpm test:integration` runs Postgres-backed integration tests and requires `TEST_DATABASE_URL`.
+- `docker compose up -d postgres` starts local Postgres and creates both `flue` and `flue_test`.
+- Integration tests apply migrations to `flue_test` and truncate app tables between tests.
+- Testcontainers is deferred until we need fully hermetic per-run databases.
+
 Harness responsibilities:
 
 ```txt

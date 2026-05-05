@@ -31,6 +31,37 @@ repo_credentials
 webhook_sources
 ```
 
+## Implementation Stages
+
+The data model below is the target product model. It is intentionally broader than the current scaffold.
+
+Current implemented tables:
+
+- `sessions`
+- `messages`
+- `events`
+- `session_sequence_counters`
+- `app_migrations`
+
+Planned tables:
+
+- `runs`
+- `sandboxes`
+- `artifacts`
+- `flue_sessions`
+- `external_threads`
+- `integration_deliveries`
+- `message_callbacks`
+- `repo_credentials`
+- `webhook_sources`
+
+Identifier policy:
+
+- Product entity IDs are application-generated UUID strings. SQL tables should use `uuid` columns once the table participates in production behavior.
+- Flue-owned IDs are `text` because their format is owned by Flue.
+- Provider/external IDs are `text` because their format is owned by the provider.
+- Per-session cursor sequences should be allocated by database-backed counters or equivalent transactional logic, not by counting rows in application memory.
+
 ## Sessions
 
 Represents a durable background task workspace.
@@ -329,6 +360,7 @@ Rules:
 - Use a custom Postgres-backed Flue session store in production and CI.
 - Do not rely on Flue's Node in-memory default outside local experiments.
 - Product state remains in `sessions`, `messages`, `runs`, `events`, `artifacts`, and `sandboxes`.
+- Do not create this table until `runner-flue` is implemented; the current Postgres `AppStore` is product-state persistence only.
 
 See [Flue Persistence](./flue-persistence.md) for details.
 
@@ -477,10 +509,14 @@ Append message:
 ```txt
 begin
   find/create session
-  insert message with next sequence
-  insert message_created event with next event sequence
+  allocate next message sequence from durable per-session counter
+  insert message
+  allocate next event sequence from durable per-session counter
+  insert message_created event
 commit
 ```
+
+The current scaffold has separate `AppStore` calls for sequence allocation and insert. The Postgres implementation keeps sequence allocation safe through `session_sequence_counters`; the worker phase should move multi-step message/run transitions into explicit transactions where atomic state transitions matter.
 
 Claim message:
 

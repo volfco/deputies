@@ -7,6 +7,7 @@ describe('loadConfig', () => {
       runMode: 'all',
       runner: 'fake',
       sandboxProvider: 'fake',
+      appStore: 'memory',
       flueSessionStore: 'postgres',
     });
   });
@@ -18,6 +19,8 @@ describe('loadConfig', () => {
         RUN_MODE: 'worker',
         RUNNER: 'flue',
         SANDBOX_PROVIDER: 'kubernetes',
+        APP_STORE: 'postgres',
+        DATABASE_URL: 'postgres://example',
         FLUE_SESSION_STORE: 'memory',
       }),
     ).toMatchObject({
@@ -25,6 +28,8 @@ describe('loadConfig', () => {
       runMode: 'worker',
       runner: 'flue',
       sandboxProvider: 'kubernetes',
+      appStore: 'postgres',
+      databaseUrl: 'postgres://example',
       flueSessionStore: 'memory',
     });
   });

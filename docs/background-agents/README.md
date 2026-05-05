@@ -18,7 +18,7 @@ The goal is a deployable background coding-agent service that can start as a sin
 
 ## Core Principles
 
-1. Flue is the agent harness, not the whole product.
+1. Flue is the agent runtime, not the whole product.
 2. The control plane uses portable primitives: Node, Postgres, HTTP, SSE/WebSockets, and S3-compatible object storage.
 3. One deployable service comes first. Module boundaries must still allow later API/worker split.
 4. Durable state lives in Postgres, not memory or cloud-specific actors.
@@ -60,6 +60,26 @@ Flue is more than a low-level model SDK. The product should use these Flue capab
 The product control plane still owns the things Flue does not provide on portable Node deployments: durable work queues, run leases, retry/recovery, external integrations, callback delivery, product event replay, artifacts, sandbox lifecycle records, credential policy, and UI/API state.
 
 For Node deployments, Flue can generate a standalone server with `/agents/:name/:id`, live SSE, and custom session persistence. Our portable service should embed or delegate to those capabilities, not recreate the harness. The product endpoints still exist because they add durable background-work semantics that Flue's generated Node server does not provide by itself.
+
+## Current Implementation Status
+
+The current scaffold has implemented the first durable product-state seam:
+
+- TypeScript Node service with memory-backed unit tests.
+- Core session/message/event HTTP loop.
+- Docker Compose Postgres for local development.
+- SQL migration runner.
+- Postgres-backed `AppStore` for `sessions`, `messages`, `events`, and per-session sequence counters.
+- Separate `test:integration` path gated by `TEST_DATABASE_URL`.
+
+The following MVP pieces are still planned, not implemented:
+
+- worker loop, runs, and session leases;
+- SSE event streaming;
+- Postgres-backed Flue `SessionStore`;
+- real `runner-flue` adapter;
+- sandbox lifecycle persistence and a real sandbox provider;
+- integration ingress/egress adapters.
 
 ## MVP Target
 

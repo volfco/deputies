@@ -173,6 +173,7 @@ Invariants:
 - Domain modules depend on store interfaces, not SQL details.
 - Store code does not import domain services.
 - Product state and Flue runtime state are stored separately.
+- Memory storage is for deterministic tests and local experiments; durable product behavior uses Postgres.
 
 Modules:
 
@@ -243,7 +244,9 @@ src/sessions/service.ts     # session domain operations
 src/messages/service.ts     # message queue operations
 src/events/service.ts       # append/replay events
 src/store/types.ts          # persistence port
-src/store/memory.ts         # temporary adapter
+src/store/memory.ts         # deterministic test/local adapter
+src/store/postgres.ts       # durable product state adapter
+src/db/migrations           # SQL migrations
 src/runner/types.ts         # runner port
 src/sandbox/types.ts        # sandbox provider port
 ```

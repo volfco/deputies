@@ -48,7 +48,7 @@ RUN_MODE=api       # API only, future split
 RUN_MODE=worker    # Worker only, future split
 ```
 
-The code must behave correctly with multiple replicas even when deployed in `RUN_MODE=all`. Postgres leases and locks are required from the beginning.
+The code must behave correctly with multiple replicas even when deployed in `RUN_MODE=all`. Any code path that allocates durable work or processes work must use Postgres-backed concurrency controls from its first implementation. The current store already uses database-backed per-session sequence counters; run leases are introduced with the worker/runs phase.
 
 ## Flue Node Deployment Implications
 
@@ -164,7 +164,7 @@ integrations -> sessions/messages/events/prompts/auth
 runner-flue -> events/sandbox/prompts
 sandbox -> store/config
 sessions/messages/runs/events/artifacts -> store
-store -> postgres driver only
+store -> postgres driver + shared record/event types
 ```
 
 Forbidden dependencies:
@@ -173,11 +173,11 @@ Forbidden dependencies:
 api -> runner-flue
 integrations -> runner-flue
 runner-flue -> api
-store -> domain modules
+store -> domain services
 sessions/messages -> integration-specific modules
 ```
 
-Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and makes tests easier.
+Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and makes tests easier. Store implementations may import shared data types, but must not import session/message/event service classes.
 
 `runner-flue` must also provide or configure a Postgres-backed Flue session store. Flue's Node default is in-memory and is not acceptable for production, CI, UAT, or multi-replica deployments. Product state and Flue runtime state are separate but both must be durable.
 

@@ -1,5 +1,28 @@
 # Roadmap
 
+## Current Status
+
+Implemented so far:
+
+- Core TypeScript service scaffold.
+- Config parser and health endpoint.
+- Core session/message/event modules.
+- HTTP routes for creating sessions, enqueueing messages, and replaying events.
+- Memory-backed `AppStore` for deterministic unit tests.
+- Docker Compose local Postgres.
+- SQL migration runner.
+- Postgres-backed `AppStore` for `sessions`, `messages`, `events`, and sequence counters.
+- Postgres integration test path.
+
+Still open from the early phases:
+
+- Architecture fitness tests.
+- `GET /sessions/:id/events/stream`.
+- Contract schemas for public API responses and events.
+- Worker loop, runs, leases, and fake-runner processing.
+
+The next implementation phase should be the worker/runs/leases layer, because durable product persistence is now in place.
+
 ## Phase 0: Repository And Agent Context
 
 Goal: make the codebase agent-ready before implementation accelerates.
@@ -40,6 +63,8 @@ Acceptance criteria:
 - Integration test can start app with test Postgres.
 - Architecture tests prevent forbidden imports.
 
+Status: mostly implemented, except architecture fitness tests. The current Postgres integration tests exercise store/service behavior rather than starting the full app with Postgres; app-level Postgres UAT remains later.
+
 ## Phase 2: Sessions, Messages, Events
 
 Goal: implement durable intent and replayable observability.
@@ -64,6 +89,8 @@ Acceptance criteria:
 - Appending a message writes a `message_created` event.
 - Event replay by cursor works.
 - SSE stream receives appended events.
+
+Status: partially implemented. Non-streaming session/message/event routes and cursor replay exist; SSE and contract schemas remain open.
 
 ## Phase 3: Worker, Runs, Leases
 
