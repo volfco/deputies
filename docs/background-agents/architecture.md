@@ -2,7 +2,7 @@
 
 ## Summary
 
-The system is a portable background-agent control plane with Flue as the execution harness. It starts as a single Node service containing HTTP API routes, worker loops, integration handlers, event streaming, persistence, and runner adapters.
+The system is a portable background-agent control plane with Flue as the agent runtime. Flue already provides agent sessions, tools, skills, tasks/subagents, live events, and sandbox connector abstractions. This service provides the product control plane around those capabilities: durable queueing, leases, integrations, artifacts, replayable events, and portable deployment state.
 
 The system should be deployable to:
 
@@ -49,6 +49,50 @@ RUN_MODE=worker    # Worker only, future split
 ```
 
 The code must behave correctly with multiple replicas even when deployed in `RUN_MODE=all`. Postgres leases and locks are required from the beginning.
+
+## Flue Node Deployment Implications
+
+Flue's Node deployment target already builds a Node server with:
+
+- `GET /health`
+- `GET /agents`
+- `POST /agents/:name/:id`
+- sync responses
+- live SSE responses
+- webhook/fire-and-forget mode
+
+It also supports the Node sandbox progression documented by Flue:
+
+```txt
+empty virtual sandbox
+  -> virtual sandbox with shell setup
+  -> local sandbox using host filesystem
+  -> remote sandbox through a connector
+```
+
+For this product, there are two viable integration shapes:
+
+1. **Embedded Flue runner inside product API/worker**, preferred for the portable control plane.
+2. **Delegate to a generated Flue server**, useful for standalone Flue agents or smoke tests.
+
+The preferred MVP remains embedded Flue execution behind `runner-flue`, because we need durable Postgres-backed queues, run leases, integration dedupe, artifacts, and replayable product events around the agent run. Flue's generated Node server is not a durable work queue by itself.
+
+The implementation should still align with Flue's Node deployment model:
+
+- use `init({ persist })` for Postgres-backed Flue session persistence;
+- use `agent.session()` rather than custom conversation history;
+- use Flue commands/tools/MCP rather than building a parallel tool registry;
+- use Flue sandbox connectors for remote environments;
+- treat Flue live events as input to our product event log.
+
+If we later expose raw Flue agent endpoints, they should be clearly separated from product session endpoints:
+
+```txt
+/agents/:name/:id             # Flue-native invocation shape
+/sessions/:id/messages        # product background-work shape
+```
+
+The product API may call into Flue internally, but external integrations should continue to enqueue durable product messages rather than directly relying on Flue's fire-and-forget Node mode.
 
 ## Module Layout
 
@@ -215,8 +259,27 @@ Implementations:
 
 - configure Flue with the Postgres-backed Flue session store;
 - use stable Flue agent/session IDs derived from product session IDs;
+- follow Flue's remote coding-agent pattern: create or connect a real sandbox, run setup in that sandbox, then initialize a project-scoped agent with `cwd` set to the cloned repo;
+- call Flue `agent.session()` / `session.prompt()` / `session.skill()` / `session.task()` instead of implementing its own conversation or subagent system;
+- grant product-authorized Flue tools, commands, and MCP tools;
 - treat Flue session data as runner-owned state;
 - persist normalized product events separately through the `events` module.
+
+Do not implement a separate subagent runtime for Flue-backed sessions. Product runs are durable work records; intra-run delegation belongs to Flue `session.task()` and the built-in task tool.
+
+For remote coding agents, the runner should mirror Flue's documented two-stage setup pattern:
+
+```txt
+connect/create provider sandbox
+  -> init setup agent using sandbox
+  -> clone/sync repo into /workspace/project
+  -> run setup/install hooks
+  -> init project agent with same sandbox and cwd=/workspace/project
+  -> open stable Flue session
+  -> prompt with the user request
+```
+
+Unlike the minimal Flue example, production code should persist the provider sandbox ID and reuse or reconnect it for follow-ups when policy allows.
 
 ## Sandbox Interface
 
@@ -240,7 +303,9 @@ MVP should include `fake` for tests and one real provider.
 
 ## Streaming Model
 
-The event log is the source of truth.
+The product event log is the source of truth for replay, audit, UI reconnects, and integration callbacks.
+
+Flue already provides live execution events/SSE for the active invocation. The runner should consume those live events and persist normalized equivalents into the product event log.
 
 Streaming endpoints should support replay:
 

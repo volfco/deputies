@@ -15,9 +15,11 @@ Initial providers may include:
 
 ## Design Rule
 
-The worker coordinates sandbox lifecycle through the provider interface. The Flue runner receives a `SandboxHandle` that can execute commands and expose filesystem operations through a Flue connector.
+The worker coordinates product sandbox lifecycle through the provider interface. The Flue runner receives a Flue-compatible sandbox connector derived from the provider handle.
 
 No module outside `sandbox` and provider-specific adapters should know whether a session is running on Docker, Daytona, Kubernetes, ECS, or a fake test provider.
+
+Flue already defines the runtime sandbox shape through `SandboxFactory` and `SessionEnv`. Our provider interface should not become a second agent filesystem/tool runtime. It should own lifecycle concerns that Flue intentionally does not own for our product: create, reconnect, health, destroy, snapshots, persisted provider IDs, and provider capabilities.
 
 ## Provider Interface
 
@@ -232,7 +234,15 @@ The lifecycle manager should select behavior based on capabilities.
 
 ## Flue Connector Adapter
 
-`runner-flue` should adapt `SandboxHandle` into the Flue sandbox connector contract.
+`runner-flue` should adapt `SandboxHandle` into Flue's `SandboxFactory` contract.
+
+Conceptually:
+
+```ts
+function toFlueSandboxFactory(handle: SandboxHandle): SandboxFactory;
+```
+
+The returned `SandboxFactory` creates Flue `SessionEnv` instances backed by the provider handle.
 
 Required mapping:
 
@@ -413,3 +423,27 @@ Implement providers in this order:
 3. One hosted provider, likely Daytona, Kubernetes, or ECS depending on the first deployment target.
 
 This order proves the interface before committing to any one infrastructure platform.
+
+## Relationship To Flue's Daytona Example
+
+Flue's documented remote coding-agent example creates a Daytona sandbox, initializes a setup agent, clones the repo, installs dependencies, then initializes a second project-scoped agent in the same sandbox with `cwd` set to the cloned repo.
+
+Our design should preserve that shape:
+
+```txt
+provider lifecycle manager
+  -> create/connect sandbox and persist provider sandbox ID
+  -> produce Flue SandboxFactory from provider handle
+
+runner-flue
+  -> use setup Flue agent for repo clone/sync/setup
+  -> use project Flue agent with cwd=/workspace/project for user prompt
+```
+
+The difference from Flue's minimal example is durability and policy:
+
+- The product records sandbox ownership in `sandboxes`.
+- Follow-ups should reconnect to the same sandbox when possible.
+- Repo clone should become repo sync after the first run.
+- Setup/install hooks should be explicit and observable.
+- Cleanup is controlled by product retention policy, not always `cleanup: true`.

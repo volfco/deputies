@@ -94,6 +94,8 @@ unique(agent_id, session_id)
 
 The exact serialized `data` shape should be treated as Flue-owned. Store it opaquely and avoid querying inside it unless Flue exposes a stable contract.
 
+Store rows by the exact `id` key Flue passes into `save`, `load`, and `delete`. Do not derive or parse the key in application code unless Flue exposes that key format as a stable public contract. Product-level `agent_id`, `session_id`, and `app_session_id` columns may be useful metadata for inspection, but the Flue store must remain correct even if Flue changes its internal key format.
+
 ## Store Interface
 
 The implementation should wrap Flue's session persistence interface in `runner-flue` or a nearby infrastructure module.
@@ -114,6 +116,7 @@ Rules:
 
 - Keep the table and adapter isolated from product-domain modules.
 - Treat Flue data as opaque serialized runtime state.
+- Preserve Flue task/child session state exactly as Flue stores it.
 - Write through transactions where Flue permits it.
 - Add integration tests proving history survives app restart.
 

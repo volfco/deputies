@@ -117,6 +117,7 @@ Deliverables:
 - `runner-flue` module.
 - Postgres-backed Flue session store.
 - Flue initialization from session/message context.
+- Remote coding-agent setup flow based on Flue's documented Daytona pattern.
 - Event normalization from Flue events to internal events.
 - Prompt builder integration.
 - Fake and real runner selectable by config.
@@ -127,6 +128,8 @@ Acceptance criteria:
 - Flue session history survives process restart.
 - Fake runner remains default in deterministic tests.
 - Real Flue runner can execute a minimal prompt in a controlled sandbox.
+- Real Flue runner can initialize a project-scoped agent with a sandbox `cwd`.
+- Real Flue runner uses Flue commands/tools/session APIs rather than a parallel harness.
 - Flue text/tool/task events are persisted as normalized events.
 
 ## Phase 6: Sandbox Provider

@@ -192,6 +192,8 @@ Adopt:
 - Health check before reuse.
 - Recreate when unreachable according to policy.
 
+Flue's documented Daytona coding-agent example is also directly relevant. It shows a two-stage pattern: first initialize a setup agent in the sandbox to clone/install, then initialize a project-scoped agent with the same sandbox and `cwd` set to the cloned repo. We should adopt that orchestration pattern in `runner-flue`, adding durable sandbox records and reconnect/reuse policy around it.
+
 ### 4. GitHub App Token Handling
 
 Open SWE mints GitHub App installation tokens and avoids blindly storing real tokens in the sandbox when possible.
@@ -320,7 +322,7 @@ Use Open-Inspect as the stronger model for product/control-plane architecture, b
 
 Use Open SWE as the stronger model for invocation normalization, deterministic thread IDs, follow-up queue behavior, GitHub App token handling, and source-specific prompt construction.
 
-Use Flue as the harness boundary, not as the entire product state model.
+Use Flue as the agent runtime boundary, not as the entire product state model. Flue should own conversation mechanics, tools, skills, roles, tasks/subagents, live runtime events, and sandbox connector shape. The product should own durable background-work semantics, integrations, replayable product events, artifacts, queueing, leases, and operational state.
 
 The resulting design is:
 

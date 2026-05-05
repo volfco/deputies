@@ -43,6 +43,24 @@ Open-Inspect-style durable sessions/events/artifacts
 
 This means product state lives in our Postgres-backed control plane, Flue is isolated behind `runner-flue`, external systems normalize into a common message envelope, and sandbox providers plug in through a conformance-tested interface. Cloud/provider-specific capabilities such as snapshots, stop/start, WebSocket bridges, or object storage are optional optimizations rather than correctness requirements.
 
+## Flue Built-Ins We Rely On
+
+Flue is more than a low-level model SDK. The product should use these Flue capabilities directly instead of rebuilding them:
+
+- Agent/runtime identity through stable agent IDs.
+- Flue sessions through `agent.session(id?)` and `agent.sessions`.
+- Custom session persistence through `init({ persist })`.
+- Built-in tools for file reads/writes/edits, search, shell, and task delegation.
+- `session.task()` and the built-in `task` tool for subagents inside a run.
+- Roles and skills for scoped behavior and reusable agent instructions.
+- Live Flue events and SSE as the source stream for runner progress.
+- Sandbox integration through Flue `SandboxFactory` / `SessionEnv` connectors.
+- Commands and MCP tools for controlled external capabilities.
+
+The product control plane still owns the things Flue does not provide on portable Node deployments: durable work queues, run leases, retry/recovery, external integrations, callback delivery, product event replay, artifacts, sandbox lifecycle records, credential policy, and UI/API state.
+
+For Node deployments, Flue can generate a standalone server with `/agents/:name/:id`, live SSE, and custom session persistence. Our portable service should embed or delegate to those capabilities, not recreate the harness. The product endpoints still exist because they add durable background-work semantics that Flue's generated Node server does not provide by itself.
+
 ## MVP Target
 
 The first complete version should support:
