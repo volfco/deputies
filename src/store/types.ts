@@ -3,6 +3,7 @@ import type { NormalizedEvent } from '../events/types.js';
 export type SessionStatus = 'created' | 'active' | 'idle' | 'completed' | 'failed' | 'cancelled' | 'archived';
 export type MessageStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type RunStatus = 'starting' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'stale';
+export type IntegrationDeliveryStatus = 'received' | 'processed' | 'failed';
 
 export type SessionRecord = {
   id: string;
@@ -50,6 +51,38 @@ export type RecoveredRun = {
   run: RunRecord;
 };
 
+export type WebhookSourceRecord = {
+  id: string;
+  key: string;
+  name: string;
+  enabled: boolean;
+  bearerToken: string;
+  promptPrefix?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ExternalThreadRecord = {
+  id: string;
+  source: string;
+  externalId: string;
+  sessionId: string;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type IntegrationDeliveryRecord = {
+  id: string;
+  source: string;
+  dedupeKey: string;
+  status: IntegrationDeliveryStatus;
+  receivedAt: Date;
+  processedAt?: Date;
+  error?: string;
+  metadata: Record<string, unknown>;
+};
+
 export type CreateSessionRecord = {
   id: string;
   status: SessionStatus;
@@ -67,6 +100,17 @@ export type CreateMessageRecord = {
   createdAt: Date;
   source?: string;
   context?: Record<string, unknown>;
+};
+
+export type CreateWebhookSourceRecord = {
+  id: string;
+  key: string;
+  name: string;
+  enabled: boolean;
+  bearerToken: string;
+  promptPrefix?: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export interface AppStore {
@@ -93,4 +137,24 @@ export interface AppStore {
   nextEventSequence(sessionId: string): Promise<number>;
   appendEvent(event: NormalizedEvent & { sequence: number }): Promise<NormalizedEvent & { sequence: number }>;
   getEvents(sessionId: string, afterSequence?: number): Promise<Array<NormalizedEvent & { sequence: number }>>;
+
+  createWebhookSource(record: CreateWebhookSourceRecord): Promise<WebhookSourceRecord>;
+  getWebhookSource(key: string): Promise<WebhookSourceRecord | null>;
+  getExternalThread(source: string, externalId: string): Promise<ExternalThreadRecord | null>;
+  createExternalThread(input: {
+    id: string;
+    source: string;
+    externalId: string;
+    sessionId: string;
+    metadata: Record<string, unknown>;
+    now: Date;
+  }): Promise<ExternalThreadRecord>;
+  createIntegrationDelivery(input: {
+    id: string;
+    source: string;
+    dedupeKey: string;
+    receivedAt: Date;
+    metadata: Record<string, unknown>;
+  }): Promise<IntegrationDeliveryRecord | null>;
+  markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void>;
 }

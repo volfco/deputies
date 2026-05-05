@@ -79,6 +79,7 @@ Current local policy:
 - `docker compose up -d postgres` starts local Postgres and creates both `flue` and `flue_test`.
 - Integration tests apply migrations to `flue_test` and truncate app tables between tests.
 - Testcontainers is deferred until we need fully hermetic per-run databases.
+- Architecture fitness tests currently run with unit tests and enforce Flue SDK isolation, integration-to-runner separation, and store-to-domain-service separation.
 
 Harness responsibilities:
 
@@ -259,6 +260,8 @@ Later evals:
 ## Architecture Fitness Tests
 
 Add static checks that protect module boundaries.
+
+These checks are especially important for agentic development. If modules can only interact through small, tested contracts, an implementation agent can work with a bounded context window: the target module, its port types, and its tests. Boundary drift forces agents to read more of the repository, increases hallucination risk, and makes local changes harder to verify.
 
 Required rules:
 

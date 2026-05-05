@@ -15,7 +15,9 @@ describe.skipIf(!testDatabaseUrl)('built server UAT', () => {
   });
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE events, runs, messages, session_sequence_counters, sessions RESTART IDENTITY CASCADE');
+    await pool.query(
+      'TRUNCATE integration_deliveries, external_threads, events, runs, messages, session_sequence_counters, webhook_sources, sessions RESTART IDENTITY CASCADE',
+    );
     server = spawn(process.execPath, ['dist/index.js'], {
       cwd: process.cwd(),
       env: {
@@ -59,12 +61,42 @@ describe.skipIf(!testDatabaseUrl)('built server UAT', () => {
       'message_completed',
     ]);
   });
+
+  it('accepts a generic webhook and completes it through the worker', async () => {
+    const now = new Date();
+    await pool.query(
+      `INSERT INTO webhook_sources (id, key, name, enabled, bearer_token, prompt_prefix, created_at, updated_at)
+       VALUES ($1, 'foo', 'Foo', true, 'secret', 'bar baz', $2, $2)`,
+      ['00000000-0000-4000-8000-000000000301', now],
+    );
+
+    const response = await postJsonWithAuth('/webhooks/generic/foo', 'secret', {
+      threadId: 'thread-1',
+      dedupeKey: 'delivery-1',
+      title: 'Webhook UAT',
+      prompt: 'complete from webhook',
+    });
+    expect(response.status).toBe(202);
+    const { session, message } = (await response.json()) as { session: { id: string }; message: { prompt: string } };
+    expect(message.prompt).toBe('bar baz\n\ncomplete from webhook');
+
+    const events = await waitForEvents(session.id, ['message_completed']);
+    expect(events.map((event) => event.type)).toContain('message_completed');
+  });
 });
 
 function postJson(path: string, body: unknown): Promise<Response> {
   return fetch(`http://127.0.0.1:${uatPort}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+function postJsonWithAuth(path: string, token: string, body: unknown): Promise<Response> {
+  return fetch(`http://127.0.0.1:${uatPort}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
 }

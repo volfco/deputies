@@ -96,6 +96,16 @@ The product API may call into Flue internally, but external integrations should 
 
 ## Module Layout
 
+Strong module boundaries are also an agent-development constraint, not only a software design preference. Each module should expose small contracts so future coding agents can load the relevant files for one task without pulling the entire system into context. When a feature crosses boundaries, the contract should carry intent in typed inputs/outputs rather than requiring an agent to inspect unrelated internals.
+
+This has practical consequences:
+
+- HTTP routes should call services instead of embedding product logic.
+- Store implementations should hide SQL details behind narrow methods.
+- Integration modules should normalize external payloads before they reach session/message code.
+- Runner modules should own runner-specific protocol details and publish normalized events.
+- Tests should verify contracts at module boundaries so agents can safely change internals without widening context.
+
 ```txt
 src/
   api/

@@ -1,6 +1,9 @@
 import type { NormalizedEvent } from '../events/types.js';
 import type {
   AppStore,
+  CreateWebhookSourceRecord,
+  ExternalThreadRecord,
+  IntegrationDeliveryRecord,
   CreateMessageRecord,
   CreateSessionRecord,
   ClaimedMessage,
@@ -8,6 +11,7 @@ import type {
   RecoveredRun,
   RunRecord,
   SessionRecord,
+  WebhookSourceRecord,
 } from './types.js';
 
 export class MemoryStore implements AppStore {
@@ -15,6 +19,9 @@ export class MemoryStore implements AppStore {
   private readonly messages = new Map<string, MessageRecord[]>();
   private readonly runs = new Map<string, RunRecord>();
   private readonly events = new Map<string, Array<NormalizedEvent & { sequence: number }>>();
+  private readonly webhookSources = new Map<string, WebhookSourceRecord>();
+  private readonly externalThreads = new Map<string, ExternalThreadRecord>();
+  private readonly integrationDeliveries = new Map<string, IntegrationDeliveryRecord>();
 
   async createSession(record: CreateSessionRecord): Promise<SessionRecord> {
     if (this.sessions.has(record.id)) {
@@ -175,6 +182,73 @@ export class MemoryStore implements AppStore {
     return (this.events.get(sessionId) ?? []).filter((event) => event.sequence > afterSequence);
   }
 
+  async createWebhookSource(record: CreateWebhookSourceRecord): Promise<WebhookSourceRecord> {
+    this.webhookSources.set(record.key, record);
+    return record;
+  }
+
+  async getWebhookSource(key: string): Promise<WebhookSourceRecord | null> {
+    return this.webhookSources.get(key) ?? null;
+  }
+
+  async getExternalThread(source: string, externalId: string): Promise<ExternalThreadRecord | null> {
+    return this.externalThreads.get(externalThreadKey(source, externalId)) ?? null;
+  }
+
+  async createExternalThread(input: {
+    id: string;
+    source: string;
+    externalId: string;
+    sessionId: string;
+    metadata: Record<string, unknown>;
+    now: Date;
+  }): Promise<ExternalThreadRecord> {
+    const key = externalThreadKey(input.source, input.externalId);
+    const existing = this.externalThreads.get(key);
+    if (existing) return existing;
+
+    const record: ExternalThreadRecord = {
+      id: input.id,
+      source: input.source,
+      externalId: input.externalId,
+      sessionId: input.sessionId,
+      metadata: input.metadata,
+      createdAt: input.now,
+      updatedAt: input.now,
+    };
+    this.externalThreads.set(key, record);
+    return record;
+  }
+
+  async createIntegrationDelivery(input: {
+    id: string;
+    source: string;
+    dedupeKey: string;
+    receivedAt: Date;
+    metadata: Record<string, unknown>;
+  }): Promise<IntegrationDeliveryRecord | null> {
+    const key = deliveryKey(input.source, input.dedupeKey);
+    if (this.integrationDeliveries.has(key)) return null;
+
+    const record: IntegrationDeliveryRecord = {
+      id: input.id,
+      source: input.source,
+      dedupeKey: input.dedupeKey,
+      status: 'received',
+      receivedAt: input.receivedAt,
+      metadata: input.metadata,
+    };
+    this.integrationDeliveries.set(key, record);
+    return record;
+  }
+
+  async markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void> {
+    const key = deliveryKey(input.source, input.dedupeKey);
+    const existing = this.integrationDeliveries.get(key);
+    if (!existing) return;
+    this.integrationDeliveries.set(key, { ...existing, status: 'processed', processedAt: input.processedAt });
+  }
+
   private hasActiveRun(sessionId: string, now: Date): boolean {
     for (const run of this.runs.values()) {
       if (run.sessionId !== sessionId) continue;
@@ -208,4 +282,12 @@ export class MemoryStore implements AppStore {
 
     return { message: terminalMessage, run: terminalRun };
   }
+}
+
+function externalThreadKey(source: string, externalId: string): string {
+  return `${source}:${externalId}`;
+}
+
+function deliveryKey(source: string, dedupeKey: string): string {
+  return `${source}:${dedupeKey}`;
 }

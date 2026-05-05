@@ -1,6 +1,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AppConfig } from '../config/index.js';
 import { EventService } from '../events/service.js';
+import { GenericWebhookError, GenericWebhookService } from '../integrations/generic-webhook/service.js';
 import { MessageService, MessageServiceError } from '../messages/service.js';
 import { SessionService } from '../sessions/service.js';
 import { MemoryStore } from '../store/memory.js';
@@ -11,15 +12,19 @@ export type AppServices = {
   events: EventService;
   sessions: SessionService;
   messages: MessageService;
+  genericWebhooks: GenericWebhookService;
 };
 
 export function createServices(store: AppStore = new MemoryStore()): AppServices {
   const events = new EventService(store);
+  const sessions = new SessionService(store, events);
+  const messages = new MessageService(store, events);
   return {
     store,
     events,
-    sessions: new SessionService(store, events),
-    messages: new MessageService(store, events),
+    sessions,
+    messages,
+    genericWebhooks: new GenericWebhookService(store, sessions, messages),
   };
 }
 
@@ -52,6 +57,29 @@ async function handleRequest(
     const title = optionalString(body.title);
     const session = await services.sessions.create(title ? { title } : {});
     writeJson(response, 201, { session });
+    return;
+  }
+
+  const genericWebhookMatch = url.pathname.match(/^\/webhooks\/generic\/([^/]+)$/);
+  if (request.method === 'POST' && genericWebhookMatch) {
+    const sourceKey = decodeURIComponent(genericWebhookMatch[1]!);
+    const body = await readJsonBody(request);
+
+    try {
+      const result = await services.genericWebhooks.handle({
+        sourceKey,
+        authorization: request.headers.authorization,
+        payload: body,
+      });
+      writeJson(response, 202, result);
+    } catch (error) {
+      if (error instanceof GenericWebhookError) {
+        const status = error.code === 'unauthorized' ? 401 : error.code === 'not_found' ? 404 : 400;
+        writeError(response, status, error.code, error.message);
+        return;
+      }
+      throw error;
+    }
     return;
   }
 

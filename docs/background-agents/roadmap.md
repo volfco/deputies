@@ -14,15 +14,16 @@ Implemented so far:
 - SQL migration runner.
 - Postgres-backed `AppStore` for `sessions`, `messages`, `events`, and sequence counters.
 - Durable worker loop with `runs`, message claiming, fake-runner execution, run leases, heartbeat renewal, and stale lease recovery.
+- DB-backed generic webhook sources with bearer auth, prompt prefixes, thread reuse, and delivery dedupe.
+- Architecture fitness tests for core import boundaries.
 - Postgres integration test path.
 - App-level Postgres worker integration test.
 
 Still open from the early phases:
 
-- Architecture fitness tests.
 - Contract schemas for public API responses and events.
 
-The next implementation phase should add the first generic webhook integration. That is the next product ingress capability now that sessions, events, workers, and streaming are in place.
+The next implementation phase should add contract schemas for public API responses and events, then continue toward `runner-flue`.
 
 ## Phase 0: Repository And Agent Context
 
@@ -64,7 +65,7 @@ Acceptance criteria:
 - Integration test can start app with test Postgres.
 - Architecture tests prevent forbidden imports.
 
-Status: mostly implemented, except architecture fitness tests. The current Postgres integration suite starts the app in-process with Postgres and processes an HTTP-created message through the worker. Built-artifact UAT remains later.
+Status: implemented for the current module set. Architecture fitness tests now protect key import boundaries. The current Postgres integration suite starts the app in-process with Postgres and processes an HTTP-created message through the worker.
 
 ## Phase 2: Sessions, Messages, Events
 
@@ -137,6 +138,8 @@ Acceptance criteria:
 - Duplicate delivery is ignored.
 - Filtered-out payload does not create a message.
 - Rendered prompt includes source, repo, request, and payload context.
+
+Status: implemented for the first DB-backed shape. Webhook sources are stored in Postgres with bearer tokens and prompt prefixes. The route accepts `threadId`, `dedupeKey`, `title`, `prompt`, and `context`; reuses sessions by external thread; dedupes deliveries; and enqueues prefixed prompts. Configurable JSON-path mapping/filtering/templates remain future enhancements.
 
 ## Phase 5: Flue Runner Adapter
 

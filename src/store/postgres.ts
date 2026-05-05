@@ -5,6 +5,9 @@ import type {
   ClaimedMessage,
   CreateMessageRecord,
   CreateSessionRecord,
+  CreateWebhookSourceRecord,
+  ExternalThreadRecord,
+  IntegrationDeliveryRecord,
   MessageRecord,
   MessageStatus,
   RecoveredRun,
@@ -12,6 +15,7 @@ import type {
   RunStatus,
   SessionRecord,
   SessionStatus,
+  WebhookSourceRecord,
 } from './types.js';
 
 type SessionRow = QueryResultRow & {
@@ -58,6 +62,38 @@ type RunRow = QueryResultRow & {
   started_at: Date;
   completed_at: Date | null;
   failed_at: Date | null;
+  error: string | null;
+  metadata: Record<string, unknown>;
+};
+
+type WebhookSourceRow = QueryResultRow & {
+  id: string;
+  key: string;
+  name: string;
+  enabled: boolean;
+  bearer_token: string;
+  prompt_prefix: string | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type ExternalThreadRow = QueryResultRow & {
+  id: string;
+  source: string;
+  external_id: string;
+  session_id: string;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type IntegrationDeliveryRow = QueryResultRow & {
+  id: string;
+  source: string;
+  dedupe_key: string;
+  status: 'received' | 'processed' | 'failed';
+  received_at: Date;
+  processed_at: Date | null;
   error: string | null;
   metadata: Record<string, unknown>;
 };
@@ -309,6 +345,103 @@ export class PostgresStore implements AppStore {
     return result.rows.map(toEvent);
   }
 
+  async createWebhookSource(record: CreateWebhookSourceRecord): Promise<WebhookSourceRecord> {
+    const result = await this.pool.query<WebhookSourceRow>(
+      `INSERT INTO webhook_sources (id, key, name, enabled, bearer_token, prompt_prefix, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (key)
+       DO UPDATE SET name = EXCLUDED.name,
+                     enabled = EXCLUDED.enabled,
+                     bearer_token = EXCLUDED.bearer_token,
+                     prompt_prefix = EXCLUDED.prompt_prefix,
+                     updated_at = EXCLUDED.updated_at
+       RETURNING id, key, name, enabled, bearer_token, prompt_prefix, created_at, updated_at`,
+      [
+        record.id,
+        record.key,
+        record.name,
+        record.enabled,
+        record.bearerToken,
+        record.promptPrefix ?? null,
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+
+    return toWebhookSource(result.rows[0]!);
+  }
+
+  async getWebhookSource(key: string): Promise<WebhookSourceRecord | null> {
+    const result = await this.pool.query<WebhookSourceRow>(
+      `SELECT id, key, name, enabled, bearer_token, prompt_prefix, created_at, updated_at
+       FROM webhook_sources
+       WHERE key = $1`,
+      [key],
+    );
+
+    const row = result.rows[0];
+    return row ? toWebhookSource(row) : null;
+  }
+
+  async getExternalThread(source: string, externalId: string): Promise<ExternalThreadRecord | null> {
+    const result = await this.pool.query<ExternalThreadRow>(
+      `SELECT id, source, external_id, session_id, metadata, created_at, updated_at
+       FROM external_threads
+       WHERE source = $1 AND external_id = $2`,
+      [source, externalId],
+    );
+
+    const row = result.rows[0];
+    return row ? toExternalThread(row) : null;
+  }
+
+  async createExternalThread(input: {
+    id: string;
+    source: string;
+    externalId: string;
+    sessionId: string;
+    metadata: Record<string, unknown>;
+    now: Date;
+  }): Promise<ExternalThreadRecord> {
+    const result = await this.pool.query<ExternalThreadRow>(
+      `INSERT INTO external_threads (id, source, external_id, session_id, metadata, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $6)
+       ON CONFLICT (source, external_id) DO UPDATE SET updated_at = external_threads.updated_at
+       RETURNING id, source, external_id, session_id, metadata, created_at, updated_at`,
+      [input.id, input.source, input.externalId, input.sessionId, input.metadata, input.now],
+    );
+
+    return toExternalThread(result.rows[0]!);
+  }
+
+  async createIntegrationDelivery(input: {
+    id: string;
+    source: string;
+    dedupeKey: string;
+    receivedAt: Date;
+    metadata: Record<string, unknown>;
+  }): Promise<IntegrationDeliveryRecord | null> {
+    const result = await this.pool.query<IntegrationDeliveryRow>(
+      `INSERT INTO integration_deliveries (id, source, dedupe_key, status, received_at, metadata)
+       VALUES ($1, $2, $3, 'received', $4, $5)
+       ON CONFLICT (source, dedupe_key) DO NOTHING
+       RETURNING id, source, dedupe_key, status, received_at, processed_at, error, metadata`,
+      [input.id, input.source, input.dedupeKey, input.receivedAt, input.metadata],
+    );
+
+    const row = result.rows[0];
+    return row ? toIntegrationDelivery(row) : null;
+  }
+
+  async markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void> {
+    await this.pool.query(
+      `UPDATE integration_deliveries
+       SET status = 'processed', processed_at = $3
+       WHERE source = $1 AND dedupe_key = $2`,
+      [input.source, input.dedupeKey, input.processedAt],
+    );
+  }
+
   private async nextSequence(sessionId: string, kind: 'messages' | 'events'): Promise<number> {
     const result = await this.pool.query<{ sequence: PgInteger }>(
       `INSERT INTO session_sequence_counters (session_id, kind, next_sequence)
@@ -436,4 +569,44 @@ function toRun(row: RunRow): RunRecord {
   if (row.failed_at) run.failedAt = row.failed_at;
   if (row.error) run.error = row.error;
   return run;
+}
+
+function toWebhookSource(row: WebhookSourceRow): WebhookSourceRecord {
+  const record: WebhookSourceRecord = {
+    id: row.id,
+    key: row.key,
+    name: row.name,
+    enabled: row.enabled,
+    bearerToken: row.bearer_token,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  if (row.prompt_prefix) record.promptPrefix = row.prompt_prefix;
+  return record;
+}
+
+function toExternalThread(row: ExternalThreadRow): ExternalThreadRecord {
+  return {
+    id: row.id,
+    source: row.source,
+    externalId: row.external_id,
+    sessionId: row.session_id,
+    metadata: row.metadata,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toIntegrationDelivery(row: IntegrationDeliveryRow): IntegrationDeliveryRecord {
+  const record: IntegrationDeliveryRecord = {
+    id: row.id,
+    source: row.source,
+    dedupeKey: row.dedupe_key,
+    status: row.status,
+    receivedAt: row.received_at,
+    metadata: row.metadata,
+  };
+  if (row.processed_at) record.processedAt = row.processed_at;
+  if (row.error) record.error = row.error;
+  return record;
 }

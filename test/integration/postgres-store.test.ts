@@ -7,6 +7,7 @@ import { FakeRunner } from '../../src/runner/fake.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 import { PostgresStore } from '../../src/store/postgres.js';
 import { WorkerService } from '../../src/worker/service.js';
+import { expectGenericWebhookResponse } from '../support/contracts.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -20,7 +21,9 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
   });
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE events, runs, messages, session_sequence_counters, sessions RESTART IDENTITY CASCADE');
+    await pool.query(
+      'TRUNCATE integration_deliveries, external_threads, events, runs, messages, session_sequence_counters, webhook_sources, sessions RESTART IDENTITY CASCADE',
+    );
     store = new PostgresStore(testDatabaseUrl!);
   });
 
@@ -199,12 +202,79 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       await close(server);
     }
   });
+
+  it('accepts generic webhooks with DB-backed source prompts and dedupe', async () => {
+    const services = createServices(store);
+    const now = new Date();
+    await store.createWebhookSource({
+      id: '00000000-0000-4000-8000-000000000201',
+      key: 'foo',
+      name: 'Foo',
+      enabled: true,
+      bearerToken: 'secret',
+      promptPrefix: 'bar baz',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const server = createServer(loadConfig({ APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
+    const baseUrl = await listen(server);
+
+    try {
+      const first = await postJsonWithAuth(`${baseUrl}/webhooks/generic/foo`, 'secret', {
+        threadId: 'thread-1',
+        dedupeKey: 'delivery-1',
+        title: 'Foo task',
+        prompt: 'do work',
+      });
+      expect(first.status).toBe(202);
+      const firstBody = await first.json();
+      expectGenericWebhookResponse(firstBody);
+      expect(firstBody.duplicate).toBe(false);
+      expect(firstBody.message?.prompt).toBe('bar baz\n\ndo work');
+
+      const duplicate = await postJsonWithAuth(`${baseUrl}/webhooks/generic/foo`, 'secret', {
+        threadId: 'thread-1',
+        dedupeKey: 'delivery-1',
+        prompt: 'do work again',
+      });
+      expect(duplicate.status).toBe(202);
+      const duplicateBody = await duplicate.json();
+      expectGenericWebhookResponse(duplicateBody);
+      expect(duplicateBody).toMatchObject({ duplicate: true });
+
+      const followUp = await postJsonWithAuth(`${baseUrl}/webhooks/generic/foo`, 'secret', {
+        threadId: 'thread-1',
+        dedupeKey: 'delivery-2',
+        prompt: 'follow up',
+      });
+      const followUpBody = await followUp.json();
+      expectGenericWebhookResponse(followUpBody);
+      expect(followUpBody.session?.id).toBe(firstBody.session?.id);
+
+      await expect(postJsonWithAuth(`${baseUrl}/webhooks/generic/foo`, 'wrong', {
+        threadId: 'thread-2',
+        dedupeKey: 'delivery-3',
+        prompt: 'nope',
+      })).resolves.toMatchObject({ status: 401 });
+    } finally {
+      await close(server);
+    }
+  });
 });
 
 function postJson(url: string, body: unknown): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+function postJsonWithAuth(url: string, token: string, body: unknown): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
 }

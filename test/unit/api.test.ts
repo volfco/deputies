@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import { createServer } from '../../src/app/server.js';
 import { loadConfig } from '../../src/config/index.js';
+import { expectErrorResponse, expectEventsResponse, expectMessageResponse, expectSessionResponse } from '../support/contracts.js';
 
 describe('core API', () => {
   let server: Server;
@@ -36,7 +37,9 @@ describe('core API', () => {
     const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Test session' });
     expect(createSession.status).toBe(201);
 
-    const { session } = (await createSession.json()) as { session: { id: string; title: string } };
+    const createSessionBody = await createSession.json();
+    expectSessionResponse(createSessionBody);
+    const { session } = createSessionBody;
     expect(session.title).toBe('Test session');
 
     const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
@@ -44,9 +47,9 @@ describe('core API', () => {
     });
     expect(createMessage.status).toBe(202);
 
-    const { message } = (await createMessage.json()) as {
-      message: { sessionId: string; sequence: number; status: string; prompt: string };
-    };
+    const createMessageBody = await createMessage.json();
+    expectMessageResponse(createMessageBody);
+    const { message } = createMessageBody;
     expect(message).toMatchObject({
       sessionId: session.id,
       sequence: 1,
@@ -57,12 +60,16 @@ describe('core API', () => {
     const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
     expect(eventsResponse.status).toBe(200);
 
-    const { events } = (await eventsResponse.json()) as { events: Array<{ type: string; sequence: number }> };
+    const eventsBody = await eventsResponse.json();
+    expectEventsResponse(eventsBody);
+    const { events } = eventsBody;
     expect(events.map((event) => event.type)).toEqual(['session_created', 'message_created']);
     expect(events.map((event) => event.sequence)).toEqual([1, 2]);
 
     const replayResponse = await fetch(`${baseUrl}/sessions/${session.id}/events?after=1`);
-    const { events: replayed } = (await replayResponse.json()) as { events: Array<{ type: string }> };
+    const replayBody = await replayResponse.json();
+    expectEventsResponse(replayBody);
+    const { events: replayed } = replayBody;
     expect(replayed.map((event) => event.type)).toEqual(['message_created']);
   });
 
@@ -90,7 +97,9 @@ describe('core API', () => {
     const response = await postJson(`${baseUrl}/sessions/missing/messages`, { prompt: 'hello' });
 
     expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toMatchObject({ error: 'not_found' });
+    const body = await response.json();
+    expectErrorResponse(body);
+    expect(body).toMatchObject({ error: 'not_found' });
   });
 
   it('validates message prompts', async () => {
@@ -100,7 +109,9 @@ describe('core API', () => {
     const response = await postJson(`${baseUrl}/sessions/${session.id}/messages`, { prompt: '' });
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({ error: 'invalid_request' });
+    const body = await response.json();
+    expectErrorResponse(body);
+    expect(body).toMatchObject({ error: 'invalid_request' });
   });
 });
 
