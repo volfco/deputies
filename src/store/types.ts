@@ -45,6 +45,11 @@ export type ClaimedMessage = {
   run: RunRecord;
 };
 
+export type RecoveredRun = {
+  message: MessageRecord;
+  run: RunRecord;
+};
+
 export type CreateSessionRecord = {
   id: string;
   status: SessionStatus;
@@ -80,6 +85,8 @@ export interface AppStore {
     leaseExpiresAt: Date;
     now: Date;
   }): Promise<ClaimedMessage | null>;
+  renewRunLease(input: { runId: string; leaseOwner: string; leaseExpiresAt: Date; heartbeatAt: Date }): Promise<RunRecord | null>;
+  recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]>;
   completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage>;
   failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage>;
 

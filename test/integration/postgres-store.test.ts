@@ -1,7 +1,12 @@
+import type { Server } from 'node:http';
 import { Pool } from 'pg';
-import { createServices } from '../../src/app/server.js';
+import { createServer, createServices } from '../../src/app/server.js';
+import { loadConfig } from '../../src/config/index.js';
 import { runMigrations } from '../../src/db/migrate.js';
+import { FakeRunner } from '../../src/runner/fake.js';
+import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 import { PostgresStore } from '../../src/store/postgres.js';
+import { WorkerService } from '../../src/worker/service.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -15,7 +20,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
   });
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE events, messages, session_sequence_counters, sessions RESTART IDENTITY CASCADE');
+    await pool.query('TRUNCATE events, runs, messages, session_sequence_counters, sessions RESTART IDENTITY CASCADE');
     store = new PostgresStore(testDatabaseUrl!);
   });
 
@@ -101,4 +106,118 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       now,
     })).resolves.toBeNull();
   });
+
+  it('recovers stale processing messages for retry', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Stale run' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'retry me' });
+
+    const claimed = await store.claimNextPendingMessage({
+      runId: '00000000-0000-4000-8000-000000000011',
+      runnerType: 'fake',
+      leaseOwner: 'crashed-worker',
+      leaseExpiresAt: new Date(Date.now() - 1_000),
+      now: new Date(Date.now() - 2_000),
+    });
+    expect(claimed).toBeTruthy();
+
+    const recovered = await store.recoverStaleRuns({ now: new Date(), limit: 10 });
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.run.status).toBe('stale');
+    expect(recovered[0]!.message.status).toBe('pending');
+
+    const retried = await store.claimNextPendingMessage({
+      runId: '00000000-0000-4000-8000-000000000012',
+      runnerType: 'fake',
+      leaseOwner: 'new-worker',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+      now: new Date(),
+    });
+    expect(retried?.message.id).toBe(claimed!.message.id);
+  });
+
+  it('renews run leases so active work is not recovered as stale', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Heartbeat' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'keep alive' });
+
+    const claimedAt = new Date();
+    const claimed = await store.claimNextPendingMessage({
+      runId: '00000000-0000-4000-8000-000000000021',
+      runnerType: 'fake',
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).toBeTruthy();
+
+    const renewed = await store.renewRunLease({
+      runId: claimed!.run.id,
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 60_000),
+      heartbeatAt: new Date(claimedAt.getTime() + 500),
+    });
+    expect(renewed?.leaseOwner).toBe('worker-1');
+
+    await expect(store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 2_000), limit: 10 })).resolves.toEqual([]);
+  });
+
+  it('processes an HTTP-created message through the worker using Postgres', async () => {
+    const services = createServices(store);
+    const server = createServer(loadConfig({ APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
+    const baseUrl = await listen(server);
+
+    try {
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'HTTP worker' });
+      const { session } = (await createSession.json()) as { session: { id: string } };
+
+      const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, { prompt: 'ship it' });
+      expect(createMessage.status).toBe(202);
+
+      const worker = new WorkerService({
+        store,
+        events: services.events,
+        runner: new FakeRunner(),
+        runnerType: 'fake',
+        sandboxProvider: new FakeSandboxProvider(),
+        leaseOwner: 'integration-worker',
+      });
+      await expect(worker.processNext()).resolves.toBe(true);
+
+      const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
+      const { events } = (await eventsResponse.json()) as { events: Array<{ type: string }> };
+      expect(events.map((event) => event.type)).toEqual([
+        'session_created',
+        'message_created',
+        'message_started',
+        'run_started',
+        'agent_text_delta',
+        'run_completed',
+        'message_completed',
+      ]);
+    } finally {
+      await close(server);
+    }
+  });
 });
+
+function postJson(url: string, body: unknown): Promise<Response> {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+async function listen(server: Server): Promise<string> {
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
+  return `http://${address.address}:${address.port}`;
+}
+
+async function close(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}

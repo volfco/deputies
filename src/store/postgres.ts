@@ -7,6 +7,7 @@ import type {
   CreateSessionRecord,
   MessageRecord,
   MessageStatus,
+  RecoveredRun,
   RunRecord,
   RunStatus,
   SessionRecord,
@@ -197,6 +198,76 @@ export class PostgresStore implements AppStore {
 
   async completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage> {
     return this.finishRun(input.runId, 'completed', input.completedAt);
+  }
+
+  async renewRunLease(input: {
+    runId: string;
+    leaseOwner: string;
+    leaseExpiresAt: Date;
+    heartbeatAt: Date;
+  }): Promise<RunRecord | null> {
+    const result = await this.pool.query<RunRow>(
+      `UPDATE runs
+       SET lease_expires_at = $3,
+           heartbeat_at = $4
+       WHERE id = $1 AND lease_owner = $2 AND status = 'running'
+       RETURNING id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata`,
+      [input.runId, input.leaseOwner, input.leaseExpiresAt, input.heartbeatAt],
+    );
+
+    const row = result.rows[0];
+    return row ? toRun(row) : null;
+  }
+
+  async recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]> {
+    return this.transaction(async (client) => {
+      const stale = await client.query<RunRow>(
+        `SELECT id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata
+         FROM runs
+         WHERE status IN ('starting', 'running') AND lease_expires_at <= $1
+         ORDER BY lease_expires_at ASC
+         FOR UPDATE SKIP LOCKED
+         LIMIT $2`,
+        [input.now, input.limit],
+      );
+
+      const recovered: RecoveredRun[] = [];
+      for (const staleRun of stale.rows) {
+        const runResult = await client.query<RunRow>(
+          `UPDATE runs
+           SET status = 'stale',
+               lease_owner = NULL,
+               lease_expires_at = NULL,
+               heartbeat_at = $2,
+               failed_at = $2,
+               error = 'Run lease expired'
+           WHERE id = $1
+           RETURNING id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata`,
+          [staleRun.id, input.now],
+        );
+
+        const messageResult = await client.query<MessageRow>(
+          `UPDATE messages
+           SET status = 'pending'
+           WHERE id = $1 AND status = 'processing'
+           RETURNING id, session_id, sequence, status, prompt, source, context, created_at`,
+          [staleRun.message_id],
+        );
+
+        const message = messageResult.rows[0];
+        if (!message) continue;
+
+        await client.query('UPDATE sessions SET status = $2, updated_at = $3 WHERE id = $1', [
+          staleRun.session_id,
+          'idle',
+          input.now,
+        ]);
+
+        recovered.push({ message: toMessage(message), run: toRun(runResult.rows[0]!) });
+      }
+
+      return recovered;
+    });
   }
 
   async failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage> {

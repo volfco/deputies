@@ -105,6 +105,20 @@ async function handleRequest(
     return;
   }
 
+  const eventStreamMatch = url.pathname.match(/^\/sessions\/([^/]+)\/events\/stream$/);
+  if (request.method === 'GET' && eventStreamMatch) {
+    const sessionId = decodeURIComponent(eventStreamMatch[1]!);
+    const session = await services.sessions.get(sessionId);
+    if (!session) {
+      writeError(response, 404, 'not_found', 'Session not found');
+      return;
+    }
+
+    const after = parseCursor(url.searchParams.get('after')) ?? 0;
+    await writeEventStream(request, response, services, sessionId, after);
+    return;
+  }
+
   writeJson(response, 404, {
     error: 'not_found',
     message: 'Route not found',
@@ -118,6 +132,44 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown) 
 
 function writeError(response: ServerResponse, statusCode: number, error: string, message: string) {
   writeJson(response, statusCode, { error, message });
+}
+
+async function writeEventStream(
+  request: IncomingMessage,
+  response: ServerResponse,
+  services: AppServices,
+  sessionId: string,
+  afterSequence: number,
+): Promise<void> {
+  response.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+  });
+  response.write(': connected\n\n');
+
+  let cursor = afterSequence;
+  const writeEvent = (event: Awaited<ReturnType<EventService['list']>>[number]) => {
+    if (event.sequence <= cursor) return;
+    cursor = event.sequence;
+    response.write(`id: ${event.sequence}\n`);
+    response.write(`event: ${event.type}\n`);
+    response.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  for (const event of await services.events.list(sessionId, afterSequence)) {
+    writeEvent(event);
+  }
+
+  const unsubscribe = services.events.subscribe(sessionId, writeEvent);
+  const heartbeat = setInterval(() => {
+    response.write(': keep-alive\n\n');
+  }, 15_000);
+
+  request.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

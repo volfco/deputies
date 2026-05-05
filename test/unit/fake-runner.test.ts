@@ -1,6 +1,6 @@
-import type { NormalizedEvent } from '../src/events/types.js';
-import { FakeRunner } from '../src/runner/fake.js';
-import { FakeSandboxProvider } from '../src/sandbox/fake.js';
+import type { NormalizedEvent } from '../../src/events/types.js';
+import { FakeRunner } from '../../src/runner/fake.js';
+import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 
 describe('FakeRunner', () => {
   it('emits a deterministic run event sequence', async () => {

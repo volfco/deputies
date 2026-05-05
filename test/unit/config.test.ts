@@ -1,4 +1,4 @@
-import { loadConfig } from '../src/config/index.js';
+import { loadConfig } from '../../src/config/index.js';
 
 describe('loadConfig', () => {
   it('uses portable defaults for local development and tests', () => {

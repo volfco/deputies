@@ -12,16 +12,24 @@ export type WorkerServiceOptions = {
   sandboxProvider: SandboxProvider;
   leaseOwner: string;
   leaseDurationMs?: number;
+  heartbeatIntervalMs?: number;
+  staleRecoveryLimit?: number;
 };
 
 export class WorkerService {
   private readonly leaseDurationMs: number;
+  private readonly heartbeatIntervalMs: number;
+  private readonly staleRecoveryLimit: number;
 
   constructor(private readonly options: WorkerServiceOptions) {
     this.leaseDurationMs = options.leaseDurationMs ?? 60_000;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? Math.max(1_000, Math.floor(this.leaseDurationMs / 2));
+    this.staleRecoveryLimit = options.staleRecoveryLimit ?? 10;
   }
 
   async processNext(): Promise<boolean> {
+    await this.recoverStaleRuns();
+
     const now = new Date();
     const claimed = await this.options.store.claimNextPendingMessage({
       runId: randomUUID(),
@@ -42,7 +50,7 @@ export class WorkerService {
     });
 
     try {
-      await this.runClaimedMessage(claimed);
+      await this.runWithHeartbeat(claimed);
       const completed = await this.options.store.completeRun({ runId: claimed.run.id, completedAt: new Date() });
       await this.options.events.append({
         sessionId: completed.message.sessionId,
@@ -71,6 +79,47 @@ export class WorkerService {
     }
 
     return true;
+  }
+
+  async recoverStaleRuns(): Promise<number> {
+    const recovered = await this.options.store.recoverStaleRuns({
+      now: new Date(),
+      limit: this.staleRecoveryLimit,
+    });
+
+    for (const item of recovered) {
+      await this.options.events.append({
+        sessionId: item.message.sessionId,
+        runId: item.run.id,
+        messageId: item.message.id,
+        type: 'run_failed',
+        payload: { error: item.run.error ?? 'Run lease expired', recovered: true },
+      });
+    }
+
+    return recovered.length;
+  }
+
+  private async runWithHeartbeat(claimed: ClaimedMessage): Promise<void> {
+    const heartbeat = setInterval(() => {
+      const heartbeatAt = new Date();
+      this.options.store
+        .renewRunLease({
+          runId: claimed.run.id,
+          leaseOwner: this.options.leaseOwner,
+          leaseExpiresAt: new Date(heartbeatAt.getTime() + this.leaseDurationMs),
+          heartbeatAt,
+        })
+        .catch((error: unknown) => {
+          console.error(error instanceof Error ? error.message : error);
+        });
+    }, this.heartbeatIntervalMs);
+
+    try {
+      await this.runClaimedMessage(claimed);
+    } finally {
+      clearInterval(heartbeat);
+    }
   }
 
   private async runClaimedMessage(claimed: ClaimedMessage): Promise<void> {

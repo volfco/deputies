@@ -15,8 +15,9 @@
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude test/integration/**/*.test.ts",
+    "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:uat": "vitest run --config vitest.uat.config.ts",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm test"
   },

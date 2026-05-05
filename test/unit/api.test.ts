@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
-import { createServer } from '../src/app/server.js';
-import { loadConfig } from '../src/config/index.js';
+import { createServer } from '../../src/app/server.js';
+import { loadConfig } from '../../src/config/index.js';
 
 describe('core API', () => {
   let server: Server;
@@ -66,6 +66,26 @@ describe('core API', () => {
     expect(replayed.map((event) => event.type)).toEqual(['message_created']);
   });
 
+  it('streams replayed and live events with SSE', async () => {
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stream session' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+
+    const abort = new AbortController();
+    const streamResponse = await fetch(`${baseUrl}/sessions/${session.id}/events/stream?after=1`, {
+      signal: abort.signal,
+    });
+    expect(streamResponse.status).toBe(200);
+    expect(streamResponse.headers.get('content-type')).toContain('text/event-stream');
+
+    const nextEvent = readNextSseEvent(streamResponse, abort);
+    const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
+      prompt: 'stream this',
+    });
+    expect(createMessage.status).toBe(202);
+
+    await expect(nextEvent).resolves.toMatchObject({ type: 'message_created', sequence: 2 });
+  });
+
   it('returns 404 when enqueueing a message for a missing session', async () => {
     const response = await postJson(`${baseUrl}/sessions/missing/messages`, { prompt: 'hello' });
 
@@ -90,4 +110,36 @@ function postJson(url: string, body: unknown): Promise<Response> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+async function readNextSseEvent(response: Response, abort: AbortController): Promise<{ type: string; sequence: number }> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Expected response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error('SSE stream ended before event');
+      buffer += decoder.decode(value, { stream: true });
+
+      const eventEnd = buffer.indexOf('\n\n');
+      if (eventEnd === -1) continue;
+
+      const frame = buffer.slice(0, eventEnd);
+      buffer = buffer.slice(eventEnd + 2);
+      const data = frame
+        .split('\n')
+        .find((line) => line.startsWith('data: '))
+        ?.slice('data: '.length);
+      if (!data) continue;
+
+      return JSON.parse(data) as { type: string; sequence: number };
+    }
+  } finally {
+    abort.abort();
+    reader.releaseLock();
+  }
 }

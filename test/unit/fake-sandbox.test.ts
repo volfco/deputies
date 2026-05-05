@@ -1,4 +1,4 @@
-import { FakeSandboxProvider } from '../src/sandbox/fake.js';
+import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 
 describe('FakeSandboxProvider', () => {
   it('creates, health checks, executes, and destroys a sandbox', async () => {

@@ -5,6 +5,7 @@ import type {
   CreateSessionRecord,
   ClaimedMessage,
   MessageRecord,
+  RecoveredRun,
   RunRecord,
   SessionRecord,
 } from './types.js';
@@ -94,6 +95,58 @@ export class MemoryStore implements AppStore {
 
   async completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage> {
     return this.finishRun(input.runId, input.completedAt, 'completed');
+  }
+
+  async renewRunLease(input: {
+    runId: string;
+    leaseOwner: string;
+    leaseExpiresAt: Date;
+    heartbeatAt: Date;
+  }): Promise<RunRecord | null> {
+    const run = this.runs.get(input.runId);
+    if (!run || run.status !== 'running' || run.leaseOwner !== input.leaseOwner) return null;
+
+    const renewed: RunRecord = {
+      ...run,
+      leaseExpiresAt: input.leaseExpiresAt,
+      heartbeatAt: input.heartbeatAt,
+    };
+    this.runs.set(input.runId, renewed);
+    return renewed;
+  }
+
+  async recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]> {
+    const recovered: RecoveredRun[] = [];
+
+    for (const run of this.runs.values()) {
+      if (recovered.length >= input.limit) break;
+      if (run.status !== 'running' && run.status !== 'starting') continue;
+      if (!run.leaseExpiresAt || run.leaseExpiresAt > input.now) continue;
+
+      const sessionMessages = this.messages.get(run.sessionId) ?? [];
+      const message = sessionMessages.find((candidate) => candidate.id === run.messageId);
+      if (!message) continue;
+
+      const pendingMessage: MessageRecord = { ...message, status: 'pending' };
+      sessionMessages[sessionMessages.indexOf(message)] = pendingMessage;
+
+      const { leaseExpiresAt: _leaseExpiresAt, leaseOwner: _leaseOwner, ...runWithoutLease } = run;
+      const staleRun: RunRecord = {
+        ...runWithoutLease,
+        status: 'stale',
+        failedAt: input.now,
+        heartbeatAt: input.now,
+        error: 'Run lease expired',
+      };
+      this.runs.set(run.id, staleRun);
+
+      const session = this.sessions.get(run.sessionId);
+      if (session) this.sessions.set(run.sessionId, { ...session, status: 'idle', updatedAt: input.now });
+
+      recovered.push({ message: pendingMessage, run: staleRun });
+    }
+
+    return recovered;
   }
 
   async failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage> {

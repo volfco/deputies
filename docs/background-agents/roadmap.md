@@ -8,20 +8,21 @@ Implemented so far:
 - Config parser and health endpoint.
 - Core session/message/event modules.
 - HTTP routes for creating sessions, enqueueing messages, and replaying events.
+- SSE event streaming with cursor replay.
 - Memory-backed `AppStore` for deterministic unit tests.
 - Docker Compose local Postgres.
 - SQL migration runner.
 - Postgres-backed `AppStore` for `sessions`, `messages`, `events`, and sequence counters.
+- Durable worker loop with `runs`, message claiming, fake-runner execution, run leases, heartbeat renewal, and stale lease recovery.
 - Postgres integration test path.
+- App-level Postgres worker integration test.
 
 Still open from the early phases:
 
 - Architecture fitness tests.
-- `GET /sessions/:id/events/stream`.
 - Contract schemas for public API responses and events.
-- Stale lease recovery and lease heartbeat renewal.
 
-The next implementation phase should finish worker hardening: stale lease recovery, lease heartbeat renewal, and app-level Postgres UAT.
+The next implementation phase should add the first generic webhook integration. That is the next product ingress capability now that sessions, events, workers, and streaming are in place.
 
 ## Phase 0: Repository And Agent Context
 
@@ -63,7 +64,7 @@ Acceptance criteria:
 - Integration test can start app with test Postgres.
 - Architecture tests prevent forbidden imports.
 
-Status: mostly implemented, except architecture fitness tests. The current Postgres integration tests exercise store/service behavior rather than starting the full app with Postgres; app-level Postgres UAT remains later.
+Status: mostly implemented, except architecture fitness tests. The current Postgres integration suite starts the app in-process with Postgres and processes an HTTP-created message through the worker. Built-artifact UAT remains later.
 
 ## Phase 2: Sessions, Messages, Events
 
@@ -90,7 +91,7 @@ Acceptance criteria:
 - Event replay by cursor works.
 - SSE stream receives appended events.
 
-Status: partially implemented. Non-streaming session/message/event routes and cursor replay exist; SSE and contract schemas remain open.
+Status: mostly implemented. Session/message/event routes, cursor replay, and SSE streaming exist. Contract schemas remain open.
 
 ## Phase 3: Worker, Runs, Leases
 
@@ -113,7 +114,7 @@ Acceptance criteria:
 - Stale processing messages recover.
 - Failed runner marks message/run failed and emits failure event.
 
-Status: partially implemented. The worker can claim pending messages transactionally, enforce one active run per session, execute the fake runner, and mark success/failure terminal states. Stale lease recovery and heartbeat renewal remain open.
+Status: implemented for the fake-runner path. The worker can claim pending messages transactionally, enforce one active run per session, execute the fake runner, renew heartbeats, recover stale leases, and mark success/failure terminal states. More recovery policy can be added later when retry limits are introduced.
 
 ## Phase 4: Generic Webhook Integration
 

@@ -1,8 +1,8 @@
-import { createServices } from '../src/app/server.js';
-import { FakeRunner } from '../src/runner/fake.js';
-import { FakeSandboxProvider } from '../src/sandbox/fake.js';
-import { MemoryStore } from '../src/store/memory.js';
-import { WorkerService } from '../src/worker/service.js';
+import { createServices } from '../../src/app/server.js';
+import { FakeRunner } from '../../src/runner/fake.js';
+import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
+import { MemoryStore } from '../../src/store/memory.js';
+import { WorkerService } from '../../src/worker/service.js';
 
 describe('WorkerService', () => {
   it('processes one pending message with the fake runner', async () => {

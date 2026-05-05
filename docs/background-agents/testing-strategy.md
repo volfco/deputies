@@ -73,8 +73,9 @@ Use real Postgres. Use `vercel-labs/emulate` for GitHub, Slack, and AWS when tes
 
 Current local policy:
 
-- `pnpm test` runs deterministic tests without Postgres.
+- `pnpm test` runs deterministic unit tests from `test/unit` without Postgres.
 - `pnpm test:integration` runs Postgres-backed integration tests and requires `TEST_DATABASE_URL`.
+- `pnpm test:uat` runs built-artifact UAT tests from `test/uat` and requires `TEST_DATABASE_URL` plus a prior `pnpm build`.
 - `docker compose up -d postgres` starts local Postgres and creates both `flue` and `flue_test`.
 - Integration tests apply migrations to `flue_test` and truncate app tables between tests.
 - Testcontainers is deferred until we need fully hermetic per-run databases.
