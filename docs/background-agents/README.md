@@ -77,10 +77,10 @@ The current scaffold has implemented the portable control-plane foundation:
 - Daytona SDK dependency, provider lifecycle adapter, and Flue `SandboxFactory` bridge.
 - Real Flue agent factory wiring behind `RUNNER=flue` using provider-backed sandbox handles.
 - Sandbox lifecycle persistence with reconnect/reuse semantics for follow-up messages.
+- Flue live event normalization for text deltas, tools, commands, and tasks.
 
 The following MVP pieces are still planned:
 
-- Flue live event normalization beyond the current runner-level events.
 - real Daytona/Flue UAT with credentials.
 
 ## MVP Target

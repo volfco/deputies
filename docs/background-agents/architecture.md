@@ -87,6 +87,13 @@ The implementation should still align with Flue's Node deployment model:
 
 The embedded runner uses Flue the same way the generated Node server does: construct a `createFlueContext()` in the worker process, then call `init()`. The difference is that our `init()` receives a product-managed provider sandbox via a Flue `SandboxFactory`, plus the Postgres-backed Flue `SessionStore`, instead of relying on the generated server's default in-memory store.
 
+Flue live events are normalized before being written to the product event log:
+
+- `text_delta` -> `agent_text_delta`.
+- `tool_start` and `command_start` and `task_start` -> `tool_started`.
+- `tool_end` and `command_end` and `task_end` -> `tool_finished`.
+- low-level lifecycle events such as `agent_start`, `turn_end`, `idle`, and compaction events are currently ignored unless they need product-visible UI later.
+
 If we later expose raw Flue agent endpoints, they should be clearly separated from product session endpoints:
 
 ```txt

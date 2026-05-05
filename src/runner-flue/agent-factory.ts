@@ -34,6 +34,7 @@ export class RealFlueAgentFactory implements FlueAgentFactory {
       createLocalEnv: unsupportedEnv('local'),
       defaultStore: this.sessionStore,
     });
+    ctx.setEventCallback(input.onEvent);
 
     const initOptions: AgentInit = {
       id: input.agentId,

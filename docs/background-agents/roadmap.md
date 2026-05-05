@@ -23,6 +23,7 @@ Implemented so far:
 - Real Flue agent factory wiring behind `RUNNER=flue`.
 - Sandbox lifecycle persistence with active sandbox reconnect/reuse.
 - Opt-in real Daytona/Flue built-artifact UAT scaffold.
+- Flue live event normalization for text deltas, tools, commands, and tasks.
 - Postgres integration test path.
 - App-level Postgres worker integration test.
 
@@ -30,7 +31,7 @@ Still open from the early phases:
 
 - Contract schemas for public API responses and events.
 
-The next implementation phase should run the real Daytona/Flue UAT with credentials and harden any provider/runtime issues it exposes, then normalize actual Flue live events into product events.
+The next implementation phase should run the real Daytona/Flue UAT with credentials and harden any provider/runtime issues it exposes, then add artifacts and outbound callback delivery.
 
 ## Phase 0: Repository And Agent Context
 
@@ -172,7 +173,7 @@ Acceptance criteria:
 - Real Flue runner uses Flue commands/tools/session APIs rather than a parallel harness.
 - Flue text/tool/task events are persisted as normalized events.
 
-Status: partially implemented. The Postgres-backed Flue `SessionStore` exists and is integration-tested. A `FlueRunner` adapter seam exists and is unit-tested with a fake Flue agent factory. A real Flue agent factory now creates in-process Flue contexts, passes provider-backed `SandboxFactory` instances, and uses durable Flue session persistence when configured. Event normalization from actual Flue live events and credential-backed controlled sandbox execution remain open.
+Status: mostly implemented. The Postgres-backed Flue `SessionStore` exists and is integration-tested. A `FlueRunner` adapter seam exists and is unit-tested with a fake Flue agent factory. A real Flue agent factory now creates in-process Flue contexts, passes provider-backed `SandboxFactory` instances, and uses durable Flue session persistence when configured. Flue text/tool/command/task events are normalized into product events. Credential-backed controlled sandbox execution exists as opt-in UAT and should be run/hardened with real credentials.
 
 ## Phase 6: Sandbox Provider
 
