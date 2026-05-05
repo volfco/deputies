@@ -23,6 +23,10 @@ describe('loadConfig', () => {
         DATABASE_URL: 'postgres://example',
         FLUE_MODEL: 'anthropic/claude-haiku-4-5',
         FLUE_SESSION_STORE: 'memory',
+        DAYTONA_API_KEY: 'daytona-key',
+        DAYTONA_API_URL: 'https://daytona.example',
+        DAYTONA_TARGET: 'eu',
+        DAYTONA_IMAGE: 'ubuntu:latest',
       }),
     ).toMatchObject({
       port: 4000,
@@ -33,6 +37,10 @@ describe('loadConfig', () => {
       databaseUrl: 'postgres://example',
       flueModel: 'anthropic/claude-haiku-4-5',
       flueSessionStore: 'memory',
+      daytonaApiKey: 'daytona-key',
+      daytonaApiUrl: 'https://daytona.example',
+      daytonaTarget: 'eu',
+      daytonaImage: 'ubuntu:latest',
     });
   });
 

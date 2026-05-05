@@ -18,6 +18,19 @@ describe('architecture boundaries', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps Daytona SDK isolated to sandbox adapters', async () => {
+    const files = await sourceFiles();
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      const text = await readFile(file, 'utf8');
+      if (!text.includes('@daytona/sdk')) continue;
+      if (!relative(srcRoot, file).startsWith('sandbox/')) offenders.push(relative(root, file));
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it('prevents integrations from importing runner implementations', async () => {
     const files = (await sourceFiles()).filter((file) => relative(srcRoot, file).startsWith('integrations/'));
     const offenders: string[] = [];

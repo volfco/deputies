@@ -47,11 +47,31 @@ export type SandboxExecResult = {
   completedAt: Date;
 };
 
+export type SandboxFileSystem = {
+  readFile(path: string): Promise<string>;
+  readFileBuffer(path: string): Promise<Uint8Array>;
+  writeFile(path: string, content: string | Uint8Array): Promise<void>;
+  stat(path: string): Promise<FileStat>;
+  readdir(path: string): Promise<string[]>;
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
+};
+
+export type FileStat = {
+  isFile: boolean;
+  isDirectory: boolean;
+  isSymbolicLink: boolean;
+  size: number;
+  mtime: Date;
+};
+
 export type SandboxHandle = SandboxRef & {
   provider: string;
   workspacePath: string;
   metadata: Record<string, unknown>;
   capabilities: SandboxCapabilities;
+  fs?: SandboxFileSystem;
   exec(input: SandboxExecInput): Promise<SandboxExecResult>;
 };
 

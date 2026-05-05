@@ -296,6 +296,14 @@ Behavior:
 - Uses Daytona exec/filesystem APIs where available.
 - May support persistent filesystem better than snapshots.
 
+Current implementation:
+
+- `src/sandbox/daytona.ts` wraps the Daytona TypeScript SDK behind the product `SandboxProvider` interface.
+- `src/runner-flue/sandbox-factory.ts` adapts any filesystem-capable `SandboxHandle` into Flue's `SandboxFactory` using `createSandboxSessionEnv`.
+- Daytona creation supports optional `DAYTONA_IMAGE`, `DAYTONA_SNAPSHOT`, `DAYTONA_API_URL`, and `DAYTONA_TARGET` configuration.
+- This follows Flue's documented connector shape: product code creates/configures the Daytona sandbox, then Flue receives a connector-wrapped sandbox.
+- Provider sandbox IDs are not persisted yet, so reconnect across process restarts remains a lifecycle-manager follow-up.
+
 ### Kubernetes Provider
 
 Purpose:
@@ -419,10 +427,11 @@ Rules:
 Implement providers in this order:
 
 1. `fake`, required for tests.
-2. `local-docker`, useful for local and CI validation.
-3. One hosted provider, likely Daytona, Kubernetes, or ECS depending on the first deployment target.
+2. `daytona`, the first hosted provider because it matches Flue's remote sandbox docs.
+3. `local-docker`, useful for local and CI validation.
+4. Kubernetes or ECS depending on the first self-hosted deployment target.
 
-This order proves the interface before committing to any one infrastructure platform.
+This order proves the interface with both deterministic tests and a hosted persistent sandbox before committing to a self-hosted infrastructure platform.
 
 ## Relationship To Flue's Daytona Example
 

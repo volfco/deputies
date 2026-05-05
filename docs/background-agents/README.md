@@ -74,12 +74,12 @@ The current scaffold has implemented the portable control-plane foundation:
 - Generic inbound webhook integration with DB-backed source config and prompt prefixes.
 - SSE event streaming with cursor replay.
 - Unit, Postgres integration, architecture fitness, and built-artifact UAT tests.
+- Daytona SDK dependency, provider lifecycle adapter, and Flue `SandboxFactory` bridge.
 
 The following MVP pieces are still planned:
 
-- Postgres-backed Flue `SessionStore`;
 - real Flue context/agent factory wiring for `runner-flue`;
-- sandbox lifecycle persistence and one real sandbox provider.
+- sandbox lifecycle persistence and real Daytona UAT with credentials.
 
 ## MVP Target
 

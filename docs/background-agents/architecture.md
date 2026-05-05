@@ -187,7 +187,7 @@ store -> domain services
 sessions/messages -> integration-specific modules
 ```
 
-Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and makes tests easier. Store implementations may import shared data types, but must not import session/message/event service classes.
+Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and makes tests easier. Provider SDKs should stay in provider-specific sandbox adapters, such as `src/sandbox/daytona.ts` for `@daytona/sdk`. Store implementations may import shared data types, but must not import session/message/event service classes.
 
 `runner-flue` must also provide or configure a Postgres-backed Flue session store. Flue's Node default is in-memory and is not acceptable for production, CI, UAT, or multi-replica deployments. Product state and Flue runtime state are separate but both must be durable.
 

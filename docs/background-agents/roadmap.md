@@ -17,6 +17,7 @@ Implemented so far:
 - DB-backed generic webhook sources with bearer auth, prompt prefixes, thread reuse, and delivery dedupe.
 - Architecture fitness tests for core import boundaries.
 - Postgres-backed Flue `SessionStore` and `runner-flue` adapter seam.
+- Daytona SDK dependency, sandbox provider adapter, and Flue `SandboxFactory` bridge.
 - Postgres integration test path.
 - App-level Postgres worker integration test.
 
@@ -24,7 +25,7 @@ Still open from the early phases:
 
 - Contract schemas for public API responses and events.
 
-The next implementation phase should wire real Flue context/agent construction behind `runner-flue`, then add the first real sandbox provider.
+The next implementation phase should wire real Flue context/agent construction behind `runner-flue`, then add sandbox lifecycle persistence and real Daytona UAT coverage.
 
 ## Phase 0: Repository And Agent Context
 
@@ -166,7 +167,7 @@ Acceptance criteria:
 - Real Flue runner uses Flue commands/tools/session APIs rather than a parallel harness.
 - Flue text/tool/task events are persisted as normalized events.
 
-Status: partially implemented. The Postgres-backed Flue `SessionStore` exists and is integration-tested. A `FlueRunner` adapter seam exists and is unit-tested with a fake Flue agent factory. Real Flue context/agent factory wiring, event normalization from actual Flue events, and controlled sandbox execution remain open.
+Status: partially implemented. The Postgres-backed Flue `SessionStore` exists and is integration-tested. A `FlueRunner` adapter seam exists and is unit-tested with a fake Flue agent factory. A `SandboxHandle` to Flue `SandboxFactory` bridge exists for provider-backed sandboxes. Real Flue context/agent factory wiring, event normalization from actual Flue events, and controlled sandbox execution remain open.
 
 ## Phase 6: Sandbox Provider
 
@@ -187,6 +188,8 @@ Acceptance criteria:
 - Existing sandbox can be reconnected by provider ID.
 - Unhealthy sandbox fails clearly or is recreated according to policy.
 - Tests use fake provider without real infrastructure.
+
+Status: partially implemented. The fake provider and Daytona provider adapter exist. Daytona creation, connection, health, destroy, exec, and filesystem operations are unit-tested with an SDK-shaped fake client. Provider metadata persistence and real Daytona UAT remain open.
 
 ## Phase 7: UAT Suite
 
