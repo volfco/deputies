@@ -7,6 +7,7 @@ The goal is a deployable background coding-agent service that can start as a sin
 ## Documents
 
 - [Architecture](./architecture.md): system shape, deployable units, module boundaries, and dependency rules.
+- [Domain Design](./domain-design.md): lightweight domain-driven design boundaries, aggregates, and anti-corruption layers.
 - [Data Model](./data-model.md): Postgres-backed sessions, messages, events, runs, sandboxes, integrations, and artifacts.
 - [Sandbox Providers](./sandbox-providers.md): provider contract, lifecycle APIs, capabilities, and conformance expectations.
 - [Flue Persistence](./flue-persistence.md): Postgres-backed Flue session store and how it relates to product session state.
