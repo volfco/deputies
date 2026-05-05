@@ -1,0 +1,415 @@
+# Sandbox Providers
+
+## Goal
+
+The system must support multiple sandbox providers without changing session, message, worker, integration, or Flue runner code. Provider-specific behavior belongs behind a stable sandbox provider interface plus capability flags.
+
+Initial providers may include:
+
+- `fake`: deterministic tests.
+- `local-docker`: local development and CI smoke tests.
+- `daytona`: hosted persistent development sandboxes.
+- `kubernetes`: pods/jobs inside a cluster.
+- `ecs`: Fargate tasks in AWS.
+- `modal` or others later, if desired.
+
+## Design Rule
+
+The worker coordinates sandbox lifecycle through the provider interface. The Flue runner receives a `SandboxHandle` that can execute commands and expose filesystem operations through a Flue connector.
+
+No module outside `sandbox` and provider-specific adapters should know whether a session is running on Docker, Daytona, Kubernetes, ECS, or a fake test provider.
+
+## Provider Interface
+
+```ts
+export interface SandboxProvider {
+  readonly name: string;
+  readonly capabilities: SandboxCapabilities;
+
+  create(input: CreateSandboxInput): Promise<SandboxHandle>;
+  connect(input: ConnectSandboxInput): Promise<SandboxHandle>;
+  destroy(input: DestroySandboxInput): Promise<void>;
+
+  health(input: SandboxRef): Promise<SandboxHealth>;
+
+  snapshot?(input: SnapshotSandboxInput): Promise<SandboxSnapshot>;
+  restore?(input: RestoreSandboxInput): Promise<SandboxHandle>;
+  stop?(input: StopSandboxInput): Promise<void>;
+  start?(input: StartSandboxInput): Promise<SandboxHandle>;
+  logs?(input: SandboxLogsInput): AsyncIterable<SandboxLogEvent>;
+}
+```
+
+Only `create`, `connect`, `destroy`, and `health` are mandatory. Snapshot, restore, stop, start, and logs are optional capabilities.
+
+## Core Types
+
+```ts
+export type SandboxCapabilities = {
+  persistentFilesystem: boolean;
+  snapshots: boolean;
+  stopStart: boolean;
+  exec: boolean;
+  filesystem: boolean;
+  streamingLogs: boolean;
+  portForwarding: boolean;
+  objectStorageArtifacts: boolean;
+};
+
+export type CreateSandboxInput = {
+  sessionId: string;
+  repo?: RepoRef;
+  baseBranch?: string;
+  workingBranch?: string;
+  image?: string;
+  env?: Record<string, string>;
+  resources?: SandboxResources;
+  metadata?: Record<string, unknown>;
+};
+
+export type ConnectSandboxInput = {
+  providerSandboxId: string;
+  sessionId: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type SandboxRef = {
+  providerSandboxId: string;
+  sessionId: string;
+};
+
+export type SandboxHandle = SandboxRef & {
+  provider: string;
+  workspacePath: string;
+  metadata: Record<string, unknown>;
+  capabilities: SandboxCapabilities;
+  exec(command: SandboxExecInput): Promise<SandboxExecResult>;
+  fs?: SandboxFileSystem;
+  ports?: SandboxPorts;
+};
+```
+
+## Execution API
+
+Every production provider must support command execution directly or through an attached bridge.
+
+```ts
+export type SandboxExecInput = {
+  command: string;
+  cwd?: string;
+  env?: Record<string, string>;
+  timeoutMs?: number;
+  stdin?: string;
+};
+
+export type SandboxExecResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  startedAt: Date;
+  completedAt: Date;
+};
+```
+
+Rules:
+
+- Providers must not throw for non-zero process exit codes. Return `exitCode` instead.
+- Providers should throw for infrastructure failures: sandbox missing, network failure, timeout connecting to provider API.
+- Output should be bounded by provider or caller limits to avoid memory exhaustion.
+- Secrets must not be logged by provider adapters.
+
+## Filesystem API
+
+Flue sandbox connectors need filesystem operations. A provider can implement these natively or by translating them into commands inside the sandbox.
+
+```ts
+export interface SandboxFileSystem {
+  readFile(path: string): Promise<string>;
+  readFileBuffer(path: string): Promise<Uint8Array>;
+  writeFile(path: string, contents: string | Uint8Array): Promise<void>;
+  stat(path: string): Promise<SandboxFileStat>;
+  readdir(path: string): Promise<SandboxDirEntry[]>;
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
+}
+```
+
+This mirrors the Flue connector shape closely enough that `runner-flue` can adapt a `SandboxHandle` into a Flue sandbox factory.
+
+## Lifecycle Semantics
+
+### Create
+
+`create()` provisions a new sandbox and returns once it can accept commands.
+
+Provider responsibilities:
+
+- Provision the compute environment.
+- Install or select a usable base image.
+- Return a stable provider sandbox ID.
+- Return the workspace path.
+- Attach metadata needed to reconnect later.
+
+Optional responsibilities by provider policy:
+
+- Clone the repo.
+- Run setup hooks.
+- Start a bridge process.
+- Preconfigure Git credentials.
+
+### Connect
+
+`connect()` reconnects to an existing provider sandbox ID after process restart or worker handoff.
+
+Provider responsibilities:
+
+- Validate the sandbox still exists.
+- Return an executable handle.
+- Avoid creating a new sandbox unless the provider explicitly documents reconnect-as-recreate behavior.
+
+### Health
+
+`health()` checks whether the sandbox exists and can accept work.
+
+Suggested result:
+
+```ts
+export type SandboxHealth = {
+  status: 'ready' | 'starting' | 'stopped' | 'unhealthy' | 'missing';
+  message?: string;
+  checkedAt: Date;
+};
+```
+
+For providers with `exec`, a simple `echo ok` style command is acceptable as the default health check.
+
+### Destroy
+
+`destroy()` tears down provider resources.
+
+Rules:
+
+- It must be idempotent.
+- Missing sandbox should be treated as success.
+- It must not delete database state. The caller owns DB updates.
+
+### Snapshot And Restore
+
+Snapshot support is optional.
+
+Providers with snapshots should return:
+
+```ts
+export type SandboxSnapshot = {
+  provider: string;
+  snapshotId: string;
+  sourceSandboxId: string;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+};
+```
+
+The worker can use snapshots as an optimization, not as a correctness requirement.
+
+## Provider Capabilities
+
+Provider-specific differences should be expressed through capabilities, not `if provider === ...` checks scattered through the codebase.
+
+Examples:
+
+| Capability | Meaning |
+|---|---|
+| `persistentFilesystem` | Files survive between runs without snapshot restore. |
+| `snapshots` | Provider can save and restore filesystem state. |
+| `stopStart` | Provider can stop and later restart the same sandbox. |
+| `exec` | Provider supports direct command execution. |
+| `filesystem` | Provider supports file operations without shelling out. |
+| `streamingLogs` | Provider can stream runtime logs. |
+| `portForwarding` | Provider can expose dev server ports. |
+
+The lifecycle manager should select behavior based on capabilities.
+
+## Flue Connector Adapter
+
+`runner-flue` should adapt `SandboxHandle` into the Flue sandbox connector contract.
+
+Required mapping:
+
+```txt
+Flue exec -> SandboxHandle.exec
+Flue readFile -> SandboxHandle.fs.readFile or shell fallback
+Flue writeFile -> SandboxHandle.fs.writeFile or shell fallback
+Flue readdir/stat/exists/mkdir/rm -> SandboxHandle.fs or shell fallback
+```
+
+If a provider lacks native filesystem APIs, the adapter may implement them with safe shell commands. That fallback must quote paths safely and reject unsupported path shapes.
+
+## Provider Examples
+
+### Fake Provider
+
+Purpose:
+
+- Unit, integration, and e2e tests.
+
+Behavior:
+
+- Always returns a ready sandbox.
+- `exec()` returns scripted outputs.
+- Filesystem is in memory.
+- No network or real process execution.
+
+### Local Docker Provider
+
+Purpose:
+
+- Local development and CI smoke tests.
+
+Behavior:
+
+- Creates Docker container per session.
+- Uses bind mount or named volume for workspace.
+- Executes commands via Docker exec.
+- Destroy removes container and optional volume.
+
+### Daytona Provider
+
+Purpose:
+
+- Hosted persistent dev environments.
+
+Behavior:
+
+- Creates Daytona sandbox/workspace.
+- Reconnects by provider sandbox ID.
+- Uses Daytona exec/filesystem APIs where available.
+- May support persistent filesystem better than snapshots.
+
+### Kubernetes Provider
+
+Purpose:
+
+- Cluster-native deployments.
+
+Behavior:
+
+- Creates Pod or Job per session.
+- Uses PVC for persistent workspace if needed.
+- Executes commands via Kubernetes exec API.
+- Health checks pod phase and optional exec probe.
+- Destroy deletes pod/job and optional PVC depending on retention policy.
+
+### ECS Provider
+
+Purpose:
+
+- AWS-native Fargate deployments.
+
+Behavior:
+
+- Starts task per session.
+- Uses EFS for persistent workspace if needed.
+- Requires a bridge or sidecar API for exec/filesystem operations, since ECS Exec is not ideal as a high-level filesystem API.
+- Health checks task status and bridge readiness.
+- Destroy stops task.
+
+## Bridge Pattern
+
+Some providers cannot provide convenient filesystem and exec APIs directly. Those providers should run a sandbox bridge inside the environment.
+
+Bridge responsibilities:
+
+- Expose authenticated HTTP or WebSocket control API.
+- Execute commands.
+- Perform filesystem operations.
+- Stream logs/events.
+- Report heartbeat.
+
+The provider adapter then talks to the bridge instead of provider-native exec APIs.
+
+This is especially useful for ECS, Kubernetes, and any provider with awkward remote exec semantics.
+
+## Conformance Tests
+
+Every provider must pass the same conformance suite.
+
+Required tests:
+
+- `create()` returns a handle with provider sandbox ID and workspace path.
+- `health()` reports ready after create.
+- `connect()` reconnects to the same sandbox.
+- `exec()` returns stdout, stderr, and exit code.
+- Non-zero command returns `exitCode`, not thrown error.
+- `writeFile()` then `readFile()` round trips content.
+- `mkdir()` and `readdir()` work.
+- `rm()` removes files/directories.
+- `destroy()` is idempotent.
+- Missing sandbox health returns `missing` or `unhealthy`.
+
+Optional capability tests run only when capability flags are enabled:
+
+- snapshot and restore preserve files.
+- stop and start preserve workspace if `persistentFilesystem` is true.
+- port forwarding exposes a test HTTP server.
+- streaming logs produce expected output.
+
+## Error Model
+
+Provider errors should be normalized.
+
+```ts
+export class SandboxProviderError extends Error {
+  provider: string;
+  code:
+    | 'not_found'
+    | 'auth_failed'
+    | 'quota_exceeded'
+    | 'timeout'
+    | 'network'
+    | 'unhealthy'
+    | 'unsupported'
+    | 'unknown';
+  retryable: boolean;
+  details?: unknown;
+}
+```
+
+The worker uses `retryable` to decide whether to retry, recreate, or fail the message.
+
+## Persistence
+
+Provider adapters return metadata. The sandbox module persists it in the `sandboxes` table.
+
+Persisted fields:
+
+- provider name.
+- provider sandbox ID.
+- session ID.
+- status.
+- workspace path.
+- snapshot ID, if any.
+- provider metadata needed to reconnect.
+
+Provider adapters must not write directly to the database.
+
+## Security
+
+Rules:
+
+- Provider adapters must not log raw environment variables or credentials.
+- Any bridge API must require per-sandbox authentication.
+- Sandbox tokens must be scoped to one sandbox/session.
+- Provider metadata should not contain raw long-lived credentials.
+- Destructive actions must be limited to the provider sandbox ID passed by the caller.
+- Filesystem APIs must prevent accidental host path traversal for local providers.
+
+## MVP Recommendation
+
+Implement providers in this order:
+
+1. `fake`, required for tests.
+2. `local-docker`, useful for local and CI validation.
+3. One hosted provider, likely Daytona, Kubernetes, or ECS depending on the first deployment target.
+
+This order proves the interface before committing to any one infrastructure platform.
