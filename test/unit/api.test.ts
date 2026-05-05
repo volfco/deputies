@@ -9,21 +9,11 @@ describe('core API', () => {
 
   beforeEach(async () => {
     server = createServer(loadConfig({}));
-    await new Promise<void>((resolve) => {
-      server.listen(0, '127.0.0.1', resolve);
-    });
-
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Expected TCP server address');
-    }
-    baseUrl = `http://${address.address}:${address.port}`;
+    baseUrl = await listen(server);
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+    await closeServer(server);
   });
 
   it('reports health', async () => {
@@ -31,6 +21,26 @@ describe('core API', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ status: 'ok', runMode: 'all' });
+  });
+
+  it('protects product session routes when bearer auth is enabled', async () => {
+    await closeServer(server);
+    server = createServer(loadConfig({ API_AUTH_MODE: 'bearer', API_BEARER_TOKEN: 'secret' }));
+    baseUrl = await listen(server);
+
+    const health = await fetch(`${baseUrl}/health`);
+    expect(health.status).toBe(200);
+
+    const missingAuth = await postJson(`${baseUrl}/sessions`, { title: 'Private' });
+    expect(missingAuth.status).toBe(401);
+    await expect(missingAuth.json()).resolves.toMatchObject({ error: 'unauthorized' });
+
+    const invalidAuth = await postJson(`${baseUrl}/sessions`, { title: 'Private' }, 'wrong');
+    expect(invalidAuth.status).toBe(401);
+
+    const validAuth = await postJson(`${baseUrl}/sessions`, { title: 'Private' }, 'secret');
+    expect(validAuth.status).toBe(201);
+    expectSessionResponse(await validAuth.json());
   });
 
   it('creates a session, enqueues a message, and replays events', async () => {
@@ -115,11 +125,32 @@ describe('core API', () => {
   });
 });
 
-function postJson(url: string, body: unknown): Promise<Response> {
+function postJson(url: string, body: unknown, bearerToken?: string): Promise<Response> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (bearerToken) headers.authorization = `Bearer ${bearerToken}`;
   return fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
+  });
+}
+
+async function listen(server: Server): Promise<string> {
+  await new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', resolve);
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected TCP server address');
+  }
+  return `http://${address.address}:${address.port}`;
+}
+
+async function closeServer(server: Server): Promise<void> {
+  if (!server.listening) return;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 

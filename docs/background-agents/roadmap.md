@@ -6,6 +6,7 @@ Implemented so far:
 
 - Core TypeScript service scaffold.
 - Config parser, Hono transport layer, and health endpoint.
+- Optional bearer auth middleware for product session routes.
 - Core session/message/event modules.
 - HTTP routes for creating sessions, enqueueing messages, and replaying events.
 - SSE event streaming with cursor replay.

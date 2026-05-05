@@ -2,6 +2,7 @@ export type RunMode = 'all' | 'api' | 'worker';
 export type RunnerKind = 'fake' | 'flue';
 export type SandboxProviderKind = 'fake' | 'local-docker' | 'daytona' | 'kubernetes' | 'ecs';
 export type AppStoreKind = 'memory' | 'postgres';
+export type ApiAuthMode = 'none' | 'bearer';
 
 export type AppConfig = {
   port: number;
@@ -9,6 +10,8 @@ export type AppConfig = {
   runner: RunnerKind;
   sandboxProvider: SandboxProviderKind;
   appStore: AppStoreKind;
+  apiAuthMode: ApiAuthMode;
+  apiBearerToken?: string;
   databaseUrl?: string;
   flueSessionStore: 'postgres' | 'memory';
   flueModel?: string;
@@ -30,9 +33,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       'fake',
     ),
     appStore: parseEnum(env.APP_STORE, ['memory', 'postgres'], 'memory'),
+    apiAuthMode: parseEnum(env.API_AUTH_MODE, ['none', 'bearer'], 'none'),
     flueSessionStore: parseEnum(env.FLUE_SESSION_STORE, ['postgres', 'memory'], 'postgres'),
   };
 
+  if (env.API_BEARER_TOKEN) config.apiBearerToken = env.API_BEARER_TOKEN;
   if (env.DATABASE_URL) config.databaseUrl = env.DATABASE_URL;
   if (env.FLUE_MODEL) config.flueModel = env.FLUE_MODEL;
   if (env.DAYTONA_API_KEY) config.daytonaApiKey = env.DAYTONA_API_KEY;
@@ -42,6 +47,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.DAYTONA_SNAPSHOT) config.daytonaSnapshot = env.DAYTONA_SNAPSHOT;
 
   return config;
+}
+
+export function requireApiBearerToken(config: AppConfig): string {
+  if (!config.apiBearerToken) {
+    throw new Error('API_BEARER_TOKEN is required when API_AUTH_MODE=bearer');
+  }
+
+  return config.apiBearerToken;
 }
 
 export function requireDaytonaApiKey(config: AppConfig): string {

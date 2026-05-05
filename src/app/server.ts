@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
+import { apiAuthMiddleware } from '../auth/middleware.js';
 import type { AppConfig } from '../config/index.js';
 import { EventService } from '../events/service.js';
 import { GenericWebhookError, GenericWebhookService } from '../integrations/generic-webhook/service.js';
@@ -48,6 +49,9 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.notFound((c) => c.json({ error: 'not_found', message: 'Route not found' }, 404));
 
   app.get('/health', (c) => c.json({ status: 'ok', runMode: config.runMode }));
+
+  app.use('/sessions/*', apiAuthMiddleware(config));
+  app.use('/sessions', apiAuthMiddleware(config));
 
   app.post('/sessions', async (c) => {
     const body = await readJsonBody(c);

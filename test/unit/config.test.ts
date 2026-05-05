@@ -8,6 +8,7 @@ describe('loadConfig', () => {
       runner: 'fake',
       sandboxProvider: 'fake',
       appStore: 'memory',
+      apiAuthMode: 'none',
       flueSessionStore: 'postgres',
     });
   });
@@ -20,6 +21,8 @@ describe('loadConfig', () => {
         RUNNER: 'flue',
         SANDBOX_PROVIDER: 'kubernetes',
         APP_STORE: 'postgres',
+        API_AUTH_MODE: 'bearer',
+        API_BEARER_TOKEN: 'api-token',
         DATABASE_URL: 'postgres://example',
         FLUE_MODEL: 'anthropic/claude-haiku-4-5',
         FLUE_SESSION_STORE: 'memory',
@@ -34,6 +37,8 @@ describe('loadConfig', () => {
       runner: 'flue',
       sandboxProvider: 'kubernetes',
       appStore: 'postgres',
+      apiAuthMode: 'bearer',
+      apiBearerToken: 'api-token',
       databaseUrl: 'postgres://example',
       flueModel: 'anthropic/claude-haiku-4-5',
       flueSessionStore: 'memory',

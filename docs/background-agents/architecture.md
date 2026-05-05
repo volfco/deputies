@@ -194,6 +194,8 @@ Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and ma
 
 The HTTP transport uses Hono on Node via `@hono/node-server`. This keeps the API layer lightweight while giving us middleware hooks for auth, request IDs, CORS, body limits, and route grouping as integrations grow.
 
+Product session routes support optional bearer-token protection with `API_AUTH_MODE=bearer` and `API_BEARER_TOKEN`. `/health` remains public. Generic webhooks keep their own per-source bearer auth so external systems can be authorized independently from product API clients.
+
 `runner-flue` must also provide or configure a Postgres-backed Flue session store. Flue's Node default is in-memory and is not acceptable for production, CI, UAT, or multi-replica deployments. Product state and Flue runtime state are separate but both must be durable.
 
 ## Request Flow

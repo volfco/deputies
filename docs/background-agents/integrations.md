@@ -63,6 +63,8 @@ external webhook
 
 ## Generic Inbound Webhook
 
+Generic webhook auth is independent of product API auth. `API_AUTH_MODE=bearer` protects product session routes, but `POST /webhooks/generic/:sourceKey` uses the bearer token configured for that webhook source in the database.
+
 The generic webhook is the first integration to implement.
 
 Route:
