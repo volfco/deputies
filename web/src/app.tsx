@@ -20,7 +20,7 @@ import {
   type Health,
 } from './api.js';
 
-const tokenStorageKey = 'flue-bg-agents-api-token';
+const tokenStorageKey = 'devops-deputies-api-token';
 
 export function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -39,6 +39,7 @@ export function App() {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const eventCursor = useRef(0);
+  const threadEndRef = useRef<HTMLDivElement | null>(null);
 
   const authRequired = health?.apiAuthMode === 'bearer';
   const canCallApi = Boolean(health) && (!authRequired || Boolean(token));
@@ -66,6 +67,10 @@ export function App() {
     if (!selectedSessionId || !canCallApi) return;
     refreshSessionDetail(selectedSessionId);
   }, [selectedSessionId, canCallApi, token]);
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [selectedSessionId, messages.length, events.length]);
 
   useEffect(() => {
     if (!selectedSessionId || !canCallApi) return;
@@ -265,9 +270,9 @@ export function App() {
     <main className="shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Flue Control Plane</p>
-          <h1>Background agent runs without losing the thread.</h1>
-          <p className="lede">Create sessions, send follow-ups, watch live events, and inspect produced artifacts.</p>
+          <p className="eyebrow">DevOps Deputies</p>
+          <h1>Your async engineering deputies.</h1>
+          <p className="lede">Start a thread, delegate follow-ups, watch the work trail, and inspect the results.</p>
         </div>
         <div className="status-card">
           <span className={health?.status === 'ok' ? 'dot ok' : 'dot'} />
@@ -326,13 +331,13 @@ export function App() {
           {isCreatingThread ? (
             <section className="panel new-thread-state">
               <p className="eyebrow">New Thread</p>
-              <h2>What should the agent do?</h2>
+              <h2>What should your deputy do?</h2>
               <form className="new-thread" onSubmit={handleCreateThread}>
                 <textarea
                   value={newThreadPrompt}
                   onChange={(event) => setNewThreadPrompt(event.target.value)}
                   onKeyDown={(event) => submitOnModifierEnter(event)}
-                  placeholder="Ask the agent to investigate, change code, or answer a question..."
+                  placeholder="Ask your deputy to investigate, change code, or answer a question..."
                   disabled={!canCallApi}
                   autoFocus
                 />
@@ -364,25 +369,27 @@ export function App() {
                 </div>
               </section>
 
-              <form className="panel composer" onSubmit={handleSendMessage}>
-                <textarea
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  onKeyDown={(event) => submitOnModifierEnter(event)}
-                  placeholder="Ask the agent to investigate, change code, or follow up..."
-                />
-                <button type="submit" disabled={!prompt.trim()}>Send message</button>
-              </form>
-
               <div className="columns">
-                <ChatPanel events={events} messages={messages} />
+                <section className="thread-column">
+                  <ChatPanel events={events} messages={messages} />
+                  <form className="panel composer" onSubmit={handleSendMessage}>
+                    <textarea
+                      value={prompt}
+                      onChange={(event) => setPrompt(event.target.value)}
+                      onKeyDown={(event) => submitOnModifierEnter(event)}
+                      placeholder="Ask your deputy to investigate, change code, or follow up..."
+                    />
+                    <button type="submit" disabled={!prompt.trim()}>Send message</button>
+                  </form>
+                  <div ref={threadEndRef} />
+                </section>
                 <Artifacts artifacts={artifacts} />
               </div>
             </>
           ) : (
             <section className="panel empty-state">
               <h2>Select a session or start a new thread</h2>
-              <p>The UI will stream events once a thread is active.</p>
+              <p>The work trail will stream once a thread is active.</p>
               <button type="button" onClick={startNewThread} disabled={!canCallApi}>+ New thread</button>
             </section>
           )}
@@ -446,7 +453,7 @@ function ChatPanel(props: { events: AgentEvent[]; messages: Message[] }) {
           </article>
           {assistantText[message.id] ? (
             <article className="bubble assistant-bubble">
-              <h3>Agent response</h3>
+              <h3>Deputy response</h3>
               <p>{assistantText[message.id]}</p>
             </article>
           ) : null}
