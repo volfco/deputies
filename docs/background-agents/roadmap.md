@@ -37,7 +37,7 @@ Still open from the early phases:
 
 - Contract schemas for public API responses and events.
 
-The next implementation phase should focus on deployability and operational polish: release/migration commands, Railway/ECS/Kubernetes guidance, richer UI observability for sandbox cleanup, callback observability/replay controls, and contract schemas for public API/events.
+The next implementation phase should focus on operational polish before the next large integration: callback delivery observability/replay controls, richer UI observability for sandbox cleanup, release/migration commands, Railway/ECS/Kubernetes guidance, and contract schemas for public API/events.
 
 ## Phase 0: Repository And Agent Context
 
@@ -242,7 +242,24 @@ Acceptance criteria:
 - Bot messages are ignored.
 - Completion posts thread reply in emulated Slack.
 
-Status: mostly implemented. Inbound app mentions and thread follow-ups create/reuse sessions, Slack signatures and URL verification are supported, duplicate events are ignored, bot messages are ignored, received/running/completed reactions are posted best-effort, and final deputy responses are delivered through the callback dispatcher. Remaining work includes Slack authorization policy, prompt cleanup, richer thread context fetching, and optional status messages beyond reactions.
+Status: mostly implemented. Inbound app mentions and thread follow-ups create/reuse sessions, Slack signatures and URL verification are supported, duplicate events are ignored, bot messages are ignored, allowlists enforce optional team/channel/user authorization, received/running/completed reactions are posted best-effort, and final deputy responses are delivered through the callback dispatcher. Tagged mentions fetch prior unprocessed thread replies as prompt context, omit already processed Slack timestamps, decode Slack text entities, and use readable channel/user names when Slack scopes allow it. Remaining work is optional status messages beyond reactions and direct-message support later.
+
+## Phase 8.5: Callback Observability
+
+Goal: make asynchronous completion delivery debuggable and recoverable before adding more integrations.
+
+Deliverables:
+
+- API route to list callback deliveries for a session or message.
+- API route to manually replay failed callback deliveries.
+- Operator UI context-panel section for callback status, attempts, last error, and next retry time.
+- Tests for callback visibility, retry state, and manual replay behavior.
+
+Acceptance criteria:
+
+- Operators can see whether a Slack or generic-webhook callback is pending, sent, retrying, or terminally failed.
+- Operators can replay a failed callback without re-running the agent task.
+- Callback observability works for all callback target types through the generic callback core.
 
 ## Phase 9: GitHub Integration
 

@@ -4,11 +4,8 @@ This is a living backlog for product, integration, runtime, and operations work.
 
 ## Integrations
 
-- Slack outbound completion replies.
-- Slack authorization policy for allowed teams, channels, and users.
-- Slack prompt cleanup so the deputy focuses on the request before metadata.
-- Slack thread context fetching.
 - Slack start/queued status acknowledgement beyond reaction-only progress.
+- Slack direct-message support.
 - GitHub integration for issue comments, PR comments, and review comments.
 - GitHub App signature verification, installation token flow, and delivery dedupe.
 - GitHub callback comments with completion summaries and PR/artifact links.
@@ -33,7 +30,7 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Agent authentication to external services through MCP, CLI credentials, API tokens, and short-lived provider tokens.
 - Credential scoping and injection policy for tools, commands, MCP servers, and sandbox environments.
 - Multi-repository task support, including repo selection, cloning/syncing multiple worktrees, and cross-repo context.
-- Callback retry tuning, observability, and manual replay controls.
+- Callback delivery observability and manual replay controls.
 - Prompt templates and snapshot tests for Slack/GitHub/Linear inputs.
 - Better repo resolution from Slack/GitHub/Linear context.
 - Setup/install hook observability.

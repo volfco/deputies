@@ -88,7 +88,7 @@ Current local policy:
 - Testcontainers is deferred until we need fully hermetic per-run databases.
 - Architecture fitness tests currently run with unit tests and enforce Flue SDK isolation, integration-to-runner separation, and store-to-domain-service separation.
 - API tests exercise the Hono app through the Node adapter so middleware, routing, JSON responses, and SSE behavior remain covered as transport internals change.
-- Slack unit/API tests cover request signature verification, URL verification challenge handling, dedupe, bot-message ignore, app mention session creation, and thread follow-up session reuse.
+- Slack unit/API tests cover request signature verification, URL verification challenge handling, dedupe, bot-message ignore, app mention session creation, thread follow-up session reuse, allowlist authorization, archived-session handling, prior-thread context fetching/deduping, Slack text entity decoding, readable channel/user prompt metadata, and prompt fallback behavior when Slack scopes are missing.
 - API hardening tests cover invalid JSON and oversized request bodies.
 - Lifecycle unit tests cover worker-loop stop behavior and idempotent resource shutdown.
 - API tests cover auth modes, session-cookie login/logout, archive/restore behavior, queued-message edit/cancel/pause/resume, active-run cancellation, callback/artifact persistence, sandbox stop/destroy cleanup, and worker batching.
