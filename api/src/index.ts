@@ -1,7 +1,9 @@
 import { AppLifecycle, installProcessShutdownHandlers, type CloseableResource } from './app/lifecycle.js';
 import { createServer, createServices } from './app/server.js';
 import { HttpCompletionCallbackSender, type CompletionCallbackSender } from './callbacks/service.js';
-import { loadConfig, requireDatabaseUrl, requireDaytonaApiKey, requireFlueModel } from './config/index.js';
+import { loadConfig, requireDatabaseUrl, requireDaytonaApiKey, requireFlueModel, requireGitHubAppCredentials } from './config/index.js';
+import { GitHubClient } from './integrations/github/client.js';
+import { GitHubRepositoryAccessService } from './integrations/github/repository-access.js';
 import { SlackClient } from './integrations/slack/client.js';
 import { SlackCompletionCallbackSender } from './integrations/slack/callback-sender.js';
 import { SlackRunProgressNotifier } from './integrations/slack/progress-notifier.js';
@@ -47,6 +49,7 @@ if (config.runMode === 'all' || config.runMode === 'worker') {
     cancellationPollIntervalMs: config.runCancellationPollIntervalMs,
     callbackSenders: createCallbackSenders(),
     progressNotifiers: createProgressNotifiers(),
+    repositoryAccess: createRepositoryAccess(),
   });
   workerLoop = startWorkerLoop(worker);
   if (services.sandboxCleanup) {
@@ -72,6 +75,18 @@ function createCallbackSenders(): CompletionCallbackSender[] {
 function createProgressNotifiers() {
   if (!config.slackBotToken) return [];
   return [new SlackRunProgressNotifier(new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }))];
+}
+
+function createRepositoryAccess() {
+  if (!config.githubAppId && !config.githubAppPrivateKey) return {};
+  const credentials = requireGitHubAppCredentials(config);
+  return {
+    github: new GitHubRepositoryAccessService({
+      ...credentials,
+      client: new GitHubClient({ apiBaseUrl: config.githubApiBaseUrl }),
+      allowedRepositories: config.githubAllowedRepositories,
+    }),
+  };
 }
 
 const lifecycleOptions = {

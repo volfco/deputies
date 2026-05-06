@@ -6,9 +6,12 @@ This is a living backlog for product, integration, runtime, and operations work.
 
 - Slack start/queued status acknowledgement beyond reaction-only progress.
 - Slack direct-message support.
+- GitHub App runtime access for clone, push, branch, and PR operations.
+- GitHub App installation token minting and repository installation resolution.
 - GitHub integration for issue comments, PR comments, and review comments.
 - GitHub App signature verification, installation token flow, and delivery dedupe.
 - GitHub callback comments with completion summaries and PR/artifact links.
+- GitHub repository/user gating, deterministic thread mapping, untrusted prompt wrappers, branch sanitization, and provider-owned push/PR helpers.
 - Linear integration for issue mentions, assignments, and comment follow-ups.
 - Generic webhook mapping/filter/template configuration beyond the current simple payload shape.
 

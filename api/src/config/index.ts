@@ -36,6 +36,11 @@ export type AppConfig = {
   slackAllowedTeamIds: string[];
   slackAllowedChannelIds: string[];
   slackAllowedUserIds: string[];
+  githubApiBaseUrl: string;
+  githubAllowedRepositories: string[];
+  githubAppId?: string;
+  githubAppPrivateKey?: string;
+  githubWebhookSecret?: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -62,6 +67,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     slackAllowedTeamIds: parseStringList(env.SLACK_ALLOWED_TEAM_IDS),
     slackAllowedChannelIds: parseStringList(env.SLACK_ALLOWED_CHANNEL_IDS),
     slackAllowedUserIds: parseStringList(env.SLACK_ALLOWED_USER_IDS),
+    githubApiBaseUrl: env.GITHUB_API_BASE_URL ?? 'https://api.github.com',
+    githubAllowedRepositories: parseStringList(env.GITHUB_ALLOWED_REPOSITORIES),
   };
 
   if (env.API_BEARER_TOKEN) config.apiBearerToken = env.API_BEARER_TOKEN;
@@ -77,6 +84,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.DAYTONA_SNAPSHOT) config.daytonaSnapshot = env.DAYTONA_SNAPSHOT;
   if (env.SLACK_SIGNING_SECRET) config.slackSigningSecret = env.SLACK_SIGNING_SECRET;
   if (env.SLACK_BOT_TOKEN) config.slackBotToken = env.SLACK_BOT_TOKEN;
+  if (env.GITHUB_APP_ID) config.githubAppId = env.GITHUB_APP_ID;
+  if (env.GITHUB_APP_PRIVATE_KEY) config.githubAppPrivateKey = normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY);
+  if (env.GITHUB_WEBHOOK_SECRET) config.githubWebhookSecret = env.GITHUB_WEBHOOK_SECRET;
 
   if (config.slackSigningSecret && !config.unsafeAllowAllSlackIds && !hasAnySlackAllowlist(config)) {
     throw new Error('Slack allowlists are required when SLACK_SIGNING_SECRET is set. Configure SLACK_ALLOWED_TEAM_IDS, SLACK_ALLOWED_CHANNEL_IDS, or SLACK_ALLOWED_USER_IDS, or set UNSAFE_ALLOW_ALL_SLACK_IDS=true for unrestricted Slack access.');
@@ -145,6 +155,14 @@ export function requireSlackSigningSecret(config: AppConfig): string {
   return config.slackSigningSecret;
 }
 
+export function requireGitHubAppCredentials(config: AppConfig): { appId: string; privateKey: string } {
+  if (!config.githubAppId || !config.githubAppPrivateKey) {
+    throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY are required for GitHub App runtime access');
+  }
+
+  return { appId: config.githubAppId, privateKey: config.githubAppPrivateKey };
+}
+
 function parsePort(value: string | undefined): number {
   if (!value) return 3583;
 
@@ -188,6 +206,10 @@ function parseBoolean(value: string | undefined, fallback: boolean, name: string
 function parseStringList(value: string | undefined): string[] {
   if (!value) return [];
   return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizePrivateKey(value: string): string {
+  return value.replace(/\\n/g, '\n');
 }
 
 function parseEnum<const T extends readonly string[]>(

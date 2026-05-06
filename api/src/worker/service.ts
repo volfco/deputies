@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ArtifactService } from '../artifacts/service.js';
 import { CallbackDispatcher, CallbackService, type CompletionCallbackSender } from '../callbacks/service.js';
 import type { EventService } from '../events/service.js';
+import { RepositorySetupService, type RepositoryAccessProvider } from '../repositories/setup.js';
 import type { Runner } from '../runner/types.js';
 import { SandboxLifecycleService } from '../sandbox/service.js';
 import type { SandboxProvider } from '../sandbox/types.js';
@@ -24,6 +25,9 @@ export type WorkerServiceOptions = {
   staleRecoveryLimit?: number;
   callbackSenders?: CompletionCallbackSender[];
   progressNotifiers?: RunProgressNotifier[];
+  repositoryAccess?: {
+    github?: RepositoryAccessProvider;
+  };
 };
 
 export class WorkerService {
@@ -170,6 +174,17 @@ export class WorkerService {
         workspacePath: sandbox.workspacePath,
       },
     });
+    const runnerSandbox = await new RepositorySetupService(this.options.repositoryAccess?.github).setup({
+      context: primary.context ?? {},
+      sandbox,
+      sessionId: primary.sessionId,
+      runId: claimed.run.id,
+      messageId: primary.id,
+      emit: async (event) => {
+        await this.options.events.append(event);
+      },
+    });
+
     try {
       const result = await this.options.runner.run({
         sessionId: primary.sessionId,
@@ -177,7 +192,7 @@ export class WorkerService {
         messageId: primary.id,
         prompt: buildBatchPrompt(claimed.messages),
         context: primary.context ?? {},
-        sandbox,
+        sandbox: runnerSandbox,
         signal,
         emit: async (event) => {
           if (signal.aborted) return;

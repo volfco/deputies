@@ -135,6 +135,20 @@ else:
 
 ## GitHub Integration
 
+GitHub App runtime access should be implemented before inbound GitHub webhooks are treated as production-ready. The webhook path creates sessions and comments, but repo-scoped agent work also needs short-lived installation credentials for clone, fetch, push, branch, PR, and status/comment operations.
+
+Current runtime access support includes GitHub App JWT signing, repository installation lookup, installation token minting, token caching, repository allowlist checks, and sandbox clone/fetch setup from message repository context. The worker passes the cloned repository path to the runner and emits `repository_ready` without token material. Push/branch/PR helper operations are still future work.
+
+Repository-scoped messages can carry context in either shape:
+
+```json
+{ "repository": { "provider": "github", "owner": "owner", "repo": "repo" } }
+```
+
+```json
+{ "github": { "repository": { "owner": "owner", "repo": "repo" } } }
+```
+
 Supported triggers:
 
 - Issue comments mentioning the agent.
@@ -172,6 +186,156 @@ Testing should use `vercel-labs/emulate` GitHub service:
 - Assert sessions/messages are created.
 - Assert comments or PRs are created in the emulated GitHub API.
 - Assert duplicate deliveries are ignored.
+
+### GitHub Implementation Plan
+
+This plan combines the strongest patterns from Background Agents/Open Inspect and Open SWE while preserving this service's boundaries: integrations normalize external events, workers own sandbox setup, runners stay provider-neutral, and GitHub-specific API/push/PR details stay in GitHub adapters.
+
+#### 1. Webhook ingress and dedupe
+
+Implement public `POST /webhooks/github/events` before adding any GitHub-created work to production.
+
+- Read the raw request body and verify `X-Hub-Signature-256` with HMAC SHA-256 against `GITHUB_WEBHOOK_SECRET`.
+- Fail closed when the webhook secret is missing or the signature is invalid.
+- Require and persist `X-GitHub-Delivery` in `integration_deliveries` with source `github`.
+- Use a two-phase delivery state inspired by Background Agents: mark as received/processing before async work, mark processed after successful enqueue, and mark failed with a retryable error when enqueue fails.
+- Ignore duplicate deliveries without creating new sessions/messages.
+- Record structured delivery metadata only: event name, action, repository, sender, issue/PR/comment IDs, and skip reason. Do not persist payload bodies unless explicitly needed and sanitized.
+
+Acceptance criteria:
+
+- Invalid signatures return `401`.
+- Missing secrets reject webhooks instead of silently accepting them.
+- Duplicate delivery IDs are idempotent.
+- Failed processing leaves enough metadata for operator diagnosis without storing GitHub tokens or large raw payloads.
+
+#### 2. GitHub event normalization and gating
+
+Normalize raw GitHub payloads into a small internal event shape before session/message creation.
+
+- Support `issue_comment.created`, `pull_request_review_comment.created`, and selected `pull_request` actions first.
+- Add stable `triggerKey` and `concurrencyKey` fields, e.g. `issue_comment:<commentId>`, `pr:<number>`, and `issue:<number>`.
+- Resolve repository as `{ provider: 'github', owner, repo }` and attach it to message context so worker repository setup can clone/fetch it.
+- Ignore bot/self comments to avoid loops.
+- Enforce `GITHUB_ALLOWED_REPOSITORIES` before any API fetch or session creation.
+- Add caller gating after repo allowlist: either explicit allowed GitHub users or collaborator permission check requiring `write`, `maintain`, or `admin`.
+- Add best-effort `eyes` reaction for accepted comments/review comments after gating succeeds.
+
+Acceptance criteria:
+
+- Unsupported actions are acknowledged and skipped with a reason.
+- Unauthorized repositories/users do not create sessions/messages.
+- Accepted events include normalized context and repository setup context.
+
+#### 3. Repository extraction utilities
+
+Add a reusable repo parser for non-GitHub-webhook sources and manual prompts, based on Open SWE's pragmatic extraction rules.
+
+- Support `repo:owner/name` and `repo owner/name`.
+- Support GitHub URLs such as `https://github.com/owner/repo`.
+- Prefer explicit `repo:` or `repo ` syntax over URLs when both are present.
+- Do not add a default owner unless there is an explicit product setting; absent defaults should return no repository.
+- Normalize trailing slashes and reject ambiguous or invalid values.
+
+Acceptance criteria:
+
+- Slack/Linear/manual sources can opt into the same parser later without importing GitHub webhook handlers.
+- Unit tests cover explicit repo syntax, URLs, precedence, trailing slashes, and invalid inputs.
+
+#### 4. Thread mapping and follow-up context
+
+Use deterministic external thread IDs so GitHub follow-ups reuse the correct session.
+
+- Map issues to `github:<owner>/<repo>:issue:<issueNumber>`.
+- Map PRs to `github:<owner>/<repo>:pr:<prNumber>`.
+- For PR review comments, use the PR external thread and include review-comment metadata in the message context.
+- Fetch enough context for the first accepted event: issue/PR title, body, author, relevant comments, review comments, and diff hunk when available.
+- For later mentions, include only unprocessed comments since the last accepted GitHub mention when feasible.
+- Bound context sizes: cap issue/PR body previews, diff hunks, and comment counts.
+
+Acceptance criteria:
+
+- Repeated comments on the same issue/PR enqueue follow-up messages on the existing session.
+- Concurrent messages for the same session are handled by the existing queue/batch behavior.
+- Large PR/issue payloads do not produce unbounded prompts.
+
+#### 5. GitHub prompt safety wrappers
+
+Adopt Open SWE's compact safety pattern for GitHub-originated content.
+
+- Wrap untrusted GitHub text in reserved tags, e.g. `<github_untrusted_content ...>`.
+- Sanitize those reserved tags if they appear inside user-controlled GitHub content.
+- Keep the heavy trust guidance in a shared GitHub prompt preamble or system section rather than repeating bulky warnings around every comment.
+- Preserve readable author/source labels for comments, review comments, PR titles, bodies, branch names, and diff hunks.
+- Add snapshot tests for prompt construction and tag sanitization.
+
+Acceptance criteria:
+
+- Prompt tests prove external content cannot spoof trusted wrapper boundaries.
+- GitHub prompts remain compact while clearly separating task instructions from untrusted GitHub text.
+
+#### 6. Callback comments and completion behavior
+
+Implement GitHub callback delivery through the generic callback core instead of relying only on prompt instructions.
+
+- Add a GitHub callback sender for final completion, failure, and PR/artifact links.
+- Post sparse comments by default: accepted/start reaction, final summary, failure requiring human attention, and PR URL when created.
+- Store callback target metadata, not tokens.
+- Use fresh GitHub App access when dispatching callback comments.
+- Add manual replay support automatically through the existing callback replay route.
+
+Acceptance criteria:
+
+- Completion comments are visible through emulator-backed tests.
+- Failed callback deliveries show in existing callback observability UI and can be replayed.
+- GitHub tokens never appear in callback payloads, events, artifacts, or logs.
+
+#### 7. Provider-owned push and PR helpers
+
+Build branch push and PR creation as GitHub/source-control adapter operations, not as worker or runner internals.
+
+- Add branch-name sanitization before any push or PR creation.
+- Generate fresh app auth for each push/PR operation.
+- Build redacted and real push specs in the GitHub adapter; only redacted specs may be logged or persisted.
+- Push branch first, verify it succeeded, then create PR.
+- Prevent duplicate PR artifacts for the same session unless an explicit update flow is requested.
+- Record verified PR URLs as artifacts.
+- Allow a later user-OAuth path to override app-token PR creation when product auth exists; keep GitHub App fallback as the first implementation.
+
+Acceptance criteria:
+
+- PR creation cannot claim success without a verified PR URL.
+- Invalid branch names are rejected before git commands run.
+- Provider-specific URL/token logic stays inside GitHub/source-control adapter modules.
+
+#### 8. Auth refresh for reused sandboxes
+
+Keep runtime GitHub auth fresh whenever a reused sandbox performs repository operations.
+
+- Continue minting/accessing short-lived tokens during worker repository setup for clone/fetch.
+- Re-mint or refresh auth before push/PR operations, not only at sandbox creation time.
+- If a future sandbox provider supports outbound proxy or secret injection, implement it behind the sandbox provider boundary; do not require it for all providers.
+- Prefer command-scoped environment auth for Daytona until a stronger provider-native mechanism exists.
+
+Acceptance criteria:
+
+- Stopped/restarted sandboxes can fetch/push with fresh credentials.
+- Token refresh is tested independently from sandbox creation.
+- No provider-specific proxy requirement leaks into the core sandbox interface.
+
+#### 9. Tests and emulator coverage
+
+Add focused unit tests first, then emulator-backed integration tests.
+
+- Unit-test webhook signature verification, delivery dedupe, normalization, repo extraction, permission gating decisions, prompt wrappers, and branch sanitization.
+- Use fake GitHub clients for token, permission, comment, branch, push, and PR flows.
+- Add opt-in emulator tests that seed GitHub users/repos/issues/PRs/installations, send webhooks, process worker runs, and assert comments/PRs in the emulator.
+- Add regression tests proving token strings are absent from events, messages, artifacts, callback payloads, and logs under controlled fakes.
+
+Acceptance criteria:
+
+- Phase 9 can be verified without real GitHub credentials in CI-like local runs.
+- Real-provider smoke testing remains opt-in and never runs by default.
 
 ## Slack Integration
 

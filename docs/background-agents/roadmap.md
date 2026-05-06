@@ -263,19 +263,42 @@ Acceptance criteria:
 
 Status: implemented for the current callback core. Session-scoped API routes list callback deliveries and requeue failed deliveries for replay. Manual replay preserves delivery history while extending the attempt budget for one more dispatch. The operator UI context panel shows callback status, attempts, retry timing, last error, and a replay action for failed deliveries.
 
+## Phase 8.6: GitHub App Runtime Access
+
+Goal: give agent runs short-lived GitHub App credentials for repository operations before GitHub webhooks start creating repo-scoped work.
+
+Deliverables:
+
+- GitHub App config for app ID, private key, API base URL, and webhook secret later.
+- GitHub App JWT creation and installation access token minting.
+- Installation resolution for a repository owner/name.
+- Short-lived token caching until expiry.
+- A runner/sandbox-safe way to clone and push private repositories without writing tokens to messages/events.
+- Tests using a fake or emulator-backed GitHub API for JWT/token flow and installation lookup.
+
+Acceptance criteria:
+
+- The service can mint an installation token for an allowed GitHub repository.
+- A runner can receive repo access instructions without integrations importing runner code.
+- Tokens are not persisted in events, messages, artifacts, or logs.
+- GitHub API base URLs remain configurable for emulator-backed tests.
+
+Status: initial runtime path implemented. Config parsing, GitHub App JWT signing, repository installation lookup, installation token minting, per-installation token caching, repository allowlist checks, and runner-safe repository access instructions exist with focused unit coverage. Worker setup can clone or fetch a repo declared in message context before runner execution without writing tokens to events/messages/artifacts. Push/branch/PR helper operations remain next.
+
 ## Phase 9: GitHub Integration
 
 Goal: support issue/PR mention workflows with emulator-backed confidence.
 
 Deliverables:
 
-- GitHub webhook route.
-- Signature verification.
-- Delivery dedupe.
-- Mention detection.
-- Issue/PR context fetching.
-- GitHub callback posting.
-- GitHub App token support.
+- GitHub webhook route with fail-closed `X-Hub-Signature-256` verification.
+- Delivery dedupe keyed by `X-GitHub-Delivery`.
+- Normalized GitHub event shape with trigger/concurrency keys.
+- Repository/user gating using repository allowlists and collaborator permission or explicit allowed users.
+- Mention detection for issue comments, PR comments, and PR review comments.
+- Issue/PR context fetching with bounded prompt context and untrusted-content wrappers.
+- GitHub callback posting through the generic callback core.
+- Provider-owned branch push and PR creation helpers with branch sanitization and redacted push specs.
 - Emulate-backed integration tests.
 
 Acceptance criteria:
@@ -285,6 +308,11 @@ Acceptance criteria:
 - Duplicate delivery is ignored.
 - Completion posts comment to emulated GitHub.
 - Prompt wraps GitHub content as untrusted.
+- Push/PR creation records verified PR artifacts and never persists token material.
+
+Dependency: Phase 8.6 should exist first so GitHub-created work can clone private repositories, push branches, and create PRs through GitHub App credentials.
+
+Detailed implementation plan: see [GitHub Implementation Plan](./integrations.md#github-implementation-plan).
 
 ## Phase 10: Linear Integration
 
