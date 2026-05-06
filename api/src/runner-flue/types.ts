@@ -1,4 +1,4 @@
-import type { FlueEvent, PromptResponse, SandboxFactory } from '@flue/sdk';
+import type { FlueEvent, PromptResponse, SandboxFactory, SessionData } from '@flue/sdk';
 import type { RunnerInput, RunnerResult } from '../runner/types.js';
 import type { SandboxHandle } from '../sandbox/types.js';
 
@@ -29,4 +29,7 @@ export interface FlueAgentFactory {
     cwd?: string;
     onEvent?: (event: FlueEvent) => void;
   }): Promise<FlueAgentPort>;
+  loadSession?(id: string): Promise<SessionData | null>;
+  saveSession?(id: string, data: SessionData): Promise<void>;
+  deleteSession?(id: string): Promise<void>;
 }

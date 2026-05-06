@@ -36,8 +36,17 @@ export class FlueRunner implements Runner {
         createdAt: new Date(),
       });
 
+      // Cancellation must not leave partial Flue turn state in durable history.
+      // A prompt-only warning is cheaper but advisory, and models can still continue
+      // cancelled work from persisted context.
+      const sessionSnapshot = await this.loadSessionSnapshot(input.sessionId);
       if (input.signal?.aborted) throw new Error('Operation aborted');
-      const response = await session.prompt(input.prompt);
+      let response;
+      try {
+        response = await session.prompt(input.prompt);
+      } finally {
+        if (input.signal?.aborted) await this.restoreSessionSnapshot(input.sessionId, sessionSnapshot);
+      }
       await Promise.all(pendingEvents);
       if (input.signal?.aborted) throw new Error('Operation aborted');
 
@@ -63,6 +72,19 @@ export class FlueRunner implements Runner {
       return { text: response.text };
     } finally {
       input.signal?.removeEventListener('abort', abortSession);
+    }
+  }
+
+  private async loadSessionSnapshot(sessionId: string) {
+    const data = await this.agentFactory.loadSession?.(sessionId);
+    return data ? structuredClone(data) : null;
+  }
+
+  private async restoreSessionSnapshot(sessionId: string, snapshot: Awaited<ReturnType<FlueRunner['loadSessionSnapshot']>>): Promise<void> {
+    if (snapshot) {
+      await this.agentFactory.saveSession?.(sessionId, snapshot);
+    } else {
+      await this.agentFactory.deleteSession?.(sessionId);
     }
   }
 }

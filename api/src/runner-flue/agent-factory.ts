@@ -1,5 +1,5 @@
 import { createFlueContext, InMemorySessionStore, resolveModel } from '@flue/sdk/internal';
-import type { AgentInit, SessionStore } from '@flue/sdk';
+import type { AgentInit, SessionData, SessionStore } from '@flue/sdk';
 import type { FlueAgentFactory, FlueAgentPort } from './types.js';
 import { sandboxHandleToFlueFactory } from './sandbox-factory.js';
 
@@ -46,6 +46,22 @@ export class RealFlueAgentFactory implements FlueAgentFactory {
 
     return ctx.init(initOptions);
   }
+
+  async loadSession(id: string): Promise<SessionData | null> {
+    return this.sessionStore.load(flueSessionStorageKey(id));
+  }
+
+  async saveSession(id: string, data: SessionData): Promise<void> {
+    await this.sessionStore.save(flueSessionStorageKey(id), data);
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.sessionStore.delete(flueSessionStorageKey(id));
+  }
+}
+
+function flueSessionStorageKey(sessionId: string): string {
+  return `agent-session:${JSON.stringify([sessionId, sessionId])}`;
 }
 
 function unsupportedEnv(kind: string) {

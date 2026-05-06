@@ -221,7 +221,30 @@ Acceptance criteria:
 - JSON response schemas are validated.
 - User-facing errors are stable and useful.
 
-## Phase 8: GitHub Integration
+## Phase 8: Slack Integration
+
+Goal: support Slack app mention and thread follow-up workflows.
+
+Deliverables:
+
+- Slack event route.
+- Signature verification.
+- URL verification challenge.
+- Event dedupe.
+- Thread-to-session mapping.
+- Slack callback posting.
+- Emulate-backed integration tests.
+
+Acceptance criteria:
+
+- App mention creates message.
+- Thread follow-up maps to existing session.
+- Bot messages are ignored.
+- Completion posts thread reply in emulated Slack.
+
+Status: mostly implemented. Inbound app mentions and thread follow-ups create/reuse sessions, Slack signatures and URL verification are supported, duplicate events are ignored, bot messages are ignored, received/running/completed reactions are posted best-effort, and final deputy responses are delivered through the callback dispatcher. Remaining work includes Slack authorization policy, prompt cleanup, richer thread context fetching, and optional status messages beyond reactions.
+
+## Phase 9: GitHub Integration
 
 Goal: support issue/PR mention workflows with emulator-backed confidence.
 
@@ -243,27 +266,6 @@ Acceptance criteria:
 - Duplicate delivery is ignored.
 - Completion posts comment to emulated GitHub.
 - Prompt wraps GitHub content as untrusted.
-
-## Phase 9: Slack Integration
-
-Goal: support Slack app mention and thread follow-up workflows.
-
-Deliverables:
-
-- Slack event route.
-- Signature verification.
-- URL verification challenge.
-- Event dedupe.
-- Thread-to-session mapping.
-- Slack callback posting.
-- Emulate-backed integration tests.
-
-Acceptance criteria:
-
-- App mention creates message.
-- Thread follow-up maps to existing session.
-- Bot messages are ignored.
-- Completion posts thread reply in emulated Slack.
 
 ## Phase 10: Linear Integration
 

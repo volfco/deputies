@@ -1,5 +1,7 @@
 import { FlueRunner } from '../../src/runner-flue/runner.js';
+import { RealFlueAgentFactory } from '../../src/runner-flue/agent-factory.js';
 import type { FlueAgentFactory } from '../../src/runner-flue/types.js';
+import type { SessionData, SessionStore } from '@flue/sdk';
 import type { NormalizedEvent } from '../../src/events/types.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 
@@ -110,4 +112,139 @@ describe('FlueRunner', () => {
     expect(events[4]?.payload).toMatchObject({ toolName: 'command', command: 'gh' });
     expect(events[6]?.payload).toMatchObject({ toolName: 'task', taskId: 'task-1' });
   });
+
+  it('restores persisted Flue session state after abort', async () => {
+    const previousSession = {
+      version: 2 as const,
+      entries: [
+        {
+          type: 'message' as const,
+          id: 'entry-1',
+          parentId: null,
+          timestamp: '2026-05-06T00:00:00.000Z',
+          message: { role: 'user' as const, content: [{ type: 'text' as const, text: 'previous completed work' }], timestamp: 1 },
+          source: 'prompt' as const,
+        },
+      ],
+      leafId: 'entry-1',
+      metadata: {},
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    };
+    const deleted: string[] = [];
+    const saved: unknown[] = [];
+    const loaded: string[] = [];
+    const abort = new AbortController();
+    const factory: FlueAgentFactory = {
+      async create() {
+        return {
+          async session() {
+            return {
+              async prompt() {
+                abort.abort();
+                return { text: 'partial response' };
+              },
+              abort() {},
+            };
+          },
+        };
+      },
+      async loadSession() {
+        loaded.push('session-1');
+        return previousSession;
+      },
+      async saveSession(_id, data) {
+        saved.push(data);
+      },
+      async deleteSession(id) {
+        deleted.push(id);
+      },
+    };
+    const sandbox = await new FakeSandboxProvider().create({ sessionId: 'session-1' });
+
+    await expect(
+      new FlueRunner(factory).run({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        messageId: 'message-1',
+        prompt: 'sleep for 5 seconds',
+        context: {},
+        sandbox,
+        signal: abort.signal,
+        emit: async () => {},
+      }),
+    ).rejects.toThrow('Operation aborted');
+
+    expect(loaded).toEqual(['session-1']);
+    expect(saved).toEqual([previousSession]);
+    expect(deleted).toEqual([]);
+  });
+
+  it('deletes aborted Flue session state when there was no prior snapshot', async () => {
+    const deleted: string[] = [];
+    const abort = new AbortController();
+    const factory: FlueAgentFactory = {
+      async create() {
+        return {
+          async session() {
+            return {
+              async prompt() {
+                abort.abort();
+                return { text: 'partial response' };
+              },
+              abort() {},
+            };
+          },
+        };
+      },
+      async loadSession() {
+        return null;
+      },
+      async deleteSession(id) {
+        deleted.push(id);
+      },
+    };
+    const sandbox = await new FakeSandboxProvider().create({ sessionId: 'session-1' });
+
+    await expect(
+      new FlueRunner(factory).run({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        messageId: 'message-1',
+        prompt: 'sleep for 5 seconds',
+        context: {},
+        sandbox,
+        signal: abort.signal,
+        emit: async () => {},
+      }),
+    ).rejects.toThrow('Operation aborted');
+
+    expect(deleted).toEqual(['session-1']);
+  });
+
+  it('maps product session IDs to Flue storage keys for snapshots', async () => {
+    const keys: string[] = [];
+    const data = { version: 2, entries: [], leafId: null, metadata: {}, createdAt: 'now', updatedAt: 'now' } satisfies SessionData;
+    const store: SessionStore = {
+      async load(id) {
+        keys.push(`load:${id}`);
+        return data;
+      },
+      async save(id) {
+        keys.push(`save:${id}`);
+      },
+      async delete(id) {
+        keys.push(`delete:${id}`);
+      },
+    };
+    const factory = new RealFlueAgentFactory({ model: false, sessionStore: store });
+
+    await factory.loadSession('session-1');
+    await factory.saveSession('session-1', data);
+    await factory.deleteSession('session-1');
+
+    const key = 'agent-session:["session-1","session-1"]';
+    expect(keys).toEqual([`load:${key}`, `save:${key}`, `delete:${key}`]);
+  });
+
 });
