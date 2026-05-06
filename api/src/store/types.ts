@@ -256,9 +256,11 @@ export interface AppStore {
   createArtifact(record: CreateArtifactRecord): Promise<ArtifactRecord>;
   getArtifacts(sessionId: string): Promise<ArtifactRecord[]>;
   createCallbackDelivery(record: CreateCallbackDeliveryRecord): Promise<CallbackDeliveryRecord>;
+  listCallbackDeliveries(input: { sessionId: string; messageId?: string }): Promise<CallbackDeliveryRecord[]>;
   claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]>;
   markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord>;
   markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string; terminal: boolean; nextAttemptAt?: Date }): Promise<CallbackDeliveryRecord>;
+  requestCallbackReplay(input: { sessionId: string; deliveryId: string; requestedAt: Date }): Promise<CallbackDeliveryRecord | null>;
 
   nextEventSequence(sessionId: string): Promise<number>;
   appendEvent(event: NormalizedEvent & { sequence: number }): Promise<NormalizedEvent & { sequence: number }>;

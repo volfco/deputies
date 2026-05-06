@@ -44,6 +44,26 @@ export type Artifact = {
   url?: string;
 };
 
+export type CallbackDelivery = {
+  id: string;
+  sessionId: string;
+  targetType: string;
+  target: Record<string, unknown>;
+  status: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  attempts: number;
+  maxAttempts: number;
+  createdAt: string;
+  updatedAt: string;
+  runId?: string;
+  messageId?: string;
+  lastError?: string;
+  nextAttemptAt?: string;
+  lastAttemptAt?: string;
+  deliveredAt?: string;
+};
+
 export type AuthUser = {
   username: string;
 };
@@ -192,6 +212,20 @@ export async function listEvents(sessionId: string, token: string): Promise<Agen
 export async function listArtifacts(sessionId: string, token: string): Promise<Artifact[]> {
   const body = await request<{ artifacts: Artifact[] }>(`/sessions/${sessionId}/artifacts`, { token });
   return body.artifacts;
+}
+
+export async function listCallbacks(sessionId: string, token: string): Promise<CallbackDelivery[]> {
+  const body = await request<{ callbacks: CallbackDelivery[] }>(`/sessions/${sessionId}/callbacks`, { token });
+  return body.callbacks;
+}
+
+export async function replayCallback(input: { sessionId: string; callbackId: string; token: string }): Promise<CallbackDelivery> {
+  const body = await request<{ callback: CallbackDelivery }>(`/sessions/${input.sessionId}/callbacks/${input.callbackId}/replay`, {
+    method: 'POST',
+    token: input.token,
+    body: {},
+  });
+  return body.callback;
 }
 
 export async function streamEvents(input: {

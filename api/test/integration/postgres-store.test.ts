@@ -270,8 +270,36 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     });
     expect(delivery.status).toBe('pending');
 
+    await store.claimDueCallbackDeliveries({ now, limit: 1 });
     const sent = await store.markCallbackDeliverySent({ id: delivery.id, deliveredAt: new Date(now.getTime() + 1_000) });
     expect(sent).toMatchObject({ status: 'sent', attempts: 1 });
+
+    await expect(store.listCallbackDeliveries({ sessionId: session.id })).resolves.toMatchObject([{ id: delivery.id, status: 'sent' }]);
+  });
+
+  it('requeues failed callback deliveries for replay', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Callback replay' });
+    const now = new Date();
+    const delivery = await store.createCallbackDelivery({
+      id: '00000000-0000-4000-8000-000000000803',
+      sessionId: session.id,
+      targetType: 'http',
+      target: { url: 'https://example.com/callback' },
+      eventType: 'message_completed',
+      payload: { text: 'done' },
+      createdAt: now,
+      updatedAt: now,
+      nextAttemptAt: now,
+      maxAttempts: 1,
+    });
+    await store.claimDueCallbackDeliveries({ now, limit: 1 });
+    await store.markCallbackDeliveryFailed({ id: delivery.id, failedAt: now, error: 'down', terminal: true });
+
+    const replay = await store.requestCallbackReplay({ sessionId: session.id, deliveryId: delivery.id, requestedAt: new Date(now.getTime() + 1_000) });
+
+    expect(replay).toMatchObject({ id: delivery.id, status: 'pending', attempts: 1 });
+    await expect(store.claimDueCallbackDeliveries({ now: new Date(now.getTime() + 1_000), limit: 1 })).resolves.toMatchObject([{ id: delivery.id, status: 'sending' }]);
   });
 
   it('claims each pending message once under concurrent workers', async () => {

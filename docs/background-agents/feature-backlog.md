@@ -30,7 +30,6 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Agent authentication to external services through MCP, CLI credentials, API tokens, and short-lived provider tokens.
 - Credential scoping and injection policy for tools, commands, MCP servers, and sandbox environments.
 - Multi-repository task support, including repo selection, cloning/syncing multiple worktrees, and cross-repo context.
-- Callback delivery observability and manual replay controls.
 - Prompt templates and snapshot tests for Slack/GitHub/Linear inputs.
 - Better repo resolution from Slack/GitHub/Linear context.
 - Setup/install hook observability.

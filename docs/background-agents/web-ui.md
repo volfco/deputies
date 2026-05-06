@@ -53,6 +53,7 @@ The SSE client uses `fetch()` streaming instead of native `EventSource` because 
 - Archive and restore sessions. Archived sessions are read-only until restored.
 - Replay and stream session events.
 - List session artifacts.
+- Show callback delivery status and manually replay failed callbacks.
 
 ## Deployment
 

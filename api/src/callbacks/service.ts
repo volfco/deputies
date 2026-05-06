@@ -35,6 +35,7 @@ export type CallbackDispatcherOptions = {
 export class CallbackService {
   constructor(
     private readonly store: AppStore,
+    private readonly events?: EventService,
   ) {}
 
   async enqueueCompletion(input: { claimed: ClaimedMessage; result: RunnerResult }): Promise<CallbackDeliveryRecord | null> {
@@ -64,6 +65,33 @@ export class CallbackService {
       nextAttemptAt: now,
     });
     return delivery;
+  }
+
+  async list(input: { sessionId: string; messageId?: string }): Promise<CallbackDeliveryRecord[]> {
+    return this.store.listCallbackDeliveries(input);
+  }
+
+  async requestReplay(input: { sessionId: string; deliveryId: string }): Promise<CallbackDeliveryRecord> {
+    const requestedAt = new Date();
+    const delivery = await this.store.requestCallbackReplay({ sessionId: input.sessionId, deliveryId: input.deliveryId, requestedAt });
+    if (!delivery) throw new CallbackServiceError('conflict', 'Callback delivery is not failed or does not exist for this session');
+    await this.events?.append({
+      sessionId: delivery.sessionId,
+      ...(delivery.runId ? { runId: delivery.runId } : {}),
+      ...(delivery.messageId ? { messageId: delivery.messageId } : {}),
+      type: 'callback_replay_requested',
+      payload: { deliveryId: delivery.id, targetType: delivery.targetType, attempts: delivery.attempts },
+    });
+    return delivery;
+  }
+}
+
+export class CallbackServiceError extends Error {
+  constructor(
+    readonly code: 'conflict',
+    message: string,
+  ) {
+    super(message);
   }
 }
 

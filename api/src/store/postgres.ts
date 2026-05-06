@@ -664,6 +664,18 @@ export class PostgresStore implements AppStore {
     return toCallbackDelivery(result.rows[0]!);
   }
 
+  async listCallbackDeliveries(input: { sessionId: string; messageId?: string }): Promise<CallbackDeliveryRecord[]> {
+    const result = await this.pool.query<CallbackDeliveryRow>(
+      `SELECT id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at
+       FROM callback_deliveries
+       WHERE session_id = $1
+         AND ($2::uuid IS NULL OR message_id = $2::uuid)
+       ORDER BY created_at DESC`,
+      [input.sessionId, input.messageId ?? null],
+    );
+    return result.rows.map(toCallbackDelivery);
+  }
+
   async claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]> {
     return this.transaction(async (client) => {
       const due = await client.query<CallbackDeliveryRow>(
@@ -693,9 +705,9 @@ export class PostgresStore implements AppStore {
   async markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord> {
     const result = await this.pool.query<CallbackDeliveryRow>(
       `UPDATE callback_deliveries
-       SET status = 'sent', attempts = attempts + 1, delivered_at = $2, updated_at = $2
+       SET status = 'sent', delivered_at = $2, updated_at = $2, next_attempt_at = NULL, last_error = NULL
        WHERE id = $1
-        RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
+         RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
       [input.id, input.deliveredAt],
     );
     if (!result.rows[0]) throw new Error(`Callback delivery does not exist: ${input.id}`);
@@ -712,6 +724,19 @@ export class PostgresStore implements AppStore {
     );
     if (!result.rows[0]) throw new Error(`Callback delivery does not exist: ${input.id}`);
     return toCallbackDelivery(result.rows[0]);
+  }
+
+  async requestCallbackReplay(input: { sessionId: string; deliveryId: string; requestedAt: Date }): Promise<CallbackDeliveryRecord | null> {
+    const result = await this.pool.query<CallbackDeliveryRow>(
+      `UPDATE callback_deliveries
+       SET status = 'pending', next_attempt_at = $3, delivered_at = NULL, updated_at = $3, max_attempts = GREATEST(max_attempts, attempts + 1)
+       WHERE id = $1
+         AND session_id = $2
+         AND status = 'failed'
+       RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
+      [input.deliveryId, input.sessionId, input.requestedAt],
+    );
+    return result.rows[0] ? toCallbackDelivery(result.rows[0]) : null;
   }
 
   async nextEventSequence(sessionId: string): Promise<number> {

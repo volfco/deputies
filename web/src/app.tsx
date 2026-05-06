@@ -4,6 +4,7 @@ import {
   ApiError,
   AgentEvent,
   Artifact,
+  CallbackDelivery,
   Message,
   Session,
   archiveSession,
@@ -16,11 +17,13 @@ import {
   getHealth,
   login,
   listArtifacts,
+  listCallbacks,
   listEvents,
   listMessages,
   listSessions,
   logout,
   pauseQueue,
+  replayCallback,
   resumeQueue,
   streamEvents,
   unarchiveSession,
@@ -57,6 +60,7 @@ export function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [callbacks, setCallbacks] = useState<CallbackDelivery[]>([]);
   const [newThreadPrompt, setNewThreadPrompt] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -138,7 +142,7 @@ export function App() {
         eventCursor.current = Math.max(eventCursor.current, event.sequence);
         setEvents((current) => upsertEvent(current, event));
         if (shouldRefreshSessionDetail(event.type)) {
-          refreshMessagesAndArtifacts(selectedSessionId).catch(() => undefined);
+          refreshMessagesArtifactsAndCallbacks(selectedSessionId).catch(() => undefined);
           refreshSessions().catch(() => undefined);
         }
       },
@@ -178,27 +182,31 @@ export function App() {
   async function refreshSessionDetail(sessionId: string) {
     setError('');
     try {
-      const [nextMessages, nextEvents, nextArtifacts] = await Promise.all([
+      const [nextMessages, nextEvents, nextArtifacts, nextCallbacks] = await Promise.all([
         listMessages(sessionId, token),
         listEvents(sessionId, token),
         listArtifacts(sessionId, token),
+        listCallbacks(sessionId, token),
       ]);
       eventCursor.current = nextEvents.at(-1)?.sequence ?? 0;
       setMessages(nextMessages);
       setEvents(nextEvents);
       setArtifacts(nextArtifacts);
+      setCallbacks(nextCallbacks);
     } catch (err) {
       handleApiError(err);
     }
   }
 
-  async function refreshMessagesAndArtifacts(sessionId: string) {
-    const [nextMessages, nextArtifacts] = await Promise.all([
+  async function refreshMessagesArtifactsAndCallbacks(sessionId: string) {
+    const [nextMessages, nextArtifacts, nextCallbacks] = await Promise.all([
       listMessages(sessionId, token),
       listArtifacts(sessionId, token),
+      listCallbacks(sessionId, token),
     ]);
     setMessages(nextMessages);
     setArtifacts(nextArtifacts);
+    setCallbacks(nextCallbacks);
   }
 
   async function handleCreateThread(event: FormEvent) {
@@ -215,6 +223,7 @@ export function App() {
       setMessages([message]);
       setEvents([]);
       setArtifacts([]);
+      setCallbacks([]);
       eventCursor.current = 0;
       setNewThreadPrompt('');
       setIsCreatingThread(false);
@@ -364,6 +373,10 @@ export function App() {
     setSessionsLoaded(false);
     setSelectedSessionId('');
     setIsCreatingThread(false);
+    setMessages([]);
+    setEvents([]);
+    setArtifacts([]);
+    setCallbacks([]);
   }
 
   function startNewThread() {
@@ -375,6 +388,7 @@ export function App() {
     setMessages([]);
     setEvents([]);
     setArtifacts([]);
+    setCallbacks([]);
     setPrompt('');
     eventCursor.current = 0;
   }
@@ -402,6 +416,7 @@ export function App() {
       setMessages([]);
       setEvents([]);
       setArtifacts([]);
+      setCallbacks([]);
       eventCursor.current = 0;
     }
   }
@@ -432,6 +447,18 @@ export function App() {
     try {
       const session = await unarchiveSession({ sessionId: selectedSessionId, token });
       setSessions((current) => current.map((candidate) => (candidate.id === session.id ? session : candidate)));
+    } catch (err) {
+      handleApiError(err);
+    }
+  }
+
+  async function handleReplayCallback(callbackId: string) {
+    if (!selectedSessionId) return;
+    setError('');
+    try {
+      const callback = await replayCallback({ sessionId: selectedSessionId, callbackId, token });
+      setCallbacks((current) => current.map((candidate) => (candidate.id === callback.id ? callback : candidate)));
+      await refreshSessionDetail(selectedSessionId);
     } catch (err) {
       handleApiError(err);
     }
@@ -549,7 +576,7 @@ export function App() {
                     </Card>
                   </form>
                 </section>
-                <Artifacts artifacts={artifacts} />
+                <ContextPanel artifacts={artifacts} callbacks={callbacks} onReplayCallback={handleReplayCallback} />
               </div>
             </section>
           )}
@@ -922,7 +949,7 @@ function Diagnostics(props: { events: AgentEvent[] }) {
   );
 }
 
-function Artifacts(props: { artifacts: Artifact[] }) {
+function ContextPanel(props: { artifacts: Artifact[]; callbacks: CallbackDelivery[]; onReplayCallback: (callbackId: string) => void }) {
   return (
     <aside className="min-h-0 overflow-auto border-t border-slate-800 bg-slate-950/40 p-4 lg:border-l lg:border-t-0">
       <h2 className="text-sm font-semibold">Context</h2>
@@ -941,6 +968,42 @@ function Artifacts(props: { artifacts: Artifact[] }) {
         ))}
         {!props.artifacts.length ? <p className="text-sm text-slate-500">No artifacts yet.</p> : null}
       </div>
+      <div className="mt-6 border-b border-slate-800 pb-3 text-sm text-slate-400">
+        <strong className="block font-medium text-slate-200">Callbacks</strong>
+        <span>Delivery status for Slack and webhook completion replies.</span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {props.callbacks.map((callback) => (
+          <Card className="p-3" key={callback.id}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-xs text-slate-500">{callback.targetType} · {formatDate(callback.updatedAt)}</span>
+                <strong className="mt-1 block truncate text-sm font-medium">{callbackEventLabel(callback.eventType)}</strong>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Badge className={statusTextClass(callback.status)}>{callback.status}</Badge>
+                {callback.status === 'failed' ? (
+                  <Button className="h-7 w-7 p-0" size="icon" variant="ghost" onClick={() => props.onReplayCallback(callback.id)} aria-label="Replay callback" title="Replay callback">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <details className="mt-2 text-xs text-slate-400">
+              <summary className="cursor-pointer text-slate-500">Details</summary>
+              <dl className="mt-2 grid gap-1">
+                <div>Attempts: {callback.attempts}/{callback.maxAttempts}</div>
+                {callback.nextAttemptAt ? <div>Next retry: {formatDate(callback.nextAttemptAt)}</div> : null}
+                {callback.lastAttemptAt ? <div>Last attempt: {formatDate(callback.lastAttemptAt)}</div> : null}
+                {callback.deliveredAt ? <div>Delivered: {formatDate(callback.deliveredAt)}</div> : null}
+                {callback.lastError ? <div className="text-red-300">Last error: {callback.lastError}</div> : null}
+                <div className="truncate">ID: {callback.id}</div>
+              </dl>
+            </details>
+          </Card>
+        ))}
+        {!props.callbacks.length ? <p className="text-sm text-slate-500">No callbacks yet.</p> : null}
+      </div>
     </aside>
   );
 }
@@ -951,7 +1014,12 @@ function upsertEvent(events: AgentEvent[], event: AgentEvent): AgentEvent[] {
 }
 
 function shouldRefreshSessionDetail(eventType: string): boolean {
-  return new Set(['message_created', 'message_started', 'message_completed', 'message_failed', 'message_cancelled', 'run_cancel_requested', 'run_cancelled', 'artifact_created']).has(eventType);
+  return new Set(['message_created', 'message_started', 'message_completed', 'message_failed', 'message_cancelled', 'run_cancel_requested', 'run_cancelled', 'artifact_created', 'callback_sent', 'callback_retry_scheduled', 'callback_failed', 'callback_replay_requested']).has(eventType);
+}
+
+function callbackEventLabel(eventType: string): string {
+  if (eventType === 'message_completed') return 'Completion reply';
+  return eventType.replace(/_/g, ' ');
 }
 
 function buildAssistantText(events: AgentEvent[]): Record<string, string> {

@@ -5,6 +5,8 @@ import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 import { MemoryStore } from '../../src/store/memory.js';
 import {
   expectArtifactsResponse,
+  expectCallbackResponse,
+  expectCallbacksResponse,
   expectErrorResponse,
   expectEventsResponse,
   expectMessageResponse,
@@ -162,6 +164,43 @@ describe('core API', () => {
     const messagesBody = await messagesResponse.json();
     expectMessagesResponse(messagesBody);
     expect(messagesBody.messages).toMatchObject([{ sessionId: session.id, prompt: 'show this message' }]);
+  });
+
+  it('lists callback deliveries and requeues failed callbacks for replay', async () => {
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Callback replay' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    const now = new Date('2026-05-06T00:00:00.000Z');
+    const delivery = await store.createCallbackDelivery({
+      id: '00000000-0000-4000-8000-000000000901',
+      sessionId: session.id,
+      targetType: 'http',
+      target: { url: 'https://example.com/callback' },
+      eventType: 'message_completed',
+      payload: { text: 'done' },
+      createdAt: now,
+      updatedAt: now,
+      nextAttemptAt: now,
+      maxAttempts: 1,
+    });
+    await store.claimDueCallbackDeliveries({ now, limit: 1 });
+    await store.markCallbackDeliveryFailed({ id: delivery.id, failedAt: now, error: 'HTTP callback returned 500', terminal: true });
+
+    const list = await fetch(`${baseUrl}/sessions/${session.id}/callbacks`);
+    expect(list.status).toBe(200);
+    const listBody = await list.json();
+    expectCallbacksResponse(listBody);
+    expect(listBody.callbacks).toMatchObject([{ id: delivery.id, status: 'failed', lastError: 'HTTP callback returned 500' }]);
+
+    const replay = await postJson(`${baseUrl}/sessions/${session.id}/callbacks/${delivery.id}/replay`, {});
+    expect(replay.status).toBe(200);
+    const replayBody = await replay.json();
+    expectCallbackResponse(replayBody);
+    expect(replayBody.callback).toMatchObject({ id: delivery.id, status: 'pending' });
+
+    const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
+    const eventsBody = await eventsResponse.json();
+    expectEventsResponse(eventsBody);
+    expect(eventsBody.events.map((event) => event.type)).toContain('callback_replay_requested');
   });
 
   it('updates a session title', async () => {

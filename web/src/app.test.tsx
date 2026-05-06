@@ -170,6 +170,25 @@ it('prefers final assistant response over streamed deltas', async () => {
   expect(screen.queryByText('corrupted stream')).not.toBeInTheDocument();
 });
 
+it('shows callback delivery status and replays failed callbacks', async () => {
+  const replays: string[] = [];
+  mockApi({
+    callbacks: [callbackFixture({ id: '00000000-0000-4000-8000-000000000301', status: 'failed', attempts: 5, maxAttempts: 5, lastError: 'HTTP callback returned 500' })],
+    onReplayCallback: (callbackId) => replays.push(callbackId),
+  });
+  render(<App />);
+
+  expect(await screen.findByText('Callbacks')).toBeInTheDocument();
+  expect(await screen.findByText('Completion reply')).toBeInTheDocument();
+  expect(screen.getByText('Last error: HTTP callback returned 500')).not.toBeVisible();
+  fireEvent.click(screen.getByText('Details'));
+  expect(screen.getByText('Last error: HTTP callback returned 500')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Replay callback' }));
+
+  await waitFor(() => expect(replays).toEqual(['00000000-0000-4000-8000-000000000301']));
+  expect(await screen.findByText('pending')).toBeInTheDocument();
+});
+
 it('preserves selected archived session and archived section after refresh', async () => {
   const archivedSession = { ...session, status: 'archived', title: 'Archived chosen' };
   localStorage.setItem('dev-deputies-selected-session-id', archivedSession.id);
@@ -205,9 +224,10 @@ it('keeps the new-session page selected after archiving and refreshing', async (
   expect(screen.queryByText('This session is archived.')).not.toBeInTheDocument();
 });
 
-function mockApi(options: { submittedPrompts?: string[]; messages?: unknown[]; events?: unknown[]; sessions?: unknown[]; sessionOverride?: Partial<typeof session>; onCancelRun?: () => void; authMode?: 'none' | 'bearer' | 'session'; currentUser?: { username: string } | null; logins?: Array<{ username: string; password: string }> } = {}) {
+function mockApi(options: { submittedPrompts?: string[]; messages?: unknown[]; events?: unknown[]; sessions?: unknown[]; callbacks?: unknown[]; sessionOverride?: Partial<typeof session>; onCancelRun?: () => void; onReplayCallback?: (callbackId: string) => void; authMode?: 'none' | 'bearer' | 'session'; currentUser?: { username: string } | null; logins?: Array<{ username: string; password: string }> } = {}) {
   let currentSession = { ...session, ...options.sessionOverride };
   let currentUser = options.currentUser;
+  let callbacks = options.callbacks ?? [];
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? 'GET';
@@ -278,6 +298,18 @@ function mockApi(options: { submittedPrompts?: string[]; messages?: unknown[]; e
       return jsonResponse({ artifacts: [] });
     }
 
+    if (url.pathname === `/sessions/${currentSession.id}/callbacks` && method === 'GET') {
+      return jsonResponse({ callbacks });
+    }
+
+    const replayMatch = url.pathname.match(new RegExp(`^/sessions/${currentSession.id}/callbacks/([^/]+)/replay$`));
+    if (replayMatch && method === 'POST') {
+      const callbackId = replayMatch[1]!;
+      options.onReplayCallback?.(callbackId);
+      callbacks = callbacks.map((callback) => ({ ...(callback as object), status: 'pending', maxAttempts: 6, updatedAt: '2026-05-05T12:04:00.000Z', nextAttemptAt: '2026-05-05T12:04:00.000Z' }));
+      return jsonResponse({ callback: callbacks.find((callback) => (callback as { id?: string }).id === callbackId) });
+    }
+
     if (url.pathname === `/sessions/${currentSession.id}/events/stream`) {
       return new Response(new ReadableStream(), { status: 200 });
     }
@@ -299,6 +331,19 @@ function eventFixture(input: { sequence: number; type: string; payload: Record<s
     ...input,
     sessionId: session.id,
     createdAt: '2026-05-05T12:02:00.000Z',
+  };
+}
+
+function callbackFixture(input: { id: string; status: string; attempts: number; maxAttempts: number; lastError?: string }) {
+  return {
+    ...input,
+    sessionId: session.id,
+    targetType: 'http',
+    target: { url: 'https://example.com/callback' },
+    eventType: 'message_completed',
+    payload: { text: 'done' },
+    createdAt: '2026-05-05T12:03:00.000Z',
+    updatedAt: '2026-05-05T12:03:00.000Z',
   };
 }
 

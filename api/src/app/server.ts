@@ -6,6 +6,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { apiAuthMiddleware } from '../auth/middleware.js';
 import { clearSessionCookie, createSessionCookie, readSession } from '../auth/session.js';
+import { CallbackService, CallbackServiceError } from '../callbacks/service.js';
 import { requireAuthSessionSecret, requireSlackSigningSecret, requireStaticCredentials, type AppConfig } from '../config/index.js';
 import { EventService } from '../events/service.js';
 import { GenericWebhookError, GenericWebhookService } from '../integrations/generic-webhook/service.js';
@@ -30,6 +31,7 @@ export type AppServices = {
   sessions: SessionService;
   messages: MessageService;
   genericWebhooks: GenericWebhookService;
+  callbacks: CallbackService;
   sandboxCleanup?: SandboxCleanupService;
 };
 
@@ -43,6 +45,7 @@ export function createServices(store: AppStore = new MemoryStore(), options: { s
     sessions,
     messages,
     genericWebhooks: new GenericWebhookService(store, sessions, messages),
+    callbacks: new CallbackService(store, events),
   };
   if (options.sandboxProvider) services.sandboxCleanup = new SandboxCleanupService(store, events, options.sandboxProvider);
   return services;
@@ -317,6 +320,30 @@ export function createApp(config: AppConfig, services = createServices()) {
 
     const artifacts = await services.store.getArtifacts(sessionId);
     return c.json({ artifacts });
+  });
+
+  app.get('/sessions/:sessionId/callbacks', async (c) => {
+    const sessionId = c.req.param('sessionId');
+    const session = await services.sessions.get(sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+
+    const messageId = optionalString(c.req.query('messageId'));
+    const callbacks = await services.callbacks.list({ sessionId, ...(messageId ? { messageId } : {}) });
+    return c.json({ callbacks });
+  });
+
+  app.post('/sessions/:sessionId/callbacks/:deliveryId/replay', async (c) => {
+    const sessionId = c.req.param('sessionId');
+    const session = await services.sessions.get(sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+
+    try {
+      const callback = await services.callbacks.requestReplay({ sessionId, deliveryId: c.req.param('deliveryId') });
+      return c.json({ callback });
+    } catch (error) {
+      if (error instanceof CallbackServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      throw error;
+    }
   });
 
   app.get('/sessions/:sessionId/events/stream', async (c) => {

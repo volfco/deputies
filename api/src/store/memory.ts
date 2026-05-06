@@ -323,6 +323,13 @@ export class MemoryStore implements AppStore {
     return delivery;
   }
 
+  async listCallbackDeliveries(input: { sessionId: string; messageId?: string }): Promise<CallbackDeliveryRecord[]> {
+    return Array.from(this.callbacks.values())
+      .filter((delivery) => delivery.sessionId === input.sessionId)
+      .filter((delivery) => !input.messageId || delivery.messageId === input.messageId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
   async claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]> {
     const due = Array.from(this.callbacks.values())
       .filter((delivery) => delivery.status === 'pending')
@@ -346,10 +353,10 @@ export class MemoryStore implements AppStore {
 
   async markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord> {
     const existing = this.requireCallback(input.id);
+    const { nextAttemptAt: _nextAttemptAt, lastError: _lastError, ...withoutRetryState } = existing;
     const updated: CallbackDeliveryRecord = {
-      ...existing,
+      ...withoutRetryState,
       status: 'sent',
-      attempts: existing.attempts + 1,
       deliveredAt: input.deliveredAt,
       updatedAt: input.deliveredAt,
     };
@@ -368,6 +375,21 @@ export class MemoryStore implements AppStore {
     };
     if (input.nextAttemptAt) updated.nextAttemptAt = input.nextAttemptAt;
     this.callbacks.set(input.id, updated);
+    return updated;
+  }
+
+  async requestCallbackReplay(input: { sessionId: string; deliveryId: string; requestedAt: Date }): Promise<CallbackDeliveryRecord | null> {
+    const existing = this.callbacks.get(input.deliveryId);
+    if (!existing || existing.sessionId !== input.sessionId || existing.status !== 'failed') return null;
+    const { deliveredAt: _deliveredAt, nextAttemptAt: _nextAttemptAt, ...withoutTerminalFields } = existing;
+    const updated: CallbackDeliveryRecord = {
+      ...withoutTerminalFields,
+      status: 'pending',
+      maxAttempts: Math.max(existing.maxAttempts, existing.attempts + 1),
+      updatedAt: input.requestedAt,
+      nextAttemptAt: input.requestedAt,
+    };
+    this.callbacks.set(input.deliveryId, updated);
     return updated;
   }
 

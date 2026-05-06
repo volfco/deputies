@@ -26,6 +26,7 @@ const eventTypes = new Set([
   'callback_sent',
   'callback_retry_scheduled',
   'callback_failed',
+  'callback_replay_requested',
 ]);
 
 export function expectSessionResponse(value: unknown): asserts value is { session: { id: string; status: string; title?: string } } {
@@ -121,6 +122,20 @@ export function expectErrorResponse(value: unknown): asserts value is { error: s
   expect(typeof value.message).toBe('string');
 }
 
+export function expectCallbacksResponse(value: unknown): asserts value is { callbacks: Array<{ id: string; sessionId: string; targetType: string; status: string; attempts: number }> } {
+  expect(isRecord(value)).toBe(true);
+  const callbacks = isRecord(value) ? value.callbacks : undefined;
+  expect(Array.isArray(callbacks)).toBe(true);
+  if (!Array.isArray(callbacks)) return;
+  for (const callback of callbacks) expectCallbackRecord(callback);
+}
+
+export function expectCallbackResponse(value: unknown): asserts value is { callback: { id: string; sessionId: string; targetType: string; status: string; attempts: number } } {
+  expect(isRecord(value)).toBe(true);
+  const callback = isRecord(value) ? value.callback : undefined;
+  expectCallbackRecord(callback);
+}
+
 function expectNormalizedEvent(value: unknown): void {
   expect(isRecord(value)).toBe(true);
   if (!isRecord(value)) return;
@@ -150,6 +165,20 @@ function expectMessageRecord(value: unknown): void {
   expect(typeof value.status).toBe('string');
   expect(typeof value.prompt).toBe('string');
   expect(typeof value.createdAt).toBe('string');
+}
+
+function expectCallbackRecord(value: unknown): void {
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) return;
+  expect(typeof value.id).toBe('string');
+  expect(typeof value.sessionId).toBe('string');
+  expect(typeof value.targetType).toBe('string');
+  expect(typeof value.status).toBe('string');
+  expect(typeof value.eventType).toBe('string');
+  expect(typeof value.attempts).toBe('number');
+  expect(typeof value.maxAttempts).toBe('number');
+  expect(typeof value.createdAt).toBe('string');
+  expect(typeof value.updatedAt).toBe('string');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

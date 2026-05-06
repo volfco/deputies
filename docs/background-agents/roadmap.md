@@ -261,6 +261,8 @@ Acceptance criteria:
 - Operators can replay a failed callback without re-running the agent task.
 - Callback observability works for all callback target types through the generic callback core.
 
+Status: implemented for the current callback core. Session-scoped API routes list callback deliveries and requeue failed deliveries for replay. Manual replay preserves delivery history while extending the attempt budget for one more dispatch. The operator UI context panel shows callback status, attempts, retry timing, last error, and a replay action for failed deliveries.
+
 ## Phase 9: GitHub Integration
 
 Goal: support issue/PR mention workflows with emulator-backed confidence.

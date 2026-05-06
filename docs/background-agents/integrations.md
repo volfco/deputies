@@ -307,6 +307,7 @@ Current implementation:
 - The worker dispatches due callbacks when no session message is available to claim.
 - Callback sender plugins keep concrete integration clients out of callback core. Slack provides `SlackCompletionCallbackSender` from `api/src/integrations/slack`.
 - Retry uses exponential backoff with jitter and terminal failure after `max_attempts`.
+- Session-scoped API/UI controls show callback delivery status and can requeue failed deliveries for manual replay without re-running the agent task.
 
 ## Auth Model
 
