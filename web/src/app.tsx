@@ -36,15 +36,13 @@ import { Input } from './components/ui/input.js';
 import { Textarea } from './components/ui/textarea.js';
 import { cn } from './lib/utils.js';
 
-const legacyTokenStorageKey = 'devops-deputies-api-token';
 const tokenStorageKey = 'dev-deputies-api-token';
 const selectedSessionStorageKey = 'dev-deputies-selected-session-id';
+const newSessionSelectedStorageKey = 'dev-deputies-new-session-selected';
 const archivedSessionsOpenStorageKey = 'dev-deputies-archived-sessions-open';
 
 function loadStoredToken(): string {
-  const token = localStorage.getItem(tokenStorageKey) ?? localStorage.getItem(legacyTokenStorageKey) ?? '';
-  if (token && !localStorage.getItem(tokenStorageKey)) localStorage.setItem(tokenStorageKey, token);
-  return token;
+  return localStorage.getItem(tokenStorageKey) ?? '';
 }
 
 export function App() {
@@ -55,7 +53,7 @@ export function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string>(() => localStorage.getItem(selectedSessionStorageKey) ?? '');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [isCreatingThread, setIsCreatingThread] = useState(() => localStorage.getItem(newSessionSelectedStorageKey) === 'true');
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -164,6 +162,7 @@ export function App() {
       setSessionsLoaded(true);
       setSelectedSessionId((current) => {
         if (current && nextSessions.some((session) => session.id === current)) return current;
+        if (localStorage.getItem(newSessionSelectedStorageKey) === 'true') return '';
         const next = nextSessions[0]?.id ?? '';
         if (next) localStorage.setItem(selectedSessionStorageKey, next);
         else localStorage.removeItem(selectedSessionStorageKey);
@@ -357,19 +356,20 @@ export function App() {
       setLoginPassword('');
     }
     localStorage.removeItem(tokenStorageKey);
-    localStorage.removeItem(legacyTokenStorageKey);
-      setToken('');
-      setDraftToken('');
-      localStorage.removeItem(selectedSessionStorageKey);
+    setToken('');
+    setDraftToken('');
+    localStorage.removeItem(selectedSessionStorageKey);
+    localStorage.removeItem(newSessionSelectedStorageKey);
     setSessions([]);
     setSessionsLoaded(false);
-      setSelectedSessionId('');
+    setSelectedSessionId('');
     setIsCreatingThread(false);
   }
 
   function startNewThread() {
     setSidebarCollapsed(false);
     localStorage.removeItem(selectedSessionStorageKey);
+    localStorage.setItem(newSessionSelectedStorageKey, 'true');
     setSelectedSessionId('');
     setIsCreatingThread(true);
     setMessages([]);
@@ -381,6 +381,7 @@ export function App() {
 
   function selectSession(sessionId: string) {
     localStorage.setItem(selectedSessionStorageKey, sessionId);
+    localStorage.removeItem(newSessionSelectedStorageKey);
     setSelectedSessionId(sessionId);
     setIsCreatingThread(false);
     setSidebarOpen(false);
@@ -395,6 +396,7 @@ export function App() {
     setSessions((current) => current.map((candidate) => (candidate.id === session.id ? session : candidate)));
     if (selectedSessionId === session.id) {
       localStorage.removeItem(selectedSessionStorageKey);
+      localStorage.setItem(newSessionSelectedStorageKey, 'true');
       setSelectedSessionId('');
       setIsCreatingThread(true);
       setMessages([]);

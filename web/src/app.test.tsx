@@ -188,6 +188,23 @@ it('preserves selected archived session and archived section after refresh', asy
   expect(screen.getByText(/Archived · 1/).closest('details')).toHaveAttribute('open');
 });
 
+it('keeps the new-session page selected after archiving and refreshing', async () => {
+  mockApi();
+  const first = render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Archive' }));
+
+  expect(await screen.findByText('What should your deputy do?')).toBeInTheDocument();
+  expect(localStorage.getItem('dev-deputies-selected-session-id')).toBeNull();
+  expect(localStorage.getItem('dev-deputies-new-session-selected')).toBe('true');
+
+  first.unmount();
+  render(<App />);
+
+  expect(await screen.findByText('What should your deputy do?')).toBeInTheDocument();
+  expect(screen.queryByText('This session is archived.')).not.toBeInTheDocument();
+});
+
 function mockApi(options: { submittedPrompts?: string[]; messages?: unknown[]; events?: unknown[]; sessions?: unknown[]; sessionOverride?: Partial<typeof session>; onCancelRun?: () => void; authMode?: 'none' | 'bearer' | 'session'; currentUser?: { username: string } | null; logins?: Array<{ username: string; password: string }> } = {}) {
   let currentSession = { ...session, ...options.sessionOverride };
   let currentUser = options.currentUser;
@@ -221,6 +238,11 @@ function mockApi(options: { submittedPrompts?: string[]; messages?: unknown[]; e
 
     if (url.pathname === `/sessions/${currentSession.id}/unarchive` && method === 'POST') {
       currentSession = { ...currentSession, status: 'idle' };
+      return jsonResponse({ session: currentSession });
+    }
+
+    if (url.pathname === `/sessions/${currentSession.id}/archive` && method === 'POST') {
+      currentSession = { ...currentSession, status: 'archived' };
       return jsonResponse({ session: currentSession });
     }
 
