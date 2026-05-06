@@ -148,8 +148,17 @@ export function createApp(config: AppConfig, services = createServices()) {
 
     try {
       const slackOptions = config.slackBotToken
-        ? { reactionClient: new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }) }
-        : {};
+        ? {
+            reactionClient: new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }),
+            allowedTeamIds: config.slackAllowedTeamIds,
+            allowedChannelIds: config.slackAllowedChannelIds,
+            allowedUserIds: config.slackAllowedUserIds,
+          }
+        : {
+            allowedTeamIds: config.slackAllowedTeamIds,
+            allowedChannelIds: config.slackAllowedChannelIds,
+            allowedUserIds: config.slackAllowedUserIds,
+          };
       const result = await new SlackIntegrationService(services.store, services.sessions, services.messages, slackOptions).handle(payload);
       if (result.type === 'challenge') return c.json({ challenge: result.challenge });
       return c.json({ ok: true, type: result.type });

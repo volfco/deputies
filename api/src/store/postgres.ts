@@ -846,6 +846,15 @@ export class PostgresStore implements AppStore {
     );
   }
 
+  async markIntegrationDeliveryFailed(input: { source: string; dedupeKey: string; failedAt: Date; error: string }): Promise<void> {
+    await this.pool.query(
+      `UPDATE integration_deliveries
+       SET status = 'failed', processed_at = $3, error = $4
+       WHERE source = $1 AND dedupe_key = $2`,
+      [input.source, input.dedupeKey, input.failedAt, input.error],
+    );
+  }
+
   private async nextSequence(sessionId: string, kind: 'messages' | 'events'): Promise<number> {
     const result = await this.pool.query<{ sequence: PgInteger }>(
       `INSERT INTO session_sequence_counters (session_id, kind, next_sequence)

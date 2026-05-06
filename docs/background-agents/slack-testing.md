@@ -36,7 +36,16 @@ Required env:
 SLACK_SIGNING_SECRET=<from Slack app Basic Information>
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_API_BASE_URL=https://slack.com/api
+# Slack is fail-closed when SLACK_SIGNING_SECRET is set. Configure at least one
+# allowlist, or explicitly set UNSAFE_ALLOW_ALL_SLACK_IDS=true for local tests.
+UNSAFE_ALLOW_ALL_SLACK_IDS=false
+# Optional comma-separated allowlists. Empty means unrestricted for that dimension.
+SLACK_ALLOWED_TEAM_IDS=T...
+SLACK_ALLOWED_CHANNEL_IDS=C...
+SLACK_ALLOWED_USER_IDS=U...
 ```
+
+Authorization allowlists are evaluated after Slack signature verification. If a list is non-empty, the incoming Slack event must match one of its values. At least one allowlist is required when `SLACK_SIGNING_SECRET` is set unless `UNSAFE_ALLOW_ALL_SLACK_IDS=true`. Unauthorized events return `200 { "ok": true, "type": "ignored" }` so Slack does not retry, and no product session/message is created.
 
 Manual test:
 
@@ -54,6 +63,7 @@ Expected result:
 - When the final Slack reply is delivered, the bot adds `:white_check_mark:` to the same Slack message.
 - Follow-up replies in the same Slack thread reuse the same product session.
 - Duplicate Slack `event_id` deliveries do not create duplicate messages.
+- Events from teams, channels, or users outside configured allowlists are ignored.
 
 ## Emulate Local Test
 
@@ -78,6 +88,7 @@ Automated tests should usually start emulate programmatically with `createEmulat
 
 - Inbound `app_mention` and thread follow-up `message` events are implemented.
 - URL verification and signature verification are implemented.
+- Optional team/channel/user allowlists are implemented.
 - Bot/self-message ignore and event dedupe are implemented.
 - Outbound Slack replies are delivered through the generic callback dispatcher and retried with backoff.
 - Thread history fetching is not implemented yet.

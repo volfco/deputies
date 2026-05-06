@@ -32,6 +32,10 @@ export type AppConfig = {
   slackApiBaseUrl: string;
   slackSigningSecret?: string;
   slackBotToken?: string;
+  unsafeAllowAllSlackIds: boolean;
+  slackAllowedTeamIds: string[];
+  slackAllowedChannelIds: string[];
+  slackAllowedUserIds: string[];
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -54,6 +58,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     authCookieSecure: parseBoolean(env.AUTH_COOKIE_SECURE, false, 'AUTH_COOKIE_SECURE'),
     flueSessionStore: parseEnum(env.FLUE_SESSION_STORE, ['postgres', 'memory'], 'postgres'),
     slackApiBaseUrl: env.SLACK_API_BASE_URL ?? 'https://slack.com/api',
+    unsafeAllowAllSlackIds: parseBoolean(env.UNSAFE_ALLOW_ALL_SLACK_IDS, false, 'UNSAFE_ALLOW_ALL_SLACK_IDS'),
+    slackAllowedTeamIds: parseStringList(env.SLACK_ALLOWED_TEAM_IDS),
+    slackAllowedChannelIds: parseStringList(env.SLACK_ALLOWED_CHANNEL_IDS),
+    slackAllowedUserIds: parseStringList(env.SLACK_ALLOWED_USER_IDS),
   };
 
   if (env.API_BEARER_TOKEN) config.apiBearerToken = env.API_BEARER_TOKEN;
@@ -70,7 +78,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.SLACK_SIGNING_SECRET) config.slackSigningSecret = env.SLACK_SIGNING_SECRET;
   if (env.SLACK_BOT_TOKEN) config.slackBotToken = env.SLACK_BOT_TOKEN;
 
+  if (config.slackSigningSecret && !config.unsafeAllowAllSlackIds && !hasAnySlackAllowlist(config)) {
+    throw new Error('Slack allowlists are required when SLACK_SIGNING_SECRET is set. Configure SLACK_ALLOWED_TEAM_IDS, SLACK_ALLOWED_CHANNEL_IDS, or SLACK_ALLOWED_USER_IDS, or set UNSAFE_ALLOW_ALL_SLACK_IDS=true for unrestricted Slack access.');
+  }
+
   return config;
+}
+
+function hasAnySlackAllowlist(config: Pick<AppConfig, 'slackAllowedTeamIds' | 'slackAllowedChannelIds' | 'slackAllowedUserIds'>): boolean {
+  return Boolean(config.slackAllowedTeamIds.length || config.slackAllowedChannelIds.length || config.slackAllowedUserIds.length);
 }
 
 export function requireApiBearerToken(config: AppConfig): string {
@@ -167,6 +183,11 @@ function parseBoolean(value: string | undefined, fallback: boolean, name: string
   if (value === 'true') return true;
   if (value === 'false') return false;
   throw new Error(`${name} must be true or false, received "${value}"`);
+}
+
+function parseStringList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
 function parseEnum<const T extends readonly string[]>(

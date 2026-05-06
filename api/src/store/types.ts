@@ -283,4 +283,5 @@ export interface AppStore {
     metadata: Record<string, unknown>;
   }): Promise<IntegrationDeliveryRecord | null>;
   markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void>;
+  markIntegrationDeliveryFailed(input: { source: string; dedupeKey: string; failedAt: Date; error: string }): Promise<void>;
 }

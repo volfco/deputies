@@ -95,8 +95,29 @@ describe('Slack integration', () => {
     expect(bot).toMatchObject({ type: 'ignored' });
   });
 
+  it('ignores Slack events outside configured allowlists', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const slack = new SlackIntegrationService(store, services.sessions, services.messages, {
+      allowedTeamIds: ['TALLOWED'],
+      allowedChannelIds: ['CALLOWED'],
+      allowedUserIds: ['UALLOWED'],
+    });
+
+    const deniedTeam = await slack.handle(slackEvent({ eventId: 'EvTeam', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100', teamId: 'TDENIED', channel: 'CALLOWED', user: 'UALLOWED' }));
+    const deniedChannel = await slack.handle(slackEvent({ eventId: 'EvChannel', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000001.000100', teamId: 'TALLOWED', channel: 'CDENIED', user: 'UALLOWED' }));
+    const deniedUser = await slack.handle(slackEvent({ eventId: 'EvUser', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000002.000100', teamId: 'TALLOWED', channel: 'CALLOWED', user: 'UDENIED' }));
+    const accepted = await slack.handle(slackEvent({ eventId: 'EvAllowed', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000003.000100', teamId: 'TALLOWED', channel: 'CALLOWED', user: 'UALLOWED' }));
+
+    expect(deniedTeam).toMatchObject({ type: 'ignored', reason: 'unauthorized_team' });
+    expect(deniedChannel).toMatchObject({ type: 'ignored', reason: 'unauthorized_channel' });
+    expect(deniedUser).toMatchObject({ type: 'ignored', reason: 'unauthorized_user' });
+    expect(accepted.type).toBe('accepted');
+    expect(await store.listSessions()).toHaveLength(1);
+  });
+
   it('handles signed Slack webhook challenges through the API route', async () => {
-    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret }), createServices(new MemoryStore()));
+    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
     const baseUrl = await listen(server);
     try {
       const body = JSON.stringify({ type: 'url_verification', challenge: 'challenge-token' });
@@ -109,7 +130,7 @@ describe('Slack integration', () => {
   });
 
   it('rejects unsigned Slack webhook requests', async () => {
-    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret }), createServices(new MemoryStore()));
+    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
     const baseUrl = await listen(server);
     try {
       const response = await fetch(`${baseUrl}/webhooks/slack/events`, { method: 'POST', body: '{}' });
@@ -118,19 +139,32 @@ describe('Slack integration', () => {
       await close(server);
     }
   });
+
+  it('returns ignored for signed Slack events outside API allowlists', async () => {
+    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret, SLACK_ALLOWED_CHANNEL_IDS: 'CALLOWED' }), createServices(new MemoryStore()));
+    const baseUrl = await listen(server);
+    try {
+      const body = JSON.stringify(slackEvent({ eventId: 'EvDenied', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100', channel: 'CDENIED' }));
+      const response = await postSignedSlack(`${baseUrl}/webhooks/slack/events`, body);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ ok: true, type: 'ignored' });
+    } finally {
+      await close(server);
+    }
+  });
 });
 
-function slackEvent(input: { eventId: string; type: 'app_mention' | 'message'; text: string; ts: string; threadTs?: string; botId?: string }) {
+function slackEvent(input: { eventId: string; type: 'app_mention' | 'message'; text: string; ts: string; threadTs?: string; botId?: string; teamId?: string; channel?: string; user?: string }) {
   return {
     type: 'event_callback',
-    team_id: 'T123',
+    team_id: input.teamId ?? 'T123',
     event_id: input.eventId,
     event_time: 1710000000,
     event: {
       type: input.type,
       text: input.text,
-      user: 'U123',
-      channel: 'C123',
+      user: input.user ?? 'U123',
+      channel: input.channel ?? 'C123',
       ts: input.ts,
       ...(input.threadTs ? { thread_ts: input.threadTs } : {}),
       ...(input.botId ? { bot_id: input.botId } : {}),

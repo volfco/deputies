@@ -17,6 +17,10 @@ describe('loadConfig', () => {
       authCookieSecure: false,
       flueSessionStore: 'postgres',
       slackApiBaseUrl: 'https://slack.com/api',
+      unsafeAllowAllSlackIds: false,
+      slackAllowedTeamIds: [],
+      slackAllowedChannelIds: [],
+      slackAllowedUserIds: [],
     });
   });
 
@@ -50,6 +54,9 @@ describe('loadConfig', () => {
         SLACK_API_BASE_URL: 'https://slack.emulate.localhost/api',
         SLACK_SIGNING_SECRET: 'slack-secret',
         SLACK_BOT_TOKEN: 'xoxb-token',
+        SLACK_ALLOWED_TEAM_IDS: 'T123, T456',
+        SLACK_ALLOWED_CHANNEL_IDS: 'C123,C456',
+        SLACK_ALLOWED_USER_IDS: 'U123, U456',
       }),
     ).toMatchObject({
       port: 4000,
@@ -79,6 +86,26 @@ describe('loadConfig', () => {
       slackApiBaseUrl: 'https://slack.emulate.localhost/api',
       slackSigningSecret: 'slack-secret',
       slackBotToken: 'xoxb-token',
+      unsafeAllowAllSlackIds: false,
+      slackAllowedTeamIds: ['T123', 'T456'],
+      slackAllowedChannelIds: ['C123', 'C456'],
+      slackAllowedUserIds: ['U123', 'U456'],
+    });
+  });
+
+  it('requires Slack allowlists unless unsafe allow-all is explicit', () => {
+    expect(() => loadConfig({ SLACK_SIGNING_SECRET: 'slack-secret' })).toThrow('Slack allowlists are required');
+    expect(loadConfig({ SLACK_SIGNING_SECRET: 'slack-secret', UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' })).toMatchObject({
+      slackSigningSecret: 'slack-secret',
+      unsafeAllowAllSlackIds: true,
+      slackAllowedTeamIds: [],
+      slackAllowedChannelIds: [],
+      slackAllowedUserIds: [],
+    });
+    expect(loadConfig({ SLACK_SIGNING_SECRET: 'slack-secret', SLACK_ALLOWED_TEAM_IDS: 'T123' })).toMatchObject({
+      slackSigningSecret: 'slack-secret',
+      unsafeAllowAllSlackIds: false,
+      slackAllowedTeamIds: ['T123'],
     });
   });
 
@@ -112,5 +139,6 @@ describe('loadConfig', () => {
 
   it('rejects invalid boolean values', () => {
     expect(() => loadConfig({ AUTH_COOKIE_SECURE: 'yes' })).toThrow('AUTH_COOKIE_SECURE must be true or false');
+    expect(() => loadConfig({ UNSAFE_ALLOW_ALL_SLACK_IDS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_SLACK_IDS must be true or false');
   });
 });

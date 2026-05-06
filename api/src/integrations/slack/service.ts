@@ -9,6 +9,9 @@ import type { SlackAcceptedEvent, SlackEventEnvelope } from './types.js';
 export type SlackIntegrationOptions = {
   reactionClient?: SlackReactionClient;
   receivedReactionName?: string;
+  allowedTeamIds?: string[];
+  allowedChannelIds?: string[];
+  allowedUserIds?: string[];
 };
 
 export type HandleSlackEventResult =
@@ -44,6 +47,17 @@ export class SlackIntegrationService {
       metadata: { teamId: accepted.teamId, channel: accepted.channel, threadTs: accepted.threadTs, eventType: accepted.type },
     });
     if (!delivery) return { ok: true, type: 'duplicate' };
+
+    const authorizationFailure = this.authorizationFailure(accepted);
+    if (authorizationFailure) {
+      await this.store.markIntegrationDeliveryFailed({
+        source: 'slack',
+        dedupeKey: accepted.eventId,
+        failedAt: new Date(),
+        error: authorizationFailure,
+      });
+      return { ok: true, type: 'ignored', reason: authorizationFailure };
+    }
 
     await this.addReceivedReaction(accepted);
 
@@ -86,6 +100,13 @@ export class SlackIntegrationService {
     } catch (error) {
       console.warn(error instanceof Error ? error.message : error);
     }
+  }
+
+  private authorizationFailure(event: SlackAcceptedEvent): string | null {
+    if (!isAllowed(event.teamId, this.options.allowedTeamIds)) return 'unauthorized_team';
+    if (!isAllowed(event.channel, this.options.allowedChannelIds)) return 'unauthorized_channel';
+    if (!isAllowed(event.user, this.options.allowedUserIds)) return 'unauthorized_user';
+    return null;
   }
 
   private parseAcceptedEvent(payload: SlackEventEnvelope): SlackAcceptedEvent | null {
@@ -143,4 +164,8 @@ function cleanSlackText(text: string): string {
 function requiredString(value: unknown): string {
   if (typeof value === 'string' && value.trim()) return value;
   throw new SlackIntegrationError('invalid_request', 'Expected Slack event fields');
+}
+
+function isAllowed(value: string, allowedValues: string[] | undefined): boolean {
+  return !allowedValues?.length || allowedValues.includes(value);
 }

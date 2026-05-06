@@ -458,6 +458,13 @@ export class MemoryStore implements AppStore {
     this.integrationDeliveries.set(key, { ...existing, status: 'processed', processedAt: input.processedAt });
   }
 
+  async markIntegrationDeliveryFailed(input: { source: string; dedupeKey: string; failedAt: Date; error: string }): Promise<void> {
+    const key = deliveryKey(input.source, input.dedupeKey);
+    const existing = this.integrationDeliveries.get(key);
+    if (!existing) return;
+    this.integrationDeliveries.set(key, { ...existing, status: 'failed', processedAt: input.failedAt, error: input.error });
+  }
+
   private hasActiveRun(sessionId: string, now: Date): boolean {
     for (const run of this.runs.values()) {
       if (run.sessionId !== sessionId) continue;
