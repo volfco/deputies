@@ -161,6 +161,17 @@ export function createApp(config: AppConfig, services = createServices()) {
     }
   });
 
+  app.post('/sessions/:sessionId/runs/current/cancel', async (c) => {
+    try {
+      const messages = await services.messages.cancelActiveRun({ sessionId: c.req.param('sessionId') });
+      return c.json({ messages });
+    } catch (error) {
+      if (error instanceof MessageServiceError && error.code === 'not_found') return writeError(c, 404, 'not_found', 'Session not found');
+      if (error instanceof MessageServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      throw error;
+    }
+  });
+
   app.post('/sessions/:sessionId/messages', async (c) => {
     const sessionId = c.req.param('sessionId');
     const body = await readJsonBody(c, config.maxJsonBodyBytes);

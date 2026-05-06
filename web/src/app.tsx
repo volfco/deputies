@@ -7,6 +7,7 @@ import {
   Message,
   Session,
   archiveSession,
+  cancelCurrentRun,
   cancelMessage,
   createSession,
   enqueueMessage,
@@ -60,6 +61,7 @@ export function App() {
   const authRequired = health?.apiAuthMode === 'bearer';
   const canCallApi = Boolean(health) && (!authRequired || Boolean(token));
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? null;
+  const hasActiveRun = messages.some((message) => message.status === 'processing') || selectedSession?.status === 'active';
   const filteredSessions = filterSessions(sortSessionsByLastActivity(sessions), threadSearch);
   const activeSessions = filteredSessions.filter((session) => session.status !== 'archived');
   const archivedSessions = filteredSessions.filter((session) => session.status === 'archived');
@@ -266,6 +268,18 @@ export function App() {
     }
   }
 
+  async function cancelRun() {
+    if (!selectedSessionId) return;
+    setError('');
+    try {
+      const cancelledMessages = await cancelCurrentRun({ sessionId: selectedSessionId, token });
+      setMessages((current) => current.map((candidate) => cancelledMessages.find((message) => message.id === candidate.id) ?? candidate));
+      await refreshSessions();
+    } catch (err) {
+      handleApiError(err);
+    }
+  }
+
   function saveToken(event: FormEvent) {
     event.preventDefault();
     const nextToken = draftToken.trim();
@@ -404,9 +418,11 @@ export function App() {
               <ThreadHeader
                 editingTitle={editingTitle}
                 selectedSession={selectedSession}
+                hasActiveRun={hasActiveRun}
                 titleDraft={titleDraft}
                 onArchive={handleArchiveSession}
                 onCancelTitle={() => setEditingTitle(false)}
+                onCancelRun={cancelRun}
                 onEditTitle={() => setEditingTitle(true)}
                 onTitleDraftChange={setTitleDraft}
                 onUpdateTitle={handleUpdateTitle}
@@ -605,10 +621,12 @@ function NewThreadPanel(props: {
 
 function ThreadHeader(props: {
   editingTitle: boolean;
+  hasActiveRun: boolean;
   selectedSession: Session;
   titleDraft: string;
   onArchive: () => void;
   onCancelTitle: () => void;
+  onCancelRun: () => void;
   onEditTitle: () => void;
   onTitleDraftChange: (value: string) => void;
   onUpdateTitle: (event: FormEvent) => void;
@@ -633,6 +651,7 @@ function ThreadHeader(props: {
       </div>
       <div className="flex shrink-0 items-center gap-2 justify-self-end">
         <Badge className={statusTextClass(props.selectedSession.status)}>{props.selectedSession.status}</Badge>
+        {props.hasActiveRun && props.selectedSession.status !== 'archived' ? <Button type="button" variant="secondary" onClick={props.onCancelRun}><X className="h-4 w-4" /> Cancel run</Button> : null}
         {props.selectedSession.status !== 'archived' ? <Button type="button" variant="secondary" onClick={props.onArchive}><Archive className="h-4 w-4" /> Archive</Button> : null}
       </div>
     </section>
@@ -661,7 +680,7 @@ function ChatPanel(props: {
         const groupDiagnostics = diagnostics[group.runId ?? group.responseMessageId] ?? [];
         return (
           <div className="grid gap-2" key={group.key}>
-            {group.messages.length > 1 ? <p className="text-xs font-medium uppercase tracking-widest text-slate-500">Queued batch · {group.messages.length} messages</p> : null}
+            {group.messages.length > 1 ? <p className="text-xs font-medium uppercase tracking-widest text-slate-500">Queued batch · {group.messages.filter((message) => message.status !== 'cancelled').length} active messages</p> : null}
             {group.messages.map((message) => (
               <UserMessageCard
                 editingMessageId={props.editingMessageId}
@@ -773,7 +792,7 @@ function upsertEvent(events: AgentEvent[], event: AgentEvent): AgentEvent[] {
 }
 
 function shouldRefreshSessionDetail(eventType: string): boolean {
-  return new Set(['message_created', 'message_started', 'message_completed', 'message_failed', 'artifact_created']).has(eventType);
+  return new Set(['message_created', 'message_started', 'message_completed', 'message_failed', 'message_cancelled', 'run_cancelled', 'artifact_created']).has(eventType);
 }
 
 function buildAssistantText(events: AgentEvent[]): Record<string, string> {
@@ -818,7 +837,6 @@ function groupMessagesByRun(messages: Message[], events: AgentEvent[]): MessageG
   }
 
   const groups: MessageGroup[] = [];
-  const messageBySequence = new Map(messages.map((message) => [message.sequence, message]));
   const seen = new Set<string>();
 
   for (const message of messages) {
@@ -830,7 +848,13 @@ function groupMessagesByRun(messages: Message[], events: AgentEvent[]): MessageG
       continue;
     }
 
-    const batchMessages = batch.sequences.map((sequence) => messageBySequence.get(sequence)).filter((item): item is Message => Boolean(item));
+    const minSequence = Math.min(...batch.sequences);
+    const maxSequence = Math.max(...batch.sequences);
+    const batchSequenceSet = new Set(batch.sequences);
+    const batchMessages = messages.filter((candidate) => {
+      if (batchSequenceSet.has(candidate.sequence)) return true;
+      return candidate.status === 'cancelled' && candidate.sequence > minSequence && candidate.sequence < maxSequence;
+    });
     for (const item of batchMessages) seen.add(item.id);
     groups.push({ key: batch.runId, messages: batchMessages, responseMessageId: batchMessages[0]?.id ?? message.id, runId: batch.runId });
   }

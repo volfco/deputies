@@ -136,6 +136,15 @@ export async function cancelMessage(input: { sessionId: string; messageId: strin
   return body.message;
 }
 
+export async function cancelCurrentRun(input: { sessionId: string; token: string }): Promise<Message[]> {
+  const body = await request<{ messages: Message[] }>(`/sessions/${input.sessionId}/runs/current/cancel`, {
+    method: 'POST',
+    token: input.token,
+    body: {},
+  });
+  return body.messages;
+}
+
 export async function pauseQueue(input: { sessionId: string; token: string }): Promise<Session> {
   const body = await request<{ session: Session }>(`/sessions/${input.sessionId}/queue/pause`, {
     method: 'POST',

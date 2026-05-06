@@ -232,7 +232,9 @@ export interface AppStore {
     now: Date;
   }): Promise<ClaimedMessageBatch | null>;
   renewRunLease(input: { runId: string; leaseOwner: string; leaseExpiresAt: Date; heartbeatAt: Date }): Promise<RunRecord | null>;
+  getRun(runId: string): Promise<RunRecord | null>;
   recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]>;
+  cancelActiveRun(input: { sessionId: string; cancelledAt: Date; error: string }): Promise<ClaimedMessageBatch | null>;
   completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage>;
   failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage>;
   completeRunBatch(input: { runId: string; completedAt: Date }): Promise<ClaimedMessageBatch>;

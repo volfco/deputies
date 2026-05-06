@@ -166,6 +166,30 @@ describe('core API', () => {
     expect((await resume.json()) as { session: { queuePausedAt?: string } }).toMatchObject({ session: {} });
   });
 
+  it('cancels the active run for a session', async () => {
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Cancel active run' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    await postJson(`${baseUrl}/sessions/${session.id}/messages`, { prompt: 'stop this' });
+    await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000301',
+      runnerType: 'fake',
+      leaseOwner: 'test-worker',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+      now: new Date(),
+    });
+
+    const cancel = await postJson(`${baseUrl}/sessions/${session.id}/runs/current/cancel`, {});
+
+    expect(cancel.status).toBe(200);
+    const body = (await cancel.json()) as { messages: Array<{ status: string }> };
+    expect(body.messages).toMatchObject([{ status: 'cancelled' }]);
+
+    const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
+    const eventsBody = await eventsResponse.json();
+    expectEventsResponse(eventsBody);
+    expect(eventsBody.events.map((event) => event.type)).toEqual(['session_created', 'message_created', 'run_cancelled', 'message_cancelled']);
+  });
+
   it('archives a session', async () => {
     const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Archive me' });
     const { session } = (await createSession.json()) as { session: { id: string } };

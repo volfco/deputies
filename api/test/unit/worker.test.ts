@@ -1,6 +1,7 @@
 import { createServices } from '../../src/app/server.js';
 import { FakeRunner } from '../../src/runner/fake.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
+import type { Runner, RunnerInput, RunnerResult } from '../../src/runner/types.js';
 import { runSandboxReaperOnce } from '../../src/sandbox/reaper.js';
 import { SandboxCleanupService } from '../../src/sandbox/service.js';
 import { MemoryStore } from '../../src/store/memory.js';
@@ -124,6 +125,37 @@ describe('WorkerService', () => {
     await services.sessions.resumeQueue(session.id);
     await expect(worker.processNext()).resolves.toBe(true);
     await expect(services.messages.list(session.id)).resolves.toMatchObject([{ prompt: 'edited', status: 'completed' }]);
+  });
+
+  it('does not complete a run that was cancelled while the runner was active', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Cancel running batch' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'second' });
+    const runner = new BlockingRunner();
+
+    const worker = new WorkerService({
+      store,
+      events: services.events,
+      runner,
+      runnerType: 'blocking',
+      sandboxProvider: new FakeSandboxProvider(),
+      leaseOwner: 'test-worker',
+    });
+
+    const processing = worker.processNext();
+    await runner.waitForStart();
+    await expect(services.messages.cancelActiveRun({ sessionId: session.id })).resolves.toHaveLength(2);
+    runner.release();
+
+    await expect(processing).resolves.toBe(true);
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([
+      { sequence: 1, status: 'cancelled' },
+      { sequence: 2, status: 'cancelled' },
+    ]);
+    expect(await store.getArtifacts(session.id)).toEqual([]);
+    expect((await services.events.list(session.id)).map((event) => event.type)).not.toContain('message_completed');
   });
 
   it('restarts a stopped persisted sandbox for follow-up messages', async () => {
@@ -277,6 +309,29 @@ describe('WorkerService', () => {
     expect(cleanupCalled).toBe(false);
   });
 });
+
+class BlockingRunner implements Runner {
+  private started = false;
+  private releaseRun!: () => void;
+  private readonly released = new Promise<void>((resolve) => {
+    this.releaseRun = resolve;
+  });
+
+  async run(input: RunnerInput): Promise<RunnerResult> {
+    this.started = true;
+    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'run_started', payload: {}, createdAt: new Date() });
+    await this.released;
+    return { text: 'late result', artifacts: [{ type: 'log', payload: { late: true } }] };
+  }
+
+  release(): void {
+    this.releaseRun();
+  }
+
+  async waitForStart(): Promise<void> {
+    await waitFor(() => this.started);
+  }
+}
 
 async function waitFor(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 1_000;

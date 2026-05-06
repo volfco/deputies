@@ -390,6 +390,16 @@ export class PostgresStore implements AppStore {
     return row ? toRun(row) : null;
   }
 
+  async getRun(runId: string): Promise<RunRecord | null> {
+    const result = await this.pool.query<RunRow>(
+      `SELECT id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata
+       FROM runs
+       WHERE id = $1`,
+      [runId],
+    );
+    return result.rows[0] ? toRun(result.rows[0]) : null;
+  }
+
   async recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]> {
     return this.transaction(async (client) => {
       const stale = await client.query<RunRow>(
@@ -447,6 +457,49 @@ export class PostgresStore implements AppStore {
 
   async failRunBatch(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessageBatch> {
     return this.finishRunBatch(input.runId, 'failed', input.failedAt, input.error);
+  }
+
+  async cancelActiveRun(input: { sessionId: string; cancelledAt: Date; error: string }): Promise<ClaimedMessageBatch | null> {
+    return this.transaction(async (client) => {
+      const runResult = await client.query<RunRow>(
+        `UPDATE runs
+         SET status = 'cancelled',
+             lease_owner = NULL,
+             lease_expires_at = NULL,
+             heartbeat_at = $2,
+             failed_at = $2,
+             error = $3
+         WHERE id = (
+           SELECT id FROM runs
+           WHERE session_id = $1 AND status IN ('starting', 'running')
+           ORDER BY started_at DESC
+           LIMIT 1
+           FOR UPDATE SKIP LOCKED
+         )
+         RETURNING id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata`,
+        [input.sessionId, input.cancelledAt, input.error],
+      );
+
+      const run = runResult.rows[0];
+      if (!run) return null;
+
+      const messageIds = getRunMessageIds(toRun(run));
+      const messageResult = await client.query<MessageRow>(
+        `UPDATE messages
+         SET status = 'cancelled'
+         WHERE id = ANY($1::uuid[]) AND status = 'processing'
+         RETURNING id, session_id, sequence, status, prompt, source, context, created_at`,
+        [messageIds],
+      );
+
+      await client.query('UPDATE sessions SET status = $2, updated_at = $3 WHERE id = $1', [
+        input.sessionId,
+        'idle',
+        input.cancelledAt,
+      ]);
+
+      return { messages: messageResult.rows.map(toMessage).sort((a, b) => a.sequence - b.sequence), run: toRun(run) };
+    });
   }
 
   async getActiveSandbox(sessionId: string, provider: string): Promise<SandboxRecord | null> {

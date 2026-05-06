@@ -190,6 +190,10 @@ export class MemoryStore implements AppStore {
     return renewed;
   }
 
+  async getRun(runId: string): Promise<RunRecord | null> {
+    return this.runs.get(runId) ?? null;
+  }
+
   async recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]> {
     const recovered: RecoveredRun[] = [];
 
@@ -233,6 +237,16 @@ export class MemoryStore implements AppStore {
     const claimed = await this.finishRun(input.runId, input.failedAt, 'failed');
     this.runs.set(input.runId, { ...claimed.run, error: input.error });
     return { ...claimed, run: this.runs.get(input.runId)! };
+  }
+
+  async cancelActiveRun(input: { sessionId: string; cancelledAt: Date; error: string }): Promise<ClaimedMessageBatch | null> {
+    const run = [...this.runs.values()].find((candidate) => candidate.sessionId === input.sessionId && (candidate.status === 'running' || candidate.status === 'starting'));
+    if (!run) return null;
+
+    const claimed = this.finishRun(run.id, input.cancelledAt, 'cancelled');
+    const cancelledRun: RunRecord = { ...claimed.run, error: input.error };
+    this.runs.set(run.id, cancelledRun);
+    return { ...claimed, run: cancelledRun };
   }
 
   async getActiveSandbox(sessionId: string, provider: string): Promise<SandboxRecord | null> {
@@ -418,7 +432,7 @@ export class MemoryStore implements AppStore {
     return false;
   }
 
-  private finishRun(runId: string, finishedAt: Date, status: 'completed' | 'failed'): ClaimedMessageBatch {
+  private finishRun(runId: string, finishedAt: Date, status: 'completed' | 'failed' | 'cancelled'): ClaimedMessageBatch {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`Run does not exist: ${runId}`);
 
@@ -437,12 +451,12 @@ export class MemoryStore implements AppStore {
     const { leaseExpiresAt: _leaseExpiresAt, leaseOwner: _leaseOwner, ...runWithoutLease } = run;
     const terminalRun: RunRecord = { ...runWithoutLease, status, heartbeatAt: finishedAt };
     if (status === 'completed') terminalRun.completedAt = finishedAt;
-    if (status === 'failed') terminalRun.failedAt = finishedAt;
+    if (status === 'failed' || status === 'cancelled') terminalRun.failedAt = finishedAt;
     this.runs.set(runId, terminalRun);
 
     const session = this.sessions.get(run.sessionId);
     if (!session) throw new Error(`Session does not exist: ${run.sessionId}`);
-    this.sessions.set(run.sessionId, { ...session, status: status === 'completed' ? 'idle' : 'failed', updatedAt: finishedAt });
+    this.sessions.set(run.sessionId, { ...session, status: status === 'failed' ? 'failed' : 'idle', updatedAt: finishedAt });
 
     return { messages: terminalMessages, run: terminalRun };
   }

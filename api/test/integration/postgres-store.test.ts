@@ -190,6 +190,29 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     expect(completed.messages.map((message) => message.status)).toEqual(['completed', 'completed']);
   });
 
+  it('cancels active postgres run batches', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Postgres cancel' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'second' });
+
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000903',
+      runnerType: 'fake',
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+      now: new Date(),
+    });
+    expect(claimed?.messages).toHaveLength(2);
+
+    const cancelled = await store.cancelActiveRun({ sessionId: session.id, cancelledAt: new Date(), error: 'cancelled by test' });
+
+    expect(cancelled?.run.status).toBe('cancelled');
+    expect(cancelled?.messages.map((message) => message.status)).toEqual(['cancelled', 'cancelled']);
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({ status: 'cancelled', error: 'cancelled by test' });
+    await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'idle' });
+  });
+
   it('runs postgres advisory locks on only one holder', async () => {
     const locked = await store.withAdvisoryLock(12345, async () => {
       const competing = new PostgresStore(testDatabaseUrl!);

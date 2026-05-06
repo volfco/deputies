@@ -54,11 +54,13 @@ export class WorkerService {
 
     try {
       await this.runWithHeartbeat(claimed);
+      if (await this.isRunCancelled(claimed.run.id)) return true;
       const completed = await this.options.store.completeRunBatch({ runId: claimed.run.id, completedAt: new Date() });
       for (const message of completed.messages) {
         await this.options.events.append({ sessionId: message.sessionId, runId: completed.run.id, messageId: message.id, type: 'message_completed', payload: { sequence: message.sequence } });
       }
     } catch (error) {
+      if (await this.isRunCancelled(claimed.run.id)) return true;
       const message = error instanceof Error ? error.message : 'Unknown worker error';
       const failed = await this.options.store.failRunBatch({ runId: claimed.run.id, failedAt: new Date(), error: message });
       await this.options.events.append({
@@ -159,6 +161,7 @@ export class WorkerService {
           });
         },
       });
+      if (await this.isRunCancelled(claimed.run.id)) return;
       await new ArtifactService(this.options.store, this.options.events).recordRunArtifacts({
         sessionId: primary.sessionId,
         runId: claimed.run.id,
@@ -169,6 +172,10 @@ export class WorkerService {
     } finally {
       await this.options.store.updateSandbox({ ...record, updatedAt: new Date() });
     }
+  }
+
+  private async isRunCancelled(runId: string): Promise<boolean> {
+    return (await this.options.store.getRun(runId))?.status === 'cancelled';
   }
 }
 
