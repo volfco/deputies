@@ -1,3 +1,4 @@
+import { CallbackDispatcher } from '../../src/callbacks/service.js';
 import { createServices } from '../../src/app/server.js';
 import { FakeRunner } from '../../src/runner/fake.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
@@ -109,11 +110,12 @@ describe('WorkerService', () => {
     const services = createServices(store);
     const session = await services.sessions.create({ title: 'Slack callback' });
     const replies: Array<{ channel: string; threadTs: string; text: string }> = [];
+    const progress: Array<{ channel: string; timestamp: string; name: string }> = [];
     await services.messages.enqueue({
       sessionId: session.id,
       prompt: 'from slack',
       source: 'slack',
-      context: { callback: { type: 'slack', channel: 'C123', threadTs: '1710000000.000100' } },
+      context: { callback: { type: 'slack', channel: 'C123', threadTs: '1710000000.000100', messageTs: '1710000001.000100' } },
     });
 
     const worker = new WorkerService({
@@ -133,14 +135,65 @@ describe('WorkerService', () => {
           });
         },
       }],
+      progressNotifiers: [{
+        async onRunStarted({ message }) {
+          const callback = message.context?.callback as { channel: string; messageTs: string };
+          progress.push({ channel: callback.channel, timestamp: callback.messageTs, name: 'hourglass_flowing_sand' });
+        },
+      }],
     });
 
     await expect(worker.processNext()).resolves.toBe(true);
+    await expect(worker.processNext()).resolves.toBe(true);
 
     expect(replies).toEqual([{ channel: 'C123', threadTs: '1710000000.000100', text: 'final deputy reply' }]);
+    expect(progress).toEqual([{ channel: 'C123', timestamp: '1710000001.000100', name: 'hourglass_flowing_sand' }]);
     const events = await services.events.list(session.id);
     expect(events.map((event) => event.type)).toContain('callback_sent');
     expect(events.find((event) => event.type === 'callback_sent')?.payload).toMatchObject({ targetType: 'slack' });
+  });
+
+  it('retries failed callbacks with backoff before terminal failure', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Callback retry' });
+    const now = new Date('2026-05-06T00:00:00.000Z');
+    await store.createCallbackDelivery({
+      id: '00000000-0000-4000-8000-000000000901',
+      sessionId: session.id,
+      targetType: 'http',
+      target: { url: 'https://example.com/callback' },
+      eventType: 'message_completed',
+      payload: {
+        event: 'message_completed',
+        sessionId: session.id,
+        runId: '00000000-0000-4000-8000-000000000902',
+        messageId: '00000000-0000-4000-8000-000000000903',
+        text: 'done',
+        artifacts: [],
+      },
+      createdAt: now,
+      updatedAt: now,
+      nextAttemptAt: now,
+      maxAttempts: 2,
+    });
+
+    let currentTime = now;
+    const dispatcher = new CallbackDispatcher(store, services.events, [{
+      type: 'http',
+      async deliver() {
+        throw new Error('temporary outage');
+      },
+    }], { now: () => currentTime, baseDelayMs: 1_000, jitterRatio: 0 });
+
+    await expect(dispatcher.dispatchDue()).resolves.toBe(1);
+    await expect(dispatcher.dispatchDue()).resolves.toBe(0);
+    currentTime = new Date(now.getTime() + 1_000);
+    await expect(dispatcher.dispatchDue()).resolves.toBe(1);
+
+    const eventTypes = (await services.events.list(session.id)).map((event) => event.type);
+    expect(eventTypes).toContain('callback_retry_scheduled');
+    expect(eventTypes).toContain('callback_failed');
   });
 
   it('does not claim queued messages while the session queue is paused', async () => {

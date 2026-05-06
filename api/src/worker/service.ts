@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { ArtifactService } from '../artifacts/service.js';
-import { CallbackService, type CompletionCallbackSender } from '../callbacks/service.js';
+import { CallbackDispatcher, CallbackService, type CompletionCallbackSender } from '../callbacks/service.js';
 import type { EventService } from '../events/service.js';
 import type { Runner } from '../runner/types.js';
 import { SandboxLifecycleService } from '../sandbox/service.js';
 import type { SandboxProvider } from '../sandbox/types.js';
-import type { AppStore, ClaimedMessageBatch } from '../store/types.js';
+import type { AppStore, ClaimedMessageBatch, MessageRecord, RunRecord } from '../store/types.js';
+
+export type RunProgressNotifier = {
+  onRunStarted?(input: { message: MessageRecord; run: RunRecord }): Promise<void>;
+};
 
 export type WorkerServiceOptions = {
   store: AppStore;
@@ -19,6 +23,7 @@ export type WorkerServiceOptions = {
   cancellationPollIntervalMs?: number;
   staleRecoveryLimit?: number;
   callbackSenders?: CompletionCallbackSender[];
+  progressNotifiers?: RunProgressNotifier[];
 };
 
 export class WorkerService {
@@ -46,7 +51,7 @@ export class WorkerService {
       now,
     });
 
-    if (!claimed) return false;
+    if (!claimed) return (await this.dispatchDueCallbacks()) > 0;
 
     await this.options.events.append({
       sessionId: claimed.messages[0]!.sessionId,
@@ -55,6 +60,7 @@ export class WorkerService {
       type: 'message_started',
       payload: { sequences: claimed.messages.map((message) => message.sequence), batchSize: claimed.messages.length },
     });
+    await this.notifyRunStarted(claimed.messages[0]!, claimed.run);
 
     try {
       await this.runWithHeartbeat(claimed);
@@ -191,7 +197,7 @@ export class WorkerService {
         messageId: primary.id,
         result,
       });
-      await new CallbackService(this.options.store, this.options.events, this.options.callbackSenders).deliverCompletion({ claimed: { message: primary, run: claimed.run }, result });
+      await new CallbackService(this.options.store).enqueueCompletion({ claimed: { message: primary, run: claimed.run }, result });
     } finally {
       await this.options.store.updateSandbox({ ...record, updatedAt: new Date() });
     }
@@ -217,6 +223,20 @@ export class WorkerService {
       await this.options.events.append({ sessionId: message.sessionId, runId: cancelled.run.id, messageId: message.id, type: 'message_cancelled', payload: { sequence: message.sequence } });
     }
     return true;
+  }
+
+  async dispatchDueCallbacks(): Promise<number> {
+    return new CallbackDispatcher(this.options.store, this.options.events, this.options.callbackSenders).dispatchDue();
+  }
+
+  private async notifyRunStarted(message: MessageRecord, run: RunRecord): Promise<void> {
+    for (const notifier of this.options.progressNotifiers ?? []) {
+      try {
+        await notifier.onRunStarted?.({ message, run });
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : error);
+      }
+    }
   }
 }
 

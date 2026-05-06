@@ -4,6 +4,7 @@ import { HttpCompletionCallbackSender, type CompletionCallbackSender } from './c
 import { loadConfig, requireDatabaseUrl, requireDaytonaApiKey, requireFlueModel } from './config/index.js';
 import { SlackClient } from './integrations/slack/client.js';
 import { SlackCompletionCallbackSender } from './integrations/slack/callback-sender.js';
+import { SlackRunProgressNotifier } from './integrations/slack/progress-notifier.js';
 import { FakeRunner } from './runner/fake.js';
 import type { Runner } from './runner/types.js';
 import { RealFlueAgentFactory } from './runner-flue/agent-factory.js';
@@ -45,6 +46,7 @@ if (config.runMode === 'all' || config.runMode === 'worker') {
     leaseOwner: `worker-${process.pid}`,
     cancellationPollIntervalMs: config.runCancellationPollIntervalMs,
     callbackSenders: createCallbackSenders(),
+    progressNotifiers: createProgressNotifiers(),
   });
   workerLoop = startWorkerLoop(worker);
   if (services.sandboxCleanup) {
@@ -65,6 +67,11 @@ function createCallbackSenders(): CompletionCallbackSender[] {
     senders.push(new SlackCompletionCallbackSender(new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken })));
   }
   return senders;
+}
+
+function createProgressNotifiers() {
+  if (!config.slackBotToken) return [];
+  return [new SlackRunProgressNotifier(new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }))];
 }
 
 const lifecycleOptions = {

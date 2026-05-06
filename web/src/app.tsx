@@ -397,6 +397,7 @@ export function App() {
     if (selectedSessionId === session.id) {
       localStorage.removeItem(selectedSessionStorageKey);
       setSelectedSessionId('');
+      setIsCreatingThread(true);
       setMessages([]);
       setEvents([]);
       setArtifacts([]);
@@ -492,7 +493,7 @@ export function App() {
         )}
 
         <section className="min-h-0 min-w-0 overflow-hidden">
-          {isCreatingThread ? (
+          {isCreatingThread || !selectedSession ? (
             <NewThreadPanel
               canCallApi={canCallApi}
               loading={loading}
@@ -500,7 +501,7 @@ export function App() {
               onPromptChange={setNewThreadPrompt}
               onSubmit={handleCreateThread}
             />
-          ) : selectedSession ? (
+          ) : (
             <section className="flex h-full min-h-0 flex-col">
               <ThreadHeader
                 editingTitle={editingTitle}
@@ -550,14 +551,6 @@ export function App() {
                 </section>
                 <Artifacts artifacts={artifacts} />
               </div>
-            </section>
-          ) : (
-            <section className="grid min-h-screen place-items-center px-4">
-              <Card className="max-w-lg p-6 text-center">
-                <h2 className="text-lg font-semibold">Select a session or start a new one</h2>
-                <p className="mt-2 text-sm text-slate-400">The work trail will stream once a session is active.</p>
-                <Button className="mt-4" onClick={startNewThread} disabled={!canCallApi}><Plus className="h-4 w-4" /> New session</Button>
-              </Card>
             </section>
           )}
         </section>

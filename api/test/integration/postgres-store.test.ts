@@ -266,6 +266,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       payload: { text: 'done' },
       createdAt: now,
       updatedAt: now,
+      nextAttemptAt: now,
     });
     expect(delivery.status).toBe('pending');
 

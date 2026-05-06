@@ -5,7 +5,7 @@ export type MessageStatus = 'pending' | 'processing' | 'cancelling' | 'completed
 export type RunStatus = 'starting' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'stale';
 export type IntegrationDeliveryStatus = 'received' | 'processed' | 'failed';
 export type SandboxStatus = 'ready' | 'stopped' | 'unhealthy' | 'destroyed' | 'failed';
-export type CallbackDeliveryStatus = 'pending' | 'sent' | 'failed';
+export type CallbackDeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed';
 
 export type SessionRecord = {
   id: string;
@@ -127,11 +127,14 @@ export type CallbackDeliveryRecord = {
   eventType: string;
   payload: Record<string, unknown>;
   attempts: number;
+  maxAttempts: number;
   createdAt: Date;
   updatedAt: Date;
   runId?: string;
   messageId?: string;
   lastError?: string;
+  nextAttemptAt?: Date;
+  lastAttemptAt?: Date;
   deliveredAt?: Date;
 };
 
@@ -199,6 +202,8 @@ export type CreateCallbackDeliveryRecord = {
   payload: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
+  nextAttemptAt: Date;
+  maxAttempts?: number;
   runId?: string;
   messageId?: string;
 };
@@ -251,8 +256,9 @@ export interface AppStore {
   createArtifact(record: CreateArtifactRecord): Promise<ArtifactRecord>;
   getArtifacts(sessionId: string): Promise<ArtifactRecord[]>;
   createCallbackDelivery(record: CreateCallbackDeliveryRecord): Promise<CallbackDeliveryRecord>;
+  claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]>;
   markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord>;
-  markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string }): Promise<CallbackDeliveryRecord>;
+  markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string; terminal: boolean; nextAttemptAt?: Date }): Promise<CallbackDeliveryRecord>;
 
   nextEventSequence(sessionId: string): Promise<number>;
   appendEvent(event: NormalizedEvent & { sequence: number }): Promise<NormalizedEvent & { sequence: number }>;

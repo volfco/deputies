@@ -37,7 +37,7 @@ Still open from the early phases:
 
 - Contract schemas for public API responses and events.
 
-The next implementation phase should focus on deployability and operational polish: release/migration commands, Railway/ECS/Kubernetes guidance, callback retry dispatch, richer UI observability for sandbox cleanup, and contract schemas for public API/events.
+The next implementation phase should focus on deployability and operational polish: release/migration commands, Railway/ECS/Kubernetes guidance, richer UI observability for sandbox cleanup, callback observability/replay controls, and contract schemas for public API/events.
 
 ## Phase 0: Repository And Agent Context
 

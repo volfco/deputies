@@ -8,7 +8,7 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Slack authorization policy for allowed teams, channels, and users.
 - Slack prompt cleanup so the deputy focuses on the request before metadata.
 - Slack thread context fetching.
-- Slack start/queued status acknowledgement.
+- Slack start/queued status acknowledgement beyond reaction-only progress.
 - GitHub integration for issue comments, PR comments, and review comments.
 - GitHub App signature verification, installation token flow, and delivery dedupe.
 - GitHub callback comments with completion summaries and PR/artifact links.
@@ -18,6 +18,8 @@ This is a living backlog for product, integration, runtime, and operations work.
 ## Web UI
 
 - Session tagging, filtering, and grouping.
+- User-selectable model, repository, branch, and execution settings.
+- Repository picker with saved defaults per user/team/source.
 - Session list pagination and server-side search.
 - Pin/favorite sessions.
 - Better run and sandbox status in the context panel.
@@ -28,7 +30,10 @@ This is a living backlog for product, integration, runtime, and operations work.
 
 ## Agent Runtime
 
-- Callback retry dispatcher with backoff.
+- Agent authentication to external services through MCP, CLI credentials, API tokens, and short-lived provider tokens.
+- Credential scoping and injection policy for tools, commands, MCP servers, and sandbox environments.
+- Multi-repository task support, including repo selection, cloning/syncing multiple worktrees, and cross-repo context.
+- Callback retry tuning, observability, and manual replay controls.
 - Prompt templates and snapshot tests for Slack/GitHub/Linear inputs.
 - Better repo resolution from Slack/GitHub/Linear context.
 - Setup/install hook observability.
@@ -46,6 +51,8 @@ This is a living backlog for product, integration, runtime, and operations work.
 
 ## Scale And Operations
 
+- Multiple product users and organizations with separate auth, session ownership, quotas, and audit trails.
+- Per-user/per-team integration authorization policies for Slack, GitHub, Linear, and web UI entry points.
 - Metrics endpoint or structured timing logs.
 - Pending-message, active-run, and worker-throughput dashboards.
 - Session/event table pagination and retention policies.

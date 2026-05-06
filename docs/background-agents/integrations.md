@@ -95,7 +95,7 @@ Current callback support:
 
 - Generic webhook payloads may include `callbackUrl`.
 - On message completion, the worker posts a JSON payload to that URL.
-- Callback attempts are persisted in `callback_deliveries` and reflected as `callback_sent` or `callback_failed` events.
+- Callback attempts are persisted in `callback_deliveries`. The dispatcher claims due callbacks, delivers them through target-specific sender plugins, records `callback_sent` on success, schedules retry on transient failure, and records `callback_failed` after terminal failure.
 
 Example config:
 
@@ -224,6 +224,8 @@ Current implementation:
 - Duplicate `event_id` values are ignored through `integration_deliveries`.
 - Bot messages are ignored to prevent loops.
 - Accepted Slack messages get a best-effort `:eyes:` reaction when `SLACK_BOT_TOKEN` has `reactions:write`.
+- Running Slack-originated work gets a best-effort `:hourglass_flowing_sand:` reaction through the Slack progress notifier plugin.
+- Completed Slack replies get a best-effort `:white_check_mark:` reaction through the Slack callback sender.
 - `api/src/integrations/slack` owns Slack auth, types, prompts, client helpers, and service orchestration. It must not import runners, sandboxes, or Flue.
 
 Local HTTPS emulation:
@@ -283,7 +285,7 @@ event appended
   -> callback dispatcher evaluates subscriptions/callback targets
   -> formats source-specific update
   -> posts to external service
-  -> records callback_sent or callback_failed
+  -> records callback_sent, callback_retry_scheduled, or callback_failed
 ```
 
 Default callback policy:
@@ -293,6 +295,13 @@ Default callback policy:
 - `run_completed`: notify.
 - `run_failed`: notify.
 - Tool events and text deltas: do not notify externally by default.
+
+Current implementation:
+
+- Completion callbacks are enqueued during worker finalization instead of requiring immediate delivery to complete the run.
+- The worker dispatches due callbacks when no session message is available to claim.
+- Callback sender plugins keep concrete integration clients out of callback core. Slack provides `SlackCompletionCallbackSender` from `api/src/integrations/slack`.
+- Retry uses exponential backoff with jitter and terminal failure after `max_attempts`.
 
 ## Auth Model
 

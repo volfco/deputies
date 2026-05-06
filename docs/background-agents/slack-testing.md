@@ -50,6 +50,8 @@ Expected result:
 - A product session is created with title `Slack: ...`.
 - A message is queued with source `slack`.
 - The bot adds an `:eyes:` reaction to the received Slack message when `SLACK_BOT_TOKEN` has `reactions:write`.
+- When work starts, the bot adds `:hourglass_flowing_sand:` to the same Slack message.
+- When the final Slack reply is delivered, the bot adds `:white_check_mark:` to the same Slack message.
 - Follow-up replies in the same Slack thread reuse the same product session.
 - Duplicate Slack `event_id` deliveries do not create duplicate messages.
 
@@ -77,6 +79,6 @@ Automated tests should usually start emulate programmatically with `createEmulat
 - Inbound `app_mention` and thread follow-up `message` events are implemented.
 - URL verification and signature verification are implemented.
 - Bot/self-message ignore and event dedupe are implemented.
-- Outbound Slack replies are not wired to completion callbacks yet.
+- Outbound Slack replies are delivered through the generic callback dispatcher and retried with backoff.
 - Thread history fetching is not implemented yet.
 - Direct messages are intentionally deferred.

@@ -64,7 +64,7 @@ export class SlackIntegrationService {
           eventId: accepted.eventId,
           type: accepted.type,
         },
-        callback: { type: 'slack', channel: accepted.channel, threadTs: accepted.threadTs },
+        callback: { type: 'slack', channel: accepted.channel, threadTs: accepted.threadTs, messageTs: accepted.ts },
       },
     });
 

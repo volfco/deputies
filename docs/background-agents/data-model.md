@@ -258,6 +258,7 @@ message_completed
 message_failed
 message_cancelled
 callback_sent
+callback_retry_scheduled
 callback_failed
 ```
 
@@ -370,7 +371,7 @@ Current implementation:
 - `008_artifacts_callbacks.sql` creates `artifacts` and `callback_deliveries`.
 - Runner-returned artifacts are persisted after successful runs and emitted as `artifact_created` events.
 - Session artifacts are readable through `GET /sessions/:sessionId/artifacts`.
-- Generic webhook HTTP callbacks are recorded in `callback_deliveries` with `pending`, `sent`, or `failed` status.
+- Generic webhook HTTP callbacks and Slack completion replies are recorded in `callback_deliveries` with `pending`, `sending`, `sent`, or `failed` status.
 
 ## Flue Sessions
 
@@ -471,9 +472,12 @@ status text not null
 event_type text not null
 payload jsonb not null default '{}'
 attempts int not null default 0
+max_attempts int not null default 5
 last_error text
 created_at timestamptz not null
 updated_at timestamptz not null
+next_attempt_at timestamptz
+last_attempt_at timestamptz
 delivered_at timestamptz
 ```
 
@@ -481,6 +485,7 @@ Statuses:
 
 ```txt
 pending
+sending
 sent
 failed
 ```

@@ -25,7 +25,7 @@ describe.skipIf(process.env.RUN_SLACK_EMULATE_TEST !== 'true')('Slack emulate', 
       const sender = new SlackCompletionCallbackSender(new SlackClient({ apiBaseUrl: `${slack.url}/api`, botToken: token }));
 
       await sender.deliver(
-        { type: 'slack', target: { channel, threadTs: thread.ts } },
+        { type: 'slack', target: { channel, threadTs: thread.ts, messageTs: thread.ts } },
         {
           event: 'message_completed',
           sessionId: '00000000-0000-4000-8000-000000000001',

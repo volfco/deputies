@@ -114,9 +114,12 @@ type CallbackDeliveryRow = QueryResultRow & {
   event_type: string;
   payload: Record<string, unknown>;
   attempts: number;
+  max_attempts: number;
   last_error: string | null;
   created_at: Date;
   updated_at: Date;
+  next_attempt_at: Date | null;
+  last_attempt_at: Date | null;
   delivered_at: Date | null;
 };
 
@@ -640,9 +643,9 @@ export class PostgresStore implements AppStore {
 
   async createCallbackDelivery(record: CreateCallbackDeliveryRecord): Promise<CallbackDeliveryRecord> {
     const result = await this.pool.query<CallbackDeliveryRow>(
-      `INSERT INTO callback_deliveries (id, session_id, run_id, message_id, target_type, target, status, event_type, payload, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10)
-       RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, last_error, created_at, updated_at, delivered_at`,
+      `INSERT INTO callback_deliveries (id, session_id, run_id, message_id, target_type, target, status, event_type, payload, created_at, updated_at, next_attempt_at, max_attempts)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11, $12)
+       RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
       [
         record.id,
         record.sessionId,
@@ -654,9 +657,37 @@ export class PostgresStore implements AppStore {
         record.payload,
         record.createdAt,
         record.updatedAt,
+        record.nextAttemptAt,
+        record.maxAttempts ?? 5,
       ],
     );
     return toCallbackDelivery(result.rows[0]!);
+  }
+
+  async claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]> {
+    return this.transaction(async (client) => {
+      const due = await client.query<CallbackDeliveryRow>(
+        `SELECT id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at
+         FROM callback_deliveries
+         WHERE status = 'pending'
+           AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+           AND attempts < max_attempts
+         ORDER BY next_attempt_at ASC NULLS FIRST, created_at ASC
+         FOR UPDATE SKIP LOCKED
+         LIMIT $2`,
+        [input.now, input.limit],
+      );
+      if (!due.rows.length) return [];
+
+      const claimed = await client.query<CallbackDeliveryRow>(
+        `UPDATE callback_deliveries
+         SET status = 'sending', attempts = attempts + 1, last_attempt_at = $2, updated_at = $2
+         WHERE id = ANY($1::uuid[])
+         RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
+        [due.rows.map((row) => row.id), input.now],
+      );
+      return claimed.rows.map(toCallbackDelivery);
+    });
   }
 
   async markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord> {
@@ -664,20 +695,20 @@ export class PostgresStore implements AppStore {
       `UPDATE callback_deliveries
        SET status = 'sent', attempts = attempts + 1, delivered_at = $2, updated_at = $2
        WHERE id = $1
-       RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, last_error, created_at, updated_at, delivered_at`,
+        RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
       [input.id, input.deliveredAt],
     );
     if (!result.rows[0]) throw new Error(`Callback delivery does not exist: ${input.id}`);
     return toCallbackDelivery(result.rows[0]);
   }
 
-  async markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string }): Promise<CallbackDeliveryRecord> {
+  async markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string; terminal: boolean; nextAttemptAt?: Date }): Promise<CallbackDeliveryRecord> {
     const result = await this.pool.query<CallbackDeliveryRow>(
       `UPDATE callback_deliveries
-       SET status = 'failed', attempts = attempts + 1, last_error = $2, updated_at = $3
+       SET status = $2, last_error = $3, updated_at = $4, next_attempt_at = $5
        WHERE id = $1
-       RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, last_error, created_at, updated_at, delivered_at`,
-      [input.id, input.error, input.failedAt],
+       RETURNING id, session_id, run_id, message_id, target_type, target, status, event_type, payload, attempts, max_attempts, last_error, created_at, updated_at, next_attempt_at, last_attempt_at, delivered_at`,
+      [input.id, input.terminal ? 'failed' : 'pending', input.error, input.failedAt, input.nextAttemptAt ?? null],
     );
     if (!result.rows[0]) throw new Error(`Callback delivery does not exist: ${input.id}`);
     return toCallbackDelivery(result.rows[0]);
@@ -1005,12 +1036,15 @@ function toCallbackDelivery(row: CallbackDeliveryRow): CallbackDeliveryRecord {
     eventType: row.event_type,
     payload: row.payload,
     attempts: row.attempts,
+    maxAttempts: row.max_attempts,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
   if (row.run_id) record.runId = row.run_id;
   if (row.message_id) record.messageId = row.message_id;
   if (row.last_error) record.lastError = row.last_error;
+  if (row.next_attempt_at) record.nextAttemptAt = row.next_attempt_at;
+  if (row.last_attempt_at) record.lastAttemptAt = row.last_attempt_at;
   if (row.delivered_at) record.deliveredAt = row.delivered_at;
   return record;
 }

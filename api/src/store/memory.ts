@@ -318,9 +318,30 @@ export class MemoryStore implements AppStore {
   }
 
   async createCallbackDelivery(record: CreateCallbackDeliveryRecord): Promise<CallbackDeliveryRecord> {
-    const delivery: CallbackDeliveryRecord = { ...record, status: 'pending', attempts: 0 };
+    const delivery: CallbackDeliveryRecord = { ...record, status: 'pending', attempts: 0, maxAttempts: record.maxAttempts ?? 5 };
     this.callbacks.set(delivery.id, delivery);
     return delivery;
+  }
+
+  async claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]> {
+    const due = Array.from(this.callbacks.values())
+      .filter((delivery) => delivery.status === 'pending')
+      .filter((delivery) => !delivery.nextAttemptAt || delivery.nextAttemptAt <= input.now)
+      .filter((delivery) => delivery.attempts < delivery.maxAttempts)
+      .sort((a, b) => (a.nextAttemptAt?.getTime() ?? a.createdAt.getTime()) - (b.nextAttemptAt?.getTime() ?? b.createdAt.getTime()))
+      .slice(0, input.limit);
+    const claimed = due.map((delivery) => {
+      const updated: CallbackDeliveryRecord = {
+        ...delivery,
+        status: 'sending',
+        attempts: delivery.attempts + 1,
+        lastAttemptAt: input.now,
+        updatedAt: input.now,
+      };
+      this.callbacks.set(delivery.id, updated);
+      return updated;
+    });
+    return claimed;
   }
 
   async markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord> {
@@ -336,15 +357,16 @@ export class MemoryStore implements AppStore {
     return updated;
   }
 
-  async markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string }): Promise<CallbackDeliveryRecord> {
+  async markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string; terminal: boolean; nextAttemptAt?: Date }): Promise<CallbackDeliveryRecord> {
     const existing = this.requireCallback(input.id);
+    const { nextAttemptAt: _nextAttemptAt, ...withoutNextAttempt } = existing;
     const updated: CallbackDeliveryRecord = {
-      ...existing,
-      status: 'failed',
-      attempts: existing.attempts + 1,
+      ...withoutNextAttempt,
+      status: input.terminal ? 'failed' : 'pending',
       lastError: input.error,
       updatedAt: input.failedAt,
     };
+    if (input.nextAttemptAt) updated.nextAttemptAt = input.nextAttemptAt;
     this.callbacks.set(input.id, updated);
     return updated;
   }

@@ -24,14 +24,20 @@ export type CompletionCallbackSender = {
   deliver(callback: CompletionCallback, payload: CompletionCallbackPayload): Promise<void>;
 };
 
+export type CallbackDispatcherOptions = {
+  now?: () => Date;
+  batchSize?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  jitterRatio?: number;
+};
+
 export class CallbackService {
   constructor(
     private readonly store: AppStore,
-    private readonly events: EventService,
-    private readonly senders: CompletionCallbackSender[] = [new HttpCompletionCallbackSender()],
   ) {}
 
-  async deliverCompletion(input: { claimed: ClaimedMessage; result: RunnerResult }): Promise<CallbackDeliveryRecord | null> {
+  async enqueueCompletion(input: { claimed: ClaimedMessage; result: RunnerResult }): Promise<CallbackDeliveryRecord | null> {
     const callback = getCompletionCallback(input.claimed.message.context);
     if (!callback) return null;
 
@@ -55,37 +61,82 @@ export class CallbackService {
       payload,
       createdAt: now,
       updatedAt: now,
+      nextAttemptAt: now,
     });
+    return delivery;
+  }
+}
 
+export class CallbackDispatcher {
+  private readonly now: () => Date;
+  private readonly batchSize: number;
+  private readonly baseDelayMs: number;
+  private readonly maxDelayMs: number;
+  private readonly jitterRatio: number;
+
+  constructor(
+    private readonly store: AppStore,
+    private readonly events: EventService,
+    private readonly senders: CompletionCallbackSender[] = [new HttpCompletionCallbackSender()],
+    options: CallbackDispatcherOptions = {},
+  ) {
+    this.now = options.now ?? (() => new Date());
+    this.batchSize = options.batchSize ?? 10;
+    this.baseDelayMs = options.baseDelayMs ?? 30_000;
+    this.maxDelayMs = options.maxDelayMs ?? 30 * 60_000;
+    this.jitterRatio = options.jitterRatio ?? 0.2;
+  }
+
+  async dispatchDue(): Promise<number> {
+    const deliveries = await this.store.claimDueCallbackDeliveries({ now: this.now(), limit: this.batchSize });
+    for (const delivery of deliveries) await this.dispatch(delivery);
+    return deliveries.length;
+  }
+
+  private async dispatch(delivery: CallbackDeliveryRecord): Promise<void> {
+    const callback = { type: delivery.targetType, target: delivery.target } satisfies CompletionCallback;
+    const sender = this.senders.find((candidate) => candidate.type === callback.type);
     try {
-      await this.deliver(callback, payload);
-      const sent = await this.store.markCallbackDeliverySent({ id: delivery.id, deliveredAt: new Date() });
+      if (!sender) throw new Error(`No callback sender configured for target type: ${callback.type}`);
+      await sender.deliver(callback, delivery.payload as CompletionCallbackPayload);
+      const sent = await this.store.markCallbackDeliverySent({ id: delivery.id, deliveredAt: this.now() });
       await this.events.append({
-        sessionId: input.claimed.message.sessionId,
-        runId: input.claimed.run.id,
-        messageId: input.claimed.message.id,
+        sessionId: sent.sessionId,
+        ...(sent.runId ? { runId: sent.runId } : {}),
+        ...(sent.messageId ? { messageId: sent.messageId } : {}),
         type: 'callback_sent',
-        payload: { deliveryId: sent.id, targetType: sent.targetType },
+        payload: { deliveryId: sent.id, targetType: sent.targetType, attempts: sent.attempts },
       });
-      return sent;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown callback error';
-      const failed = await this.store.markCallbackDeliveryFailed({ id: delivery.id, failedAt: new Date(), error: message });
-      await this.events.append({
-        sessionId: input.claimed.message.sessionId,
-        runId: input.claimed.run.id,
-        messageId: input.claimed.message.id,
-        type: 'callback_failed',
-        payload: { deliveryId: failed.id, error: message, targetType: failed.targetType },
+      const terminal = delivery.attempts >= delivery.maxAttempts;
+      const failed = await this.store.markCallbackDeliveryFailed({
+        id: delivery.id,
+        failedAt: this.now(),
+        error: message,
+        terminal,
+        ...(terminal ? {} : { nextAttemptAt: this.nextAttemptAt(delivery.attempts) }),
       });
-      return failed;
+      await this.events.append({
+        sessionId: failed.sessionId,
+        ...(failed.runId ? { runId: failed.runId } : {}),
+        ...(failed.messageId ? { messageId: failed.messageId } : {}),
+        type: terminal ? 'callback_failed' : 'callback_retry_scheduled',
+        payload: {
+          deliveryId: failed.id,
+          error: message,
+          targetType: failed.targetType,
+          attempts: failed.attempts,
+          ...(failed.nextAttemptAt ? { nextAttemptAt: failed.nextAttemptAt.toISOString() } : {}),
+        },
+      });
     }
   }
 
-  private async deliver(callback: CompletionCallback, payload: CompletionCallbackPayload): Promise<void> {
-    const sender = this.senders.find((candidate) => candidate.type === callback.type);
-    if (!sender) throw new Error(`No callback sender configured for target type: ${callback.type}`);
-    await sender.deliver(callback, payload);
+  private nextAttemptAt(attempts: number): Date {
+    const exponential = Math.min(this.maxDelayMs, this.baseDelayMs * 2 ** Math.max(0, attempts - 1));
+    const jitter = this.jitterRatio > 0 ? exponential * this.jitterRatio * Math.random() : 0;
+    return new Date(this.now().getTime() + exponential + jitter);
   }
 }
 
@@ -113,7 +164,10 @@ function getCompletionCallback(context: Record<string, unknown> | undefined): Co
   const channel = 'channel' in callback ? callback.channel : undefined;
   const threadTs = 'threadTs' in callback ? callback.threadTs : undefined;
   if (type === 'slack' && typeof channel === 'string' && channel && typeof threadTs === 'string' && threadTs) {
-    return { type: 'slack', target: { channel, threadTs } };
+    const target: Record<string, unknown> = { channel, threadTs };
+    const messageTs = 'messageTs' in callback ? callback.messageTs : undefined;
+    if (typeof messageTs === 'string' && messageTs) target.messageTs = messageTs;
+    return { type: 'slack', target };
   }
   return null;
 }

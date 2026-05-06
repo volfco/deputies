@@ -37,4 +37,5 @@ export type NormalizedEventType =
   | 'message_completed'
   | 'message_failed'
   | 'callback_sent'
+  | 'callback_retry_scheduled'
   | 'callback_failed';
