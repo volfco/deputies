@@ -888,7 +888,8 @@ function fuzzyScore(value: string, query: string): number | null {
 
 function statusTextClass(status: string): string {
   if (['completed', 'ready', 'ok'].includes(status)) return 'text-emerald-300';
-  if (['pending', 'processing', 'active', 'created', 'queued', 'stopped', 'starting'].includes(status)) return 'text-amber-300';
+  if (['active', 'processing', 'running', 'starting'].includes(status)) return 'text-cyan-300';
+  if (['pending', 'queued', 'created', 'stopped'].includes(status)) return 'text-amber-300';
   if (['failed', 'cancelled', 'unhealthy', 'destroyed', 'missing'].includes(status)) return 'text-red-300';
   if (status === 'idle' || status === 'archived') return 'text-slate-400';
   return 'text-slate-300';
