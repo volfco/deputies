@@ -79,6 +79,7 @@ export function App() {
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const eventCursor = useRef(0);
+  const threadScrollRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
 
   const bearerAuthRequired = health?.apiAuthMode === 'bearer';
@@ -129,6 +130,10 @@ export function App() {
   }, [selectedSessionId, canCallApi, token]);
 
   useEffect(() => {
+    const container = threadScrollRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom > 160) return;
     threadEndRef.current?.scrollIntoView({ block: 'end' });
   }, [selectedSessionId, messages.length, events.length]);
 
@@ -562,7 +567,7 @@ export function App() {
               />
               <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
                 <section className="flex min-h-0 min-w-0 flex-col px-3 pt-4 md:px-8 xl:px-20">
-                  <div className="min-h-0 flex-1 overflow-auto pb-4">
+                  <div className="min-h-0 flex-1 overflow-auto pb-4" ref={threadScrollRef}>
                     <ChatPanel
                       editingMessageId={editingMessageId}
                       events={events}

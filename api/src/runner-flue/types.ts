@@ -20,6 +20,7 @@ export interface FlueSessionPort {
 
 export interface FlueAgentPort {
   session(id?: string): Promise<FlueSessionPort>;
+  shell?(command: string, options?: ShellOptions): Promise<ShellResult>;
 }
 
 export interface FlueAgentFactory {

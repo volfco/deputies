@@ -2,6 +2,7 @@ import type { FlueEvent } from '@flue/sdk';
 import type { NormalizedEvent } from '../events/types.js';
 import { prepareRepositoryShellSetup, type RepositoryAccessProvider, type RepositoryShellSetup } from '../repositories/setup.js';
 import type { Runner, RunnerInput, RunnerResult } from '../runner/types.js';
+import { createGitTool, type AgentRef } from './git-tool.js';
 import { createGitHubCliTool } from './github-cli-tool.js';
 import type { FlueAgentFactory, FlueSessionPort } from './types.js';
 
@@ -26,12 +27,16 @@ export class FlueRunner implements Runner {
     };
     if (this.options.repositoryAccess?.github) repositorySetupInput.github = this.options.repositoryAccess.github;
     const repositorySetup = await prepareRepositoryShellSetup(repositorySetupInput);
+    const agentRef: AgentRef = {};
     const agent = await this.agentFactory.create({
       agentId: input.sessionId,
       sessionId: input.sessionId,
       sandbox: input.sandbox,
       cwd: repositorySetup?.workspacePath ?? input.sandbox.workspacePath,
-      tools: repositorySetup ? [createGitHubCliTool(repositorySetup.access)] : [],
+      tools: repositorySetup ? [
+        createGitHubCliTool(repositorySetup.access),
+        createGitTool({ access: repositorySetup.access, workspacePath: repositorySetup.workspacePath, agentRef }),
+      ] : [],
       onEvent: (event) => {
         if (input.signal?.aborted) return;
         const normalized = normalizeFlueEvent(event, input);
@@ -40,6 +45,7 @@ export class FlueRunner implements Runner {
         pendingEvents.push(input.emit(normalized));
       },
     });
+    agentRef.current = agent;
     const session = await agent.session(input.sessionId);
     const abortSession = () => session.abort?.();
     input.signal?.addEventListener('abort', abortSession, { once: true });

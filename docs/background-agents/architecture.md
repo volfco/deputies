@@ -140,7 +140,9 @@ Choosing an extension point:
 Current examples:
 
 - Repository clone/fetch uses `session.shell(..., { env: { GITHUB_AUTH_HEADER } })` because the side effect must create or update files inside the remote sandbox.
-- GitHub issue/comment-style operations can use the `gh` custom tool because the side effect is a GitHub API action and the installation token can stay in trusted worker code.
+- GitHub issue/comment-style operations use the `gh` custom tool because the side effect is a GitHub API action and the installation token can stay in trusted worker code.
+- Authenticated git network operations such as push use the `git` custom tool. Its handler runs in trusted worker code, but it calls Flue agent-level `shell(...)` so the actual git process and object transfer happen inside the remote sandbox repository with command-scoped credentials while the prompt is active.
+- Local file edits and local commits should use sandbox tools such as `write`, `edit`, and `bash`; publishing those commits should use the authenticated `git` tool rather than trying to use `gh` API refs for sandbox-local objects.
 
 If we later expose raw Flue agent endpoints, they should be clearly separated from product session endpoints:
 

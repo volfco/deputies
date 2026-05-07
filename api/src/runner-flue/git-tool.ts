@@ -1,0 +1,95 @@
+import type { ToolDef } from '@flue/sdk';
+import type { GitHubRepositoryAccess } from '../integrations/github/types.js';
+import type { FlueAgentPort } from './types.js';
+
+const MAX_ARGS = 64;
+const MAX_ARG_LENGTH = 4_096;
+
+export type AgentRef = {
+  current?: FlueAgentPort;
+};
+
+export function createGitTool(input: {
+  access: GitHubRepositoryAccess;
+  workspacePath: string;
+  agentRef: AgentRef;
+}): ToolDef {
+  return {
+    name: 'git',
+    description:
+      `Run authenticated git commands inside the checked-out sandbox repository for ${input.access.owner}/${input.access.repo}. ` +
+      'Use this for network git operations such as push, fetch, pull, and ls-remote. ' +
+      'This tool runs in the remote sandbox worktree with command-scoped GitHub App authentication. ' +
+      'Pass only git arguments, not the "git" executable name. For local read-only git commands or commits, bash is also acceptable; for GitHub issues, comments, and PRs, use the gh tool.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['args'],
+      properties: {
+        args: {
+          type: 'array',
+          minItems: 1,
+          maxItems: MAX_ARGS,
+          items: { type: 'string', maxLength: MAX_ARG_LENGTH },
+          description: 'Arguments to pass to git, for example ["push", "origin", "sp/my-branch"]',
+        },
+      },
+    },
+    async execute(params) {
+      const args = validateArgs(params.args);
+      const agent = input.agentRef.current;
+      if (!agent?.shell) throw new Error('Authenticated git is unavailable before the sandbox agent is ready');
+      const result = await agent.shell(gitCommand(args), {
+        cwd: input.workspacePath,
+        env: { GITHUB_AUTH_HEADER: gitAuthHeader(input.access.auth.token) },
+        timeout: 120,
+      });
+      const output = formatShellResult(result, input.access.auth.token);
+      if (result.exitCode !== 0) throw new Error(output);
+      return output;
+    },
+  };
+}
+
+function validateArgs(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('git args must be a non-empty string array');
+  if (value.length > MAX_ARGS) throw new Error(`git args cannot exceed ${MAX_ARGS} entries`);
+
+  const args = value.map((arg) => {
+    if (typeof arg !== 'string') throw new Error('git args must contain only strings');
+    if (!arg) throw new Error('git args cannot contain empty strings');
+    if (arg.includes('\0')) throw new Error('git args cannot contain NUL bytes');
+    if (arg.length > MAX_ARG_LENGTH) throw new Error(`git args cannot exceed ${MAX_ARG_LENGTH} characters per entry`);
+    return arg;
+  });
+
+  if (args[0] === 'git') throw new Error('Pass git arguments only; omit the git executable name');
+  if (args[0]!.startsWith('-')) throw new Error('git command must be an explicit subcommand, not a top-level flag');
+  return args;
+}
+
+function gitCommand(args: string[]): string {
+  return `git -c http.extraHeader="$GITHUB_AUTH_HEADER" ${args.map(quoteShell).join(' ')}`;
+}
+
+function gitAuthHeader(token: string): string {
+  const credentials = Buffer.from(`x-access-token:${token}`).toString('base64');
+  return `Authorization: Basic ${credentials}`;
+}
+
+function formatShellResult(result: { exitCode: number; stdout: string; stderr: string }, token: string): string {
+  const parts = [`exitCode: ${result.exitCode}`];
+  if (result.stdout.trim()) parts.push(`stdout:\n${redactSecrets(result.stdout.trim(), token)}`);
+  if (result.stderr.trim()) parts.push(`stderr:\n${redactSecrets(result.stderr.trim(), token)}`);
+  return parts.join('\n');
+}
+
+function redactSecrets(value: string, token: string): string {
+  return value
+    .replaceAll(token, '[redacted]')
+    .replace(/gh[ousr]_[A-Za-z0-9_]+/g, '[redacted]');
+}
+
+function quoteShell(value: string): string {
+  return `'${value.replace(/'/g, `'\''`)}'`;
+}
