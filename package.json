@@ -10,6 +10,7 @@
   "scripts": {
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
+    "auth:login:openai-codex": "pnpm --dir api auth:login:openai-codex",
     "api:db:migrate": "pnpm --dir api db:migrate",
     "api:dev": "pnpm --dir api dev",
     "api:emulate:slack": "pnpm --dir api emulate:slack",
