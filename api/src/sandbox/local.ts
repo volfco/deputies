@@ -25,6 +25,7 @@ export const defaultLocalAllowedCommands = [
   'corepack',
   'cp',
   'date',
+  'dirname',
   'env',
   'find',
   'gh',

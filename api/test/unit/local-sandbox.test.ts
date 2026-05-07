@@ -98,6 +98,16 @@ describe('LocalSandboxProvider', () => {
     expect(pathOverride.exitCode).not.toBe(0);
   });
 
+  it('includes helper commands needed by package manager shims', async () => {
+    const provider = new LocalSandboxProvider({ rootDir });
+    const sandbox = await provider.create({ sessionId: 'session-1' });
+
+    await expect(sandbox.exec({ command: 'dirname /tmp/example/file.txt' })).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: '/tmp/example\n',
+    });
+  });
+
   it('runs repository setup against a real local git remote', async () => {
     const provider = new LocalSandboxProvider({ rootDir });
     const sandbox = await provider.create({ sessionId: 'session-1' });
