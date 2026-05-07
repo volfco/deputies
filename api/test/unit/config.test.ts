@@ -1,8 +1,12 @@
 import { loadConfig } from '../../src/config/index.js';
 
 describe('loadConfig', () => {
-  it('uses portable defaults for local development and tests', () => {
-    expect(loadConfig({})).toEqual({
+  it('requires API_AUTH_MODE to be explicit', () => {
+    expect(() => loadConfig({})).toThrow('API_AUTH_MODE is required');
+  });
+
+  it('uses portable defaults when auth is explicitly disabled for local development and tests', () => {
+    expect(loadConfig({ API_AUTH_MODE: 'none' })).toEqual({
       port: 3583,
       maxJsonBodyBytes: 1048576,
       runCancellationPollIntervalMs: 1000,
@@ -146,15 +150,15 @@ describe('loadConfig', () => {
   });
 
   it('requires Slack allowlists unless unsafe allow-all is explicit', () => {
-    expect(() => loadConfig({ SLACK_SIGNING_SECRET: 'slack-secret' })).toThrow('Slack allowlists are required');
-    expect(loadConfig({ SLACK_SIGNING_SECRET: 'slack-secret', UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' })).toMatchObject({
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret' })).toThrow('Slack allowlists are required');
+    expect(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' })).toMatchObject({
       slackSigningSecret: 'slack-secret',
       unsafeAllowAllSlackIds: true,
       slackAllowedTeamIds: [],
       slackAllowedChannelIds: [],
       slackAllowedUserIds: [],
     });
-    expect(loadConfig({ SLACK_SIGNING_SECRET: 'slack-secret', SLACK_ALLOWED_TEAM_IDS: 'T123' })).toMatchObject({
+    expect(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', SLACK_ALLOWED_TEAM_IDS: 'T123' })).toMatchObject({
       slackSigningSecret: 'slack-secret',
       unsafeAllowAllSlackIds: false,
       slackAllowedTeamIds: ['T123'],
@@ -162,22 +166,22 @@ describe('loadConfig', () => {
   });
 
   it('requires GitHub webhook allowlists unless unsafe allow-all is explicit', () => {
-    expect(() => loadConfig({ GITHUB_WEBHOOK_SECRET: 'github-secret' })).toThrow('GitHub webhook allowlists are required');
-    expect(() => loadConfig({ GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat' })).toThrow('GITHUB_TRIGGER_PHRASES is required');
-    expect(loadConfig({ GITHUB_WEBHOOK_SECRET: 'github-secret', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'true', GITHUB_TRIGGER_PHRASES: 'deputies:' })).toMatchObject({
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret' })).toThrow('GitHub webhook allowlists are required');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat' })).toThrow('GITHUB_TRIGGER_PHRASES is required');
+    expect(loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'true', GITHUB_TRIGGER_PHRASES: 'deputies:' })).toMatchObject({
       githubWebhookSecret: 'github-secret',
       unsafeAllowAllGithubUsersAndOrgs: true,
       githubAllowedUsers: [],
       githubAllowedOrganizations: [],
       githubTriggerPhrases: ['deputies:'],
     });
-    expect(loadConfig({ GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat', GITHUB_TRIGGER_PHRASES: '/deputies' })).toMatchObject({
+    expect(loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat', GITHUB_TRIGGER_PHRASES: '/deputies' })).toMatchObject({
       githubWebhookSecret: 'github-secret',
       unsafeAllowAllGithubUsersAndOrgs: false,
       githubAllowedUsers: ['octocat'],
       githubTriggerPhrases: ['/deputies'],
     });
-    expect(loadConfig({ GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_ORGANIZATIONS: 'acme', GITHUB_TRIGGER_PHRASES: '@acme/deputies' })).toMatchObject({
+    expect(loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_ORGANIZATIONS: 'acme', GITHUB_TRIGGER_PHRASES: '@acme/deputies' })).toMatchObject({
       githubWebhookSecret: 'github-secret',
       unsafeAllowAllGithubUsersAndOrgs: false,
       githubAllowedOrganizations: ['acme'],
@@ -261,8 +265,8 @@ describe('loadConfig', () => {
   });
 
   it('rejects invalid boolean values', () => {
-    expect(() => loadConfig({ AUTH_COOKIE_SECURE: 'yes' })).toThrow('AUTH_COOKIE_SECURE must be true or false');
-    expect(() => loadConfig({ UNSAFE_ALLOW_ALL_SLACK_IDS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_SLACK_IDS must be true or false');
-    expect(() => loadConfig({ UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS must be true or false');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SECURE: 'yes' })).toThrow('AUTH_COOKIE_SECURE must be true or false');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_SLACK_IDS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_SLACK_IDS must be true or false');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS must be true or false');
   });
 });

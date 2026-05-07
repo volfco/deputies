@@ -22,7 +22,7 @@ describe('core API', () => {
 
   beforeEach(async () => {
     store = new MemoryStore();
-    server = createServer(loadConfig({}), createServices(store));
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store));
     baseUrl = await listen(server);
   });
 
@@ -427,7 +427,7 @@ describe('core API', () => {
   it('destroys active session sandboxes when archiving', async () => {
     await closeServer(server);
     const provider = new FakeSandboxProvider();
-    server = createServer(loadConfig({}), createServices(store, { sandboxProvider: provider }));
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store, { sandboxProvider: provider }));
     baseUrl = await listen(server);
 
     const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Archive sandbox' });
@@ -567,7 +567,7 @@ describe('core API', () => {
 
   it('rejects oversized JSON bodies', async () => {
     await closeServer(server);
-    server = createServer(loadConfig({ MAX_JSON_BODY_BYTES: '16' }));
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none', MAX_JSON_BODY_BYTES: '16' }));
     baseUrl = await listen(server);
 
     const response = await postJson(`${baseUrl}/sessions`, { title: 'this is too large' });

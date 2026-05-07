@@ -76,7 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     ),
     localSandboxAllowedCommands: parseStringList(env.LOCAL_SANDBOX_ALLOWED_COMMANDS),
     appStore: parseEnum(env.APP_STORE, ['memory', 'postgres'], 'memory'),
-    apiAuthMode: parseEnum(env.API_AUTH_MODE, ['none', 'bearer', 'session'], 'none'),
+    apiAuthMode: parseRequiredEnum(env.API_AUTH_MODE, ['none', 'bearer', 'session'], 'API_AUTH_MODE'),
     authProvider: parseEnum(env.AUTH_PROVIDER, ['static', 'github'], 'static'),
     authCookieSecure: parseBoolean(env.AUTH_COOKIE_SECURE, false, 'AUTH_COOKIE_SECURE'),
     githubOAuthBaseUrl: env.GITHUB_OAUTH_BASE_URL ?? 'https://github.com',
@@ -289,4 +289,13 @@ function parseEnum<const T extends readonly string[]>(
   if ((allowed as readonly string[]).includes(value)) return value as T[number];
 
   throw new Error(`Expected one of ${allowed.join(', ')}, received "${value}"`);
+}
+
+function parseRequiredEnum<const T extends readonly string[]>(
+  value: string | undefined,
+  allowed: T,
+  name: string,
+): T[number] {
+  if (!value) throw new Error(`${name} is required. Expected one of ${allowed.join(', ')}`);
+  return parseEnum(value, allowed, allowed[0]!);
 }

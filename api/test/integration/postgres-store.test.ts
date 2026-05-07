@@ -395,7 +395,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
 
   it('processes an HTTP-created message through the worker using Postgres', async () => {
     const services = createServices(store);
-    const server = createServer(loadConfig({ APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
+    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
     const baseUrl = await listen(server);
 
     try {
@@ -437,8 +437,8 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
   it('accepts concurrent writes through multiple API replicas sharing Postgres', async () => {
     const replicaStoreA = new PostgresStore(testDatabaseUrl!);
     const replicaStoreB = new PostgresStore(testDatabaseUrl!);
-    const serverA = createServer(loadConfig({ APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), createServices(replicaStoreA));
-    const serverB = createServer(loadConfig({ APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), createServices(replicaStoreB));
+    const serverA = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), createServices(replicaStoreA));
+    const serverB = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), createServices(replicaStoreB));
     const [baseUrlA, baseUrlB] = await Promise.all([listen(serverA), listen(serverB)]);
 
     try {
@@ -480,7 +480,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       updatedAt: now,
     });
 
-    const server = createServer(loadConfig({ APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
+    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
     const baseUrl = await listen(server);
 
     try {

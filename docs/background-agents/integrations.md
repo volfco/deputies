@@ -86,7 +86,7 @@ Avoid a large abstract integration framework for now. Prefer small shared utilit
 
 ## Generic Inbound Webhook
 
-Generic webhook auth is independent of product API auth. Product session routes can use `API_AUTH_MODE=none|bearer|session`, but `POST /webhooks/generic/:sourceKey` always uses the bearer token configured for that webhook source in the database.
+Generic webhook auth is independent of product API auth. Product session routes can use explicit `API_AUTH_MODE=none|bearer|session`, but `POST /webhooks/generic/:sourceKey` always uses the bearer token configured for that webhook source in the database.
 
 The generic webhook is the first integration to implement.
 

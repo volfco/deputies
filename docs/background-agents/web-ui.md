@@ -25,6 +25,8 @@ The UI supports all product API auth modes exposed by `/health`:
 - `bearer`: the user enters the API bearer token in the browser. The token is stored in `localStorage` and sent as `Authorization: Bearer <token>`.
 - `session`: the user signs in through the configured provider. The API sets an opaque `dev_deputies_session` HTTP-only cookie backed by the database, and the UI sends requests with `credentials: include`.
 
+`API_AUTH_MODE` is required. Use `API_AUTH_MODE=none` only for intentional local or test no-auth runs; production-like deployments should use `bearer` or `session`.
+
 Local static session-auth example:
 
 ```sh

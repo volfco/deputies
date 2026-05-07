@@ -512,7 +512,7 @@ describe('Slack integration', () => {
   });
 
   it('handles signed Slack webhook challenges through the API route', async () => {
-    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
+    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
     const baseUrl = await listen(server);
     try {
       const body = JSON.stringify({ type: 'url_verification', challenge: 'challenge-token' });
@@ -525,7 +525,7 @@ describe('Slack integration', () => {
   });
 
   it('rejects unsigned Slack webhook requests', async () => {
-    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
+    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
     const baseUrl = await listen(server);
     try {
       const response = await fetch(`${baseUrl}/webhooks/slack/events`, { method: 'POST', body: '{}' });
@@ -536,7 +536,7 @@ describe('Slack integration', () => {
   });
 
   it('returns ignored for signed Slack events outside API allowlists', async () => {
-    const server = createServer(loadConfig({ SLACK_SIGNING_SECRET: signingSecret, SLACK_ALLOWED_CHANNEL_IDS: 'CALLOWED' }), createServices(new MemoryStore()));
+    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, SLACK_ALLOWED_CHANNEL_IDS: 'CALLOWED' }), createServices(new MemoryStore()));
     const baseUrl = await listen(server);
     try {
       const body = JSON.stringify(slackEvent({ eventId: 'EvDenied', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100', channel: 'CDENIED' }));
