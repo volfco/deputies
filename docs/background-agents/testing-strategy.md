@@ -93,8 +93,8 @@ Current local policy:
 - GitHub unit/API tests cover webhook signature verification, delivery dedupe, event normalization, repository/user/org allowlists, trigger-phrase gating, archived-session recovery comments, bounded context fetching, completion callback comments, runtime installation token handling, repository prepare/list/set behavior, and guarded `gh`/`git` tool behavior.
 - API hardening tests cover invalid JSON and oversized request bodies.
 - Lifecycle unit tests cover worker-loop stop behavior and idempotent resource shutdown.
-- API tests cover auth modes, session-cookie login/logout, archive/restore behavior, queued-message edit/cancel/pause/resume, active-run cancellation, callback/artifact persistence, sandbox stop/destroy cleanup, and worker batching.
-- Web tests cover session-cookie login, keyboard send behavior, mobile/sidebar reachability, active-run cancellation button, archived restore notice, and batch rendering for cancelled middle messages.
+- API tests cover auth modes, static and GitHub App session-cookie login/logout, archive/restore behavior, queued-message edit/cancel/pause/resume, active-run cancellation, callback/artifact persistence, sandbox stop/destroy cleanup, and worker batching.
+- Web tests cover provider-aware session-cookie login, keyboard send behavior, mobile/sidebar reachability, active-run cancellation button, archived restore notice, and batch rendering for cancelled middle messages.
 - `pnpm web:build` typechecks and builds the separate Vite React operator UI.
 
 Harness responsibilities:

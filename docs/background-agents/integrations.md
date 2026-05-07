@@ -162,11 +162,12 @@ GitHub App runtime access exists for webhook-created and manually selected repos
 
 Current runtime access support includes GitHub App JWT signing, repository installation lookup, installation token minting, token caching, repository allowlist checks, configurable clone URL generation through `GITHUB_CLONE_BASE_URL`, signed inbound GitHub webhooks, webhook sender/repo-owner allowlists, trigger-phrase gating, GitHub completion comments, Flue-runner repository refresh from message repository context, a dynamic `repository` tool for status/list/set/prepare actions, a dynamic `gh` tool for authenticated GitHub CLI/API operations against the active repository, and a dynamic `git` tool for authenticated git network operations inside the prepared sandbox repository. The worker only ensures a sandbox exists. When a run starts with repository context, Flue performs pre-prompt clone/fetch and starts in the repository `cwd`. When no repository context exists, agents can choose an allowlisted repo with `repository set`, prepare it with `repository prepare`, and then use absolute paths in the returned workspace. PR helper operations are still future work.
 
-`GITHUB_API_BASE_URL` and `GITHUB_CLONE_BASE_URL` are intentionally separate. The API base points at GitHub's REST API or an emulator; the clone base points at the git remote host used for clone/fetch/push. Defaults are `https://api.github.com` and `https://github.com`.
+`GITHUB_API_BASE_URL`, `GITHUB_OAUTH_BASE_URL`, and `GITHUB_CLONE_BASE_URL` are intentionally separate. The API base points at GitHub's REST API or an emulator, the OAuth base points at the GitHub web host used for app user authorization, and the clone base points at the git remote host used for clone/fetch/push. Defaults are `https://api.github.com`, `https://github.com`, and `https://github.com`.
 
 Credential handling:
 
 - `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_ID` stay in service environment/secrets and are used only server-side to sign GitHub App JWTs.
+- `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET` are the same GitHub App's user-authorization credentials. They are used only for product UI login when `API_AUTH_MODE=session` and `AUTH_PROVIDER=github`.
 - Installation tokens are minted in memory, cached per installation until near expiry, and are not persisted in messages, events, artifacts, callbacks, or prompts.
 - Git clone/fetch auth is passed to Flue `session.shell` as command-scoped env: `GITHUB_AUTH_HEADER=Authorization: Basic base64(x-access-token:<installation-token>)`.
 - Shell commands reference only `$GITHUB_AUTH_HEADER`; token values are not embedded in command strings. Flue shell history records env variable names, not values.

@@ -23,18 +23,36 @@ The UI supports all product API auth modes exposed by `/health`:
 
 - `none`: the UI calls the API without credentials.
 - `bearer`: the user enters the API bearer token in the browser. The token is stored in `localStorage` and sent as `Authorization: Bearer <token>`.
-- `session`: the user signs in with static operator credentials. The API sets a signed `dev_deputies_session` HTTP-only cookie, and the UI sends requests with `credentials: include`.
+- `session`: the user signs in through the configured provider. The API sets an opaque `dev_deputies_session` HTTP-only cookie backed by the database, and the UI sends requests with `credentials: include`.
 
-Local session-auth example:
+Local static session-auth example:
 
 ```sh
 API_AUTH_MODE=session
+AUTH_PROVIDER=static
 AUTH_STATIC_USERNAME=dev
 AUTH_STATIC_PASSWORD=dev-secret
 AUTH_SESSION_SECRET=replace-with-random-local-secret
 AUTH_COOKIE_SECURE=false
 VITE_API_BASE_URL=http://localhost:3583
 ```
+
+Local GitHub App session-auth example:
+
+```sh
+API_AUTH_MODE=session
+AUTH_PROVIDER=github
+AUTH_SESSION_SECRET=replace-with-random-local-secret
+AUTH_COOKIE_SECURE=false
+AUTH_SUCCESS_REDIRECT_URL=http://localhost:5173
+GITHUB_APP_CLIENT_ID=Iv1.example
+GITHUB_APP_CLIENT_SECRET=github-app-client-secret
+GITHUB_APP_CALLBACK_URL=http://localhost:3583/auth/oauth/github/callback
+AUTH_GITHUB_ALLOWED_USERS=your-github-login
+VITE_API_BASE_URL=http://localhost:3583
+```
+
+For GitHub App login, configure the GitHub App's callback URL to exactly match `GITHUB_APP_CALLBACK_URL`. The same GitHub App can also provide runtime repository access through `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`; those are separate values from the app's user-authorization client ID and client secret.
 
 Set `AUTH_COOKIE_SECURE=true` only when the API is served over HTTPS. If it is enabled on plain `http://localhost`, the browser will not send the session cookie back.
 

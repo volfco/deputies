@@ -18,6 +18,9 @@ Postgres is the required durable store for the MVP.
 
 ```txt
 sessions
+auth_users
+auth_accounts
+auth_sessions
 messages
 runs
 events
@@ -38,6 +41,9 @@ The data model below is both the product target and the current implementation r
 Current implemented tables:
 
 - `sessions`
+- `auth_users`
+- `auth_accounts`
+- `auth_sessions`
 - `messages`
 - `runs`
 - `events`
@@ -61,6 +67,39 @@ Identifier policy:
 - Flue-owned IDs are `text` because their format is owned by Flue.
 - Provider/external IDs are `text` because their format is owned by the provider.
 - Per-session cursor sequences should be allocated by database-backed counters or equivalent transactional logic, not by counting rows in application memory.
+
+## Auth Users, Accounts, And Sessions
+
+Product session authentication is durable and provider-backed. The browser receives only an opaque session ID in the `dev_deputies_session` cookie.
+
+```txt
+auth_users
+  id uuid primary key
+  username text not null
+  display_name text
+  avatar_url text
+  created_at timestamptz not null
+  updated_at timestamptz not null
+
+auth_accounts
+  id uuid primary key
+  user_id uuid not null references auth_users(id) on delete cascade
+  provider text not null
+  provider_account_id text not null
+  username text not null
+  profile jsonb not null
+  created_at timestamptz not null
+  updated_at timestamptz not null
+  unique(provider, provider_account_id)
+
+auth_sessions
+  id text primary key
+  user_id uuid not null references auth_users(id) on delete cascade
+  created_at timestamptz not null
+  expires_at timestamptz not null
+```
+
+Provider accounts let `AUTH_PROVIDER=static` and `AUTH_PROVIDER=github` share the same session machinery. GitHub login uses the GitHub App user-authorization client ID and client secret; repository runtime access still mints separate short-lived installation tokens and does not persist those tokens in auth tables.
 
 ## Sessions
 

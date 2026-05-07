@@ -6,7 +6,7 @@ Implemented so far:
 
 - Core TypeScript service scaffold.
 - Config parser, Hono transport layer, and health endpoint.
-- Product API auth modes: `none`, bearer token, and static-credential session cookie login for the operator UI.
+- Product API auth modes: `none`, bearer token, and DB-backed session cookie login for the operator UI with static and GitHub App providers.
 - Stable JSON parse/body-limit errors for API routes.
 - Core session/message/event modules.
 - HTTP routes for creating/listing/updating/archiving/restoring sessions, enqueueing/editing/cancelling queued messages, cancelling active runs, listing artifacts, and replaying events.
@@ -31,7 +31,7 @@ Implemented so far:
 - Postgres integration test path.
 - App-level Postgres worker integration test.
 - Daytona sandbox idle cleanup with stop-before-destroy retention policy and advisory-lock reaper coordination.
-- Vite React operator UI with session-cookie login, session list/search, queued message editing/cancelling, active-run cancellation, archive/restore, SSE streaming, and artifact/event views.
+- Vite React operator UI with provider-aware session-cookie login, session list/search, queued message editing/cancelling, active-run cancellation, archive/restore, SSE streaming, and artifact/event views.
 - GitHub App runtime access for allowlisted repositories, including real GitHub token minting, Flue-runner repository refresh, and opt-in real GitHub + Daytona clone UAT coverage.
 - GitHub webhook ingress for issue, PR, PR review comment, and PR review events with signature verification, delivery dedupe, repository/user/org allowlists, trigger-phrase gating, session mapping, bounded context fetching, received reactions, and completion comments through the callback dispatcher.
 - Agent runtime GitHub repository tooling for repository selection/preparation, authenticated `gh`, and authenticated guarded `git` operations inside prepared sandbox repositories.
