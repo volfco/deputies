@@ -44,7 +44,7 @@ export type AppConfig = {
   githubAllowedRepositories: string[];
   githubAllowedUsers: string[];
   githubAllowedOrganizations: string[];
-  githubTriggerHandles: string[];
+  githubTriggerPhrases: string[];
   githubAppId?: string;
   githubAppPrivateKey?: string;
   githubWebhookSecret?: string;
@@ -81,7 +81,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     githubAllowedRepositories: parseStringList(env.GITHUB_ALLOWED_REPOSITORIES),
     githubAllowedUsers: parseStringList(env.GITHUB_ALLOWED_USERS),
     githubAllowedOrganizations: parseStringList(env.GITHUB_ALLOWED_ORGANIZATIONS),
-    githubTriggerHandles: parseStringList(env.GITHUB_TRIGGER_HANDLES),
+    githubTriggerPhrases: parseStringList(env.GITHUB_TRIGGER_PHRASES),
   };
 
   if (env.API_BEARER_TOKEN) config.apiBearerToken = env.API_BEARER_TOKEN;
@@ -108,8 +108,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (config.githubWebhookSecret && !config.unsafeAllowAllGithubUsersAndOrgs && !hasAnyGitHubWebhookAllowlist(config)) {
     throw new Error('GitHub webhook allowlists are required when GITHUB_WEBHOOK_SECRET is set. Configure GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_ORGANIZATIONS, or set UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true for unrestricted GitHub webhook access.');
   }
-  if (config.githubWebhookSecret && !config.githubTriggerHandles.length) {
-    throw new Error('GITHUB_TRIGGER_HANDLES is required when GITHUB_WEBHOOK_SECRET is set so GitHub webhooks only process explicitly tagged requests.');
+  if (config.githubWebhookSecret && !config.githubTriggerPhrases.length) {
+    throw new Error('GITHUB_TRIGGER_PHRASES is required when GITHUB_WEBHOOK_SECRET is set so GitHub webhooks only process explicitly triggered requests.');
   }
 
   return config;

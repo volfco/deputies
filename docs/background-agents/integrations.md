@@ -177,7 +177,7 @@ Credential handling:
 - `repository_ready` events contain repository identity, workspace path, and expiry metadata only.
 - GitHub webhook allowlists fail closed when `GITHUB_WEBHOOK_SECRET` is set. Configure `GITHUB_ALLOWED_USERS` or `GITHUB_ALLOWED_ORGANIZATIONS`, or explicitly set `UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true` for unrestricted GitHub webhook access.
 - `GITHUB_ALLOWED_USERS` and `GITHUB_ALLOWED_ORGANIZATIONS` gate inbound webhooks. Empty means unrestricted for that dimension only after at least one webhook allowlist exists, or after unsafe allow-all is enabled. Configured lists are matched case-insensitively. Non-matching deliveries are recorded as failed integration deliveries and no session/message is created.
-- `GITHUB_TRIGGER_HANDLES` optionally requires issue/PR/comment/review text to tag one of the configured GitHub handles, such as `@deputies`. Handles may be configured with or without the `@` prefix. Empty disables trigger-handle gating.
+- `GITHUB_TRIGGER_PHRASES` requires issue/PR/comment/review text to include one configured activation phrase, such as `/deputies`, `deputies:`, `@deputies`, or an org team mention like `@acme/deputies`. Bare values like `deputies` match `@deputies`, `/deputies`, and `deputies:`.
 
 The intended runtime model is snapshot-friendly: Daytona images/snapshots may pre-bake common repos and build artifacts, but every Flue run still refreshes or repairs the requested repository as its first sandbox shell step so reused/stale sandboxes get current code and fresh credentials.
 

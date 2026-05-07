@@ -224,7 +224,7 @@ describe('GitHub webhook integration', () => {
     const services = createServices(store);
     const notices: unknown[] = [];
     const github = new GitHubWebhookService(store, services.sessions, services.messages, {
-      triggerHandles: ['deputies'],
+      triggerPhrases: ['deputies'],
       archivedSessionNotifier: {
         async postNotice(input) {
           notices.push(input);
@@ -252,7 +252,7 @@ describe('GitHub webhook integration', () => {
   it('queues GitHub recovery comments that include additional instructions', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
-    const github = new GitHubWebhookService(store, services.sessions, services.messages, { triggerHandles: ['deputies'] });
+    const github = new GitHubWebhookService(store, services.sessions, services.messages, { triggerPhrases: ['deputies'] });
     const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({ title: '@deputies fix this' }) });
     if (first.type !== 'accepted') throw new Error('Expected accepted GitHub event');
     await services.sessions.archive(first.session.id);
@@ -268,7 +268,7 @@ describe('GitHub webhook integration', () => {
   it('queues archived GitHub instructions when users recover with the phrase', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
-    const github = new GitHubWebhookService(store, services.sessions, services.messages, { triggerHandles: ['deputies'] });
+    const github = new GitHubWebhookService(store, services.sessions, services.messages, { triggerPhrases: ['deputies'] });
     const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({ title: '@deputies fix this' }) });
     if (first.type !== 'accepted') throw new Error('Expected accepted GitHub event');
     await services.sessions.archive(first.session.id);
@@ -285,11 +285,11 @@ describe('GitHub webhook integration', () => {
     expect(messages[3]!.context?.includedArchivedMessageIds).toEqual([messages[1]!.id]);
   });
 
-  it('requires configured trigger handles in GitHub event text', async () => {
+  it('requires configured trigger phrases in GitHub event text', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
     const github = new GitHubWebhookService(store, services.sessions, services.messages, {
-      triggerHandles: ['deputies'],
+      triggerPhrases: ['deputies'],
     });
 
     const missingTag = await github.handle({
@@ -301,9 +301,25 @@ describe('GitHub webhook integration', () => {
       payload: issueCommentPayload({ body: '@deputies please handle this.' }),
     });
 
-    expect(missingTag).toEqual({ ok: true, type: 'ignored', reason: 'missing_trigger_handle' });
+    expect(missingTag).toEqual({ ok: true, type: 'ignored', reason: 'missing_trigger_phrase' });
     expect(tagged.type).toBe('accepted');
     expect(await store.listSessions()).toHaveLength(1);
+  });
+
+  it('accepts slash, text, and team-style GitHub trigger phrases', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const github = new GitHubWebhookService(store, services.sessions, services.messages, {
+      triggerPhrases: ['/deputies', 'deputies:', 'acme/deputies'],
+    });
+
+    const slash = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issue_comment' }, payload: issueCommentPayload({ body: '/deputies please check this' }) });
+    const text = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: 'deputies: follow up' }) });
+    const team = await github.handle({ headers: { deliveryId: 'delivery-3', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@acme/deputies review this' }) });
+
+    expect(slash.type).toBe('accepted');
+    expect(text.type).toBe('accepted');
+    expect(team.type).toBe('accepted');
   });
 
   it('accepts PR review comments and submitted PR reviews', async () => {
@@ -346,9 +362,9 @@ describe('GitHub webhook integration', () => {
       GITHUB_WEBHOOK_SECRET: secret,
       GITHUB_ALLOWED_USERS: 'octocat',
       GITHUB_ALLOWED_ORGANIZATIONS: 'acme',
-      GITHUB_TRIGGER_HANDLES: 'deputies',
+      GITHUB_TRIGGER_PHRASES: '/deputies',
     }), createServices(store));
-    const body = JSON.stringify(issuePayload({ title: '@deputies fix the flaky test' }));
+    const body = JSON.stringify(issuePayload({ title: '/deputies fix the flaky test' }));
 
     const response = await app.request('/webhooks/github/events', {
       method: 'POST',

@@ -15,7 +15,7 @@ export type GitHubWebhookHeaders = {
 export type GitHubWebhookServiceOptions = {
   allowedUsers?: string[];
   allowedOrganizations?: string[];
-  triggerHandles?: string[];
+  triggerPhrases?: string[];
   reactionSender?: Pick<GitHubReactionSender, 'addEyes'>;
   issueContextFetcher?: Pick<GitHubIssueContextFetcher, 'listIssueComments'>;
   archivedSessionNotifier?: Pick<GitHubArchivedSessionNotifier, 'postNotice' | 'postRecoveryAcknowledgement'>;
@@ -224,9 +224,9 @@ export class GitHubWebhookService {
   }
 
   private triggerFailure(event: AcceptedGitHubEvent): string | null {
-    if (!this.options.triggerHandles?.length) return null;
+    if (!this.options.triggerPhrases?.length) return null;
     if (includesArchivedSessionRecoveryPhrase(githubEventText(event))) return null;
-    return eventMentionsTrigger(event, this.options.triggerHandles) ? null : 'missing_trigger_handle';
+    return eventMatchesTrigger(event, this.options.triggerPhrases) ? null : 'missing_trigger_phrase';
   }
 
   private async addReceivedReaction(event: AcceptedGitHubEvent): Promise<void> {
@@ -602,13 +602,18 @@ function isAllowed(value: string, allowlist: string[] | undefined): boolean {
   return allowlist.some((allowed) => allowed.toLowerCase() === value.toLowerCase());
 }
 
-function eventMentionsTrigger(event: AcceptedGitHubEvent, handles: string[]): boolean {
+function eventMatchesTrigger(event: AcceptedGitHubEvent, phrases: string[]): boolean {
   const text = githubEventText(event).toLowerCase();
   if (!text) return false;
-  return handles.some((handle) => {
-    const normalized = handle.trim().toLowerCase().replace(/^@/, '');
-    return Boolean(normalized) && text.includes(`@${normalized}`);
-  });
+  return phrases.some((phrase) => triggerPhraseMatches(text, phrase));
+}
+
+function triggerPhraseMatches(text: string, phrase: string): boolean {
+  const normalized = phrase.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized.startsWith('@') || normalized.startsWith('/') || normalized.endsWith(':')) return text.includes(normalized);
+  if (normalized.includes('/')) return text.includes(`@${normalized}`) || text.includes(normalized);
+  return text.includes(`@${normalized}`) || text.includes(`/${normalized}`) || text.includes(`${normalized}:`);
 }
 
 function githubEventText(event: AcceptedGitHubEvent): string {

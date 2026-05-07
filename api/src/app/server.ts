@@ -210,7 +210,7 @@ export function createApp(config: AppConfig, services = createServices()) {
     const result = await new GitHubWebhookService(services.store, services.sessions, services.messages, {
       allowedUsers: config.githubAllowedUsers,
       allowedOrganizations: config.githubAllowedOrganizations,
-      triggerHandles: config.githubTriggerHandles,
+      triggerPhrases: config.githubTriggerPhrases,
       ...(services.githubReactionSender ? { reactionSender: services.githubReactionSender } : {}),
       ...(services.githubIssueContextFetcher ? { issueContextFetcher: services.githubIssueContextFetcher } : {}),
       ...(services.githubArchivedSessionNotifier ? { archivedSessionNotifier: services.githubArchivedSessionNotifier } : {}),
