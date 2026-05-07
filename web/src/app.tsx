@@ -952,7 +952,7 @@ function ChatPanel(props: {
         const activeRun = isActiveRunGroup(group.messages);
         const cancellingRun = isCancellingRunGroup(group.messages);
         return (
-          <div className="grid gap-2" key={group.key}>
+            <div className="grid min-w-0 gap-2" key={group.key}>
             {group.messages.length > 1 ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-medium uppercase tracking-widest text-slate-500">Queued batch · {group.messages.filter((message) => message.status !== 'cancelled').length} active messages</p>
@@ -1067,7 +1067,7 @@ function MarkdownText(props: { text: string }) {
   );
 }
 
-function HighlightedCode(props: { code: string; language?: string }) {
+function HighlightedCode(props: { code: string; language?: string; wrap?: boolean; chrome?: boolean }) {
   const [html, setHtml] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -1093,21 +1093,27 @@ function HighlightedCode(props: { code: string; language?: string }) {
   }
 
   return (
-    <figure className="my-3 overflow-hidden rounded-lg border border-slate-700/80 bg-slate-950 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
-      <figcaption className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3 py-1.5 text-[0.7rem] font-medium uppercase tracking-widest text-slate-400">
-        <span>{props.language ?? 'text'}</span>
-        <button className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[0.65rem] text-slate-300 transition hover:border-slate-500 hover:text-slate-100" type="button" onClick={copyCode} aria-label="Copy code">
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </figcaption>
+    <figure className="my-3 min-w-0 overflow-hidden rounded-lg border border-slate-700/80 bg-slate-950 shadow-[0_12px_32px_rgba(2,6,23,0.35)]">
+      {props.chrome !== false ? (
+        <figcaption className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-3 py-1.5 text-[0.7rem] font-medium uppercase tracking-widest text-slate-400">
+          <span>{props.language ?? 'text'}</span>
+          <button className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[0.65rem] text-slate-300 transition hover:border-slate-500 hover:text-slate-100" type="button" onClick={copyCode} aria-label="Copy code">
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </figcaption>
+      ) : null}
       {html ? (
-        <div className="highlighted-code overflow-auto text-sm leading-6" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={cn('highlighted-code overflow-auto text-sm leading-6', props.wrap && 'highlighted-code-wrap')} dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
-        <pre className="overflow-auto p-3 text-sm leading-6 text-slate-100"><code>{props.code}</code></pre>
+        <pre className={cn('overflow-auto p-3 text-sm leading-6 text-slate-100', props.wrap && 'whitespace-pre-wrap break-words')}><code>{props.code}</code></pre>
       )}
     </figure>
   );
+}
+
+function JsonPayload(props: { value: unknown }) {
+  return <HighlightedCode code={JSON.stringify(props.value, null, 2)} language="json" wrap chrome={false} />;
 }
 
 function CancelRunButton(props: { cancelling: boolean; onCancelRun: () => void }) {
@@ -1122,14 +1128,16 @@ function Diagnostics(props: { events: AgentEvent[] }) {
   if (!props.events.length) return null;
 
   return (
-    <details className="rounded-md border border-slate-800 bg-slate-950/30 p-2">
+    <details className="min-w-0 rounded-md border border-slate-800 bg-slate-950/30 p-2">
       <summary className="cursor-pointer text-sm text-slate-400">Diagnostics · {props.events.length} events</summary>
-      <div className="mt-2 grid gap-2">
+      <div className="mt-2 grid min-w-0 gap-2">
         {props.events.map((event) => (
-          <article className="rounded-md border border-slate-800 bg-slate-950/60 p-2" key={`${event.sessionId}-${event.sequence}`}>
+          <article className="min-w-0 rounded-md border border-slate-800 bg-slate-950/60 p-2" key={`${event.sessionId}-${event.sequence}`}>
             <span className="text-xs text-slate-500">#{event.sequence} · {formatDate(event.createdAt)}</span>
             <strong className="mt-1 block text-sm font-medium text-slate-200">{event.type}</strong>
-            <pre className="mt-2 max-h-44 overflow-auto rounded bg-slate-950 p-2 text-xs text-slate-300">{JSON.stringify(event.payload, null, 2)}</pre>
+            <div className="max-h-44 min-w-0 overflow-auto text-xs [&_figure]:my-2 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
+              <JsonPayload value={event.payload} />
+            </div>
           </article>
         ))}
       </div>
@@ -1179,7 +1187,9 @@ function ContextPanelContent(props: { repository: string | null; artifacts: Arti
             <span className="text-xs text-slate-500">{artifact.type} · {formatDate(artifact.createdAt)}</span>
             <strong className="mt-1 block text-sm font-medium">{artifact.title || artifact.url || artifact.id}</strong>
             {artifact.url ? <a className="mt-1 block text-sm text-sky-300" href={artifact.url} target="_blank" rel="noreferrer">Open artifact</a> : null}
-            <pre className="mt-2 max-h-44 overflow-auto rounded bg-slate-950 p-2 text-xs text-slate-300">{JSON.stringify(artifact.payload, null, 2)}</pre>
+            <div className="max-h-44 min-w-0 overflow-auto text-xs [&_figure]:my-2 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
+              <JsonPayload value={artifact.payload} />
+            </div>
           </Card>
         ))}
         {!props.artifacts.length ? <p className="text-sm text-slate-500">No artifacts yet.</p> : null}

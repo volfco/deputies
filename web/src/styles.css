@@ -51,3 +51,10 @@ textarea {
   padding: 0.85rem;
   background: transparent !important;
 }
+
+.highlighted-code-wrap pre,
+.highlighted-code-wrap code {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
