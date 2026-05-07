@@ -50,7 +50,7 @@ Authorization allowlists are evaluated after Slack signature verification. If a 
 Manual test:
 
 ```txt
-@Dev Deputies investigate this repository setup
+@Deputies investigate this repository setup
 ```
 
 Expected result:

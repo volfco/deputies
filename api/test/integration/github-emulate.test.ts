@@ -19,7 +19,7 @@ describe.skip('GitHub emulate', () => {
             {
               app_id: 12345,
               slug: 'dev-deputies',
-              name: 'Dev Deputies',
+              name: 'Deputies',
               private_key: privateKey,
               permissions: { contents: 'read', issues: 'write', pull_requests: 'write' },
               events: ['issues', 'issue_comment', 'pull_request'],

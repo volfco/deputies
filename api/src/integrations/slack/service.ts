@@ -121,7 +121,7 @@ export class SlackIntegrationService {
       const response = await this.options.replyClient.postThreadReply({
         channel: event.channel,
         threadTs: event.threadTs,
-        text: 'This Dev Deputies session is archived, so I did not queue your message. Restore the session in Dev Deputies before replying here again.',
+        text: 'This Deputies session is archived, so I did not queue your message. Restore the session in Deputies before replying here again.',
       });
       if (!response.ok) console.warn(`Slack archived-session notice failed: ${response.error ?? 'unknown_error'}`);
     } catch (error) {

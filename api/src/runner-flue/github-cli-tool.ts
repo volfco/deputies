@@ -85,7 +85,7 @@ function validateArgs(value: unknown): string[] {
     throw new Error(`gh ${command} clone is not available through this tool`);
   }
   if (isDirectCommentCommand(args)) {
-    throw new Error('Posting GitHub issue/PR comments directly through gh is not available. Return the final response normally; Dev Deputies posts it back to GitHub through the callback layer.');
+    throw new Error('Posting GitHub issue/PR comments directly through gh is not available. Return the final response normally; Deputies posts it back to GitHub through the callback layer.');
   }
   if (command === 'api' && isGitDatabaseApiRoute(args[1])) {
     throw new Error('GitHub Git Database API routes are not available through gh. Use sandbox git commands and the authenticated git tool for branch/object pushes.');

@@ -66,7 +66,7 @@ external webhook
 Slack, GitHub, and the web UI now exercise the same product loop from different entry points. New integrations should follow these constraints instead of creating source-specific side channels:
 
 - Integration prompts should contain source/thread context only. Behavior rules belong in runner/agent instructions, tool descriptions, and callback senders, not in chat-visible message text.
-- Every public webhook should authenticate origin, dedupe deliveries, authorize actor/resource, map an external thread to a Dev Deputies session, fetch unseen prior context, enqueue the current request, add a lightweight received signal, and post exactly one final response through callbacks.
+- Every public webhook should authenticate origin, dedupe deliveries, authorize actor/resource, map an external thread to a Deputies session, fetch unseen prior context, enqueue the current request, add a lightweight received signal, and post exactly one final response through callbacks.
 - Received/progress signals and final replies are separate. Slack/GitHub use reactions for received state; callback senders own final replies. Agent tools should not post final Slack/GitHub replies directly.
 - Follow-up prompts should be compact. The first message can include full channel/issue/PR metadata; later messages should include only a compact event/thread identity, unseen prior context, and the current tagged request.
 - Prompt text from integrations should be Markdown-safe in the web UI. Source prompts are rendered as plain text; assistant responses remain Markdown.
@@ -171,13 +171,13 @@ Credential handling:
 - Git clone/fetch auth is passed to Flue `session.shell` as command-scoped env: `GITHUB_AUTH_HEADER=Authorization: Basic base64(x-access-token:<installation-token>)`.
 - Shell commands reference only `$GITHUB_AUTH_HEADER`; token values are not embedded in command strings. Flue shell history records env variable names, not values.
 - The agent `repository` tool is always available when GitHub access is configured. `status` reports active/prepared repo state, `list` reports configured allowlist entries, `set` validates and persists session repo context, and `prepare` clones/fetches inside the sandbox.
-- Repository setup configures repo-local git identity as `Dev Deputies <dev-deputies@users.noreply.github.com>` so agents do not need to mutate global sandbox git config.
+- Repository setup configures repo-local git identity as `Deputies <dev-deputies@users.noreply.github.com>` so agents do not need to mutate global sandbox git config.
 - The agent `gh` tool runs in trusted worker code with command-scoped `GH_TOKEN`, `GH_REPO`, a temporary `GH_CONFIG_DIR`, disabled prompts, token redaction, and blocked auth/config/extension/clone escape hatches. It resolves the active repo at call time and blocks GitHub Git Database API routes so sandbox-local commits are published through git, not remote object surgery.
 - The agent `git` tool runs the git process inside the prepared remote sandbox repository through Flue agent-level `shell` with command-scoped `GITHUB_AUTH_HEADER`. Agents should use it for authenticated push/fetch/pull operations, not for GitHub issue/comment/PR API work. Risky push forms such as force, mirror, delete, and force refspecs are blocked.
 - `repository_ready` events contain repository identity, workspace path, and expiry metadata only.
 - GitHub webhook allowlists fail closed when `GITHUB_WEBHOOK_SECRET` is set. Configure `GITHUB_ALLOWED_USERS` or `GITHUB_ALLOWED_ORGANIZATIONS`, or explicitly set `UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true` for unrestricted GitHub webhook access.
 - `GITHUB_ALLOWED_USERS` and `GITHUB_ALLOWED_ORGANIZATIONS` gate inbound webhooks. Empty means unrestricted for that dimension only after at least one webhook allowlist exists, or after unsafe allow-all is enabled. Configured lists are matched case-insensitively. Non-matching deliveries are recorded as failed integration deliveries and no session/message is created.
-- `GITHUB_TRIGGER_HANDLES` optionally requires issue/PR/comment/review text to tag one of the configured GitHub handles, such as `@dev-deputies`. Handles may be configured with or without the `@` prefix. Empty disables trigger-handle gating.
+- `GITHUB_TRIGGER_HANDLES` optionally requires issue/PR/comment/review text to tag one of the configured GitHub handles, such as `@devdeputies`. Handles may be configured with or without the `@` prefix. Empty disables trigger-handle gating.
 
 The intended runtime model is snapshot-friendly: Daytona images/snapshots may pre-bake common repos and build artifacts, but every Flue run still refreshes or repairs the requested repository as its first sandbox shell step so reused/stale sandboxes get current code and fresh credentials.
 
@@ -231,7 +231,7 @@ Inbound responsibilities:
 - Dedupe with `X-GitHub-Delivery`.
 - Ignore irrelevant events, bot loops, and non-allowlisted actors/repo owners.
 - Resolve repo, issue, PR, comment, and actor.
-- Fetch issue/PR comments and include only comments not already represented in prior Dev Deputies messages for that GitHub thread. The current triggering comment is excluded because it is rendered separately.
+- Fetch issue/PR comments and include only comments not already represented in prior Deputies messages for that GitHub thread. The current triggering comment is excluded because it is rendered separately.
 - Render GitHub context with Slack-style section labels and separators; rely on webhook auth, repo/user/org allowlists, and trigger-handle gating for authorization.
 
 External thread IDs:

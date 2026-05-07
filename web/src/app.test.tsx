@@ -295,14 +295,14 @@ it('keeps the new-session page selected after archiving and refreshing', async (
 
   fireEvent.click(await screen.findByRole('button', { name: 'Archive' }));
 
-  expect(await screen.findByText('What should your deputy do?')).toBeInTheDocument();
+  expect(await screen.findByText('What needs doing?')).toBeInTheDocument();
   expect(localStorage.getItem('dev-deputies-selected-session-id')).toBeNull();
   expect(localStorage.getItem('dev-deputies-new-session-selected')).toBe('true');
 
   first.unmount();
   render(<App />);
 
-  expect(await screen.findByText('What should your deputy do?')).toBeInTheDocument();
+  expect(await screen.findByText('What needs doing?')).toBeInTheDocument();
   expect(screen.queryByText('This session is archived.')).not.toBeInTheDocument();
 });
 

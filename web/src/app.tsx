@@ -744,7 +744,7 @@ function StartupLoadingPanel() {
   return (
     <section className="grid min-h-screen place-items-center px-4">
       <Card className="max-w-lg p-6 text-center">
-        <h2 className="text-lg font-semibold">Loading Dev Deputies</h2>
+        <h2 className="text-lg font-semibold">Loading Deputies</h2>
         <p className="mt-2 text-sm text-slate-400">Restoring your session and workspace.</p>
       </Card>
     </section>
@@ -800,9 +800,9 @@ function BearerAuthPanel(props: { draftToken: string; setDraftToken: (value: str
   return (
     <section className="grid min-h-screen place-items-center px-4">
       <Card className="w-full max-w-2xl p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-sky-300">Dev Deputies</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50">Your async engineering deputies.</h1>
-        <p className="mt-2 text-sm text-slate-400">Delegate follow-ups, watch the work trail, and inspect the results.</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-sky-300">Deputies</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50">Engineering agents for delegated work.</h1>
+        <p className="mt-2 text-sm text-slate-400">Assign follow-ups, watch the work trail, and inspect the results.</p>
         <form className="mt-6 grid gap-3" onSubmit={props.saveToken}>
           <div>
             <strong>API token required</strong>
@@ -822,8 +822,8 @@ function SessionAuthPanel(props: { username: string; password: string; onUsernam
   return (
     <section className="grid min-h-screen place-items-center px-4">
       <Card className="w-full max-w-2xl p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-sky-300">Dev Deputies</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50">Sign in to your async engineering deputies.</h1>
+        <p className="text-xs font-semibold uppercase tracking-widest text-sky-300">Deputies</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50">Sign in to Deputies.</h1>
         <p className="mt-2 text-sm text-slate-400">Use your operator credentials. OAuth providers can plug into this same session flow later.</p>
         <form className="mt-6 grid gap-3" onSubmit={props.onSubmit}>
           <div>
@@ -853,13 +853,13 @@ function NewThreadPanel(props: {
   return (
     <section className="grid min-h-screen place-items-center px-4">
       <Card className="w-full max-w-2xl p-5">
-        <p className="text-xs font-semibold uppercase tracking-widest text-sky-300">Dev Deputies</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50">Your async engineering deputies.</h1>
-        <p className="mt-2 text-sm text-slate-400">Delegate follow-ups, watch the work trail, and inspect the results.</p>
-        <h2 className="mt-6 text-xl font-semibold">What should your deputy do?</h2>
+        <p className="text-xs font-semibold uppercase tracking-widest text-sky-300">Deputies</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50">Engineering agents for delegated work.</h1>
+        <p className="mt-2 text-sm text-slate-400">Assign follow-ups, watch the work trail, and inspect the results.</p>
+        <h2 className="mt-6 text-xl font-semibold">What needs doing?</h2>
         <form className="mt-4 grid gap-3" onSubmit={props.onSubmit}>
           <Input value={props.repository} onChange={(event) => props.onRepositoryChange(event.target.value)} placeholder="GitHub repository, e.g. owner/repo or https://github.com/owner/repo" disabled={!props.canCallApi} />
-          <Textarea className="min-h-40" value={props.prompt} onChange={(event) => props.onPromptChange(event.target.value)} onKeyDown={(event) => submitOnEnter(event)} placeholder="Ask your deputy to investigate, change code, or answer a question..." disabled={!props.canCallApi} autoFocus />
+          <Textarea className="min-h-40" value={props.prompt} onChange={(event) => props.onPromptChange(event.target.value)} onKeyDown={(event) => submitOnEnter(event)} placeholder="Ask Deputies to investigate, change code, or answer a question..." disabled={!props.canCallApi} autoFocus />
           <Button className="justify-self-end" type="submit" disabled={!props.canCallApi || props.loading || !props.prompt.trim()}>Start session</Button>
         </form>
       </Card>
