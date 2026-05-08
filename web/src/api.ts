@@ -96,6 +96,8 @@ export class ApiError extends Error {
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3583').replace(/\/$/, '');
 const requestTimeoutMs = 15_000;
 const requestRetryDelayMs = 250;
+export const apiConnectionOkEvent = 'deputies:api-connection-ok';
+export const apiConnectionDelayedEvent = 'deputies:api-connection-delayed';
 
 export function getApiBaseUrl(): string {
   return apiBaseUrl;
@@ -228,8 +230,8 @@ export async function resumeQueue(input: { sessionId: string; token: string }): 
   return body.session;
 }
 
-export async function listEvents(sessionId: string, token: string): Promise<AgentEvent[]> {
-  const body = await request<{ events: AgentEvent[] }>(`/sessions/${sessionId}/events`, { token });
+export async function listEvents(sessionId: string, token: string, after?: number): Promise<AgentEvent[]> {
+  const body = await request<{ events: AgentEvent[] }>(`/sessions/${sessionId}/events${after ? `?after=${after}` : ''}`, { token });
   return body.events;
 }
 
@@ -268,7 +270,7 @@ export async function streamGlobalEvents(input: {
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
 }): Promise<void> {
-  await streamEventResponse(`/events/stream?after=${input.after}&replay=false`, input);
+  await streamEventResponse(`/events/stream?after=${input.after}&include=all&replay=false`, input);
 }
 
 async function streamEventResponse(
@@ -279,14 +281,24 @@ async function streamEventResponse(
     onEvent: (event: AgentEvent) => void;
   },
 ): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers: authHeaders(input.token),
-    credentials: 'include',
-    signal: input.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      headers: authHeaders(input.token),
+      credentials: 'include',
+      signal: input.signal,
+    });
+  } catch (error) {
+    if (!input.signal.aborted) dispatchApiConnectionDelayed('Realtime connection interrupted.');
+    throw error;
+  }
 
-  if (!response.ok) throw new ApiError(response.status, `Event stream failed with ${response.status}`);
+  if (!response.ok) {
+    dispatchApiConnectionDelayed(`Realtime connection failed with ${response.status}.`);
+    throw new ApiError(response.status, `Event stream failed with ${response.status}`);
+  }
   if (!response.body) throw new ApiError(response.status, 'Event stream response has no body');
+  dispatchApiConnectionOk('stream');
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -343,7 +355,10 @@ async function requestOnce<T>(path: string, options: { method: string; token?: s
   try {
     response = await fetch(`${apiBaseUrl}${path}`, requestInit);
   } catch (error) {
-    if (abort.signal.aborted) throw new ApiError(0, `Request timed out: ${path}`);
+    if (abort.signal.aborted) {
+      dispatchApiConnectionDelayed(`Request timed out: ${path}`);
+      throw new ApiError(0, `Request timed out: ${path}`);
+    }
     throw error;
   } finally {
     window.clearTimeout(timeout);
@@ -355,7 +370,16 @@ async function requestOnce<T>(path: string, options: { method: string; token?: s
     throw new ApiError(response.status, message);
   }
 
+  dispatchApiConnectionOk('request');
   return (await response.json()) as T;
+}
+
+function dispatchApiConnectionOk(source: 'request' | 'stream') {
+  window.dispatchEvent(new CustomEvent(apiConnectionOkEvent, { detail: { source } }));
+}
+
+function dispatchApiConnectionDelayed(message: string) {
+  window.dispatchEvent(new CustomEvent(apiConnectionDelayedEvent, { detail: { message } }));
 }
 
 function delay(ms: number): Promise<void> {

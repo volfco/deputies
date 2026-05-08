@@ -203,13 +203,15 @@ export function createApp(config: AppConfig, services = createServices()) {
 
   app.get('/events', async (c) => {
     const after = parseCursor(c.req.query('after') ?? null);
-    const events = await services.events.listAll(after);
+    const includeAll = c.req.query('include') === 'all';
+    const events = includeAll ? await services.events.listAllEvents(after) : await services.events.listAll(after);
     return c.json({ events });
   });
 
   app.get('/events/stream', async (c) => {
     const after = parseCursor(c.req.query('after') ?? c.req.header('last-event-id') ?? null) ?? 0;
-    return writeGlobalEventStream(c, services, after, c.req.query('replay') !== 'false');
+    const includeAll = c.req.query('include') === 'all';
+    return writeGlobalEventStream(c, services, after, c.req.query('replay') !== 'false', includeAll);
   });
 
   app.post('/webhooks/generic/:sourceKey', async (c) => {
@@ -581,13 +583,14 @@ async function writeGlobalEventStream(
   services: AppServices,
   afterId: number,
   replay: boolean,
+  includeAll: boolean,
 ): Promise<Response> {
   return writeEventStream(c, {
     after: afterId,
     id: (event) => event.id,
-    list: () => services.events.listAll(afterId),
+    list: () => includeAll ? services.events.listAllEvents(afterId) : services.events.listAll(afterId),
     replay,
-    subscribe: (writeEvent) => services.events.subscribeAll(writeEvent),
+    subscribe: (writeEvent) => includeAll ? services.events.subscribeAllEvents(writeEvent) : services.events.subscribeAll(writeEvent),
   });
 }
 

@@ -9,6 +9,8 @@ import {
   CallbackDelivery,
   Message,
   Session,
+  apiConnectionDelayedEvent,
+  apiConnectionOkEvent,
   archiveSession,
   cancelCurrentRun,
   cancelMessage,
@@ -28,7 +30,6 @@ import {
   pauseQueue,
   replayCallback,
   resumeQueue,
-  streamEvents,
   streamGlobalEvents,
   unarchiveSession,
   updateMessage,
@@ -49,7 +50,24 @@ const newSessionSelectedStorageKey = 'deputies-new-session-selected';
 const archivedSessionsOpenStorageKey = 'deputies-archived-sessions-open';
 const themeStorageKey = 'deputies-theme';
 const threadAutoFollowThreshold = 160;
+const startupConnectionDelayMs = 3_000;
+const liveConnectionMessage = 'Live updates connected.';
+const connectionLimitHint = 'If you have Deputies open in several windows, browser connection limits may block API requests.';
 type ThemePreference = 'light' | 'dark' | 'system';
+type ConnectionState = 'ok' | 'delayed' | 'reconnecting';
+
+type ConnectionStatus = {
+  state: ConnectionState;
+  message: string;
+};
+
+type ApiConnectionOkDetail = {
+  source?: unknown;
+};
+
+type ApiConnectionDelayedDetail = {
+  message?: unknown;
+};
 
 function loadStoredToken(): string {
   return localStorage.getItem(tokenStorageKey) ?? '';
@@ -79,6 +97,35 @@ function isPageVisible(): boolean {
 
 function isThreadNearBottom(container: HTMLElement): boolean {
   return container.scrollHeight - container.scrollTop - container.clientHeight <= threadAutoFollowThreshold;
+}
+
+function initialConnectionStatus(): ConnectionStatus {
+  return { state: 'ok', message: liveConnectionMessage };
+}
+
+function startupDelayedConnectionStatus(): ConnectionStatus {
+  return { state: 'delayed', message: 'Still waiting for the API to respond.' };
+}
+
+function connectionStatusTitle(status: ConnectionStatus): string {
+  if (status.state === 'reconnecting') return 'Realtime updates are reconnecting.';
+  return 'Connection delayed.';
+}
+
+function connectionStatusLabel(status: ConnectionStatus): string {
+  if (status.state === 'ok') return 'Live';
+  if (status.state === 'reconnecting') return 'Reconnecting';
+  return 'Delayed';
+}
+
+function isStreamConnectionOk(event: Event): boolean {
+  const detail = event instanceof CustomEvent ? event.detail as ApiConnectionOkDetail : undefined;
+  return detail?.source === 'stream';
+}
+
+function connectionDelayedMessage(event: Event): string {
+  const detail = event instanceof CustomEvent ? event.detail as ApiConnectionDelayedDetail : undefined;
+  return typeof detail?.message === 'string' ? detail.message : 'API requests are taking longer than expected.';
 }
 
 export function App() {
@@ -115,6 +162,7 @@ export function App() {
   const [healthChecked, setHealthChecked] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [pageVisible, setPageVisible] = useState(isPageVisible);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(initialConnectionStatus);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const eventCursor = useRef(0);
   const globalEventCursor = useRef(0);
@@ -122,6 +170,8 @@ export function App() {
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const threadAutoFollowRef = useRef(true);
   const autoScrolledSessionId = useRef('');
+  const selectedSessionIdRef = useRef(selectedSessionId);
+  const detailLoadedSessionIdRef = useRef(detailLoadedSessionId);
 
   const bearerAuthRequired = health?.apiAuthMode === 'bearer';
   const sessionAuthRequired = health?.apiAuthMode === 'session';
@@ -134,6 +184,14 @@ export function App() {
   const filteredSessions = filterSessions(sortSessionsByLastActivity(sessions), threadSearch);
   const activeSessions = filteredSessions.filter((session) => session.status !== 'archived');
   const archivedSessions = filteredSessions.filter((session) => session.status === 'archived');
+
+  useEffect(() => {
+    if (!startupLoading || connectionStatus.state !== 'ok') return;
+    const timeout = window.setTimeout(() => {
+      setConnectionStatus(startupDelayedConnectionStatus());
+    }, startupConnectionDelayMs);
+    return () => window.clearTimeout(timeout);
+  }, [startupLoading, connectionStatus.state]);
 
   useEffect(() => {
     applyThemePreference(themePreference);
@@ -149,6 +207,32 @@ export function App() {
     media.addEventListener('change', handleSystemThemeChange);
     return () => media.removeEventListener('change', handleSystemThemeChange);
   }, [themePreference]);
+
+  useEffect(() => {
+    selectedSessionIdRef.current = selectedSessionId;
+    detailLoadedSessionIdRef.current = detailLoadedSessionId;
+  }, [selectedSessionId, detailLoadedSessionId]);
+
+  useEffect(() => {
+    const handleConnectionOk = (event: Event) => {
+      setConnectionStatus((current) => {
+        if (current.state === 'reconnecting' && !isStreamConnectionOk(event)) return current;
+        return initialConnectionStatus();
+      });
+    };
+    const handleConnectionDelayed = (event: Event) => {
+      setConnectionStatus({
+        state: 'delayed',
+        message: connectionDelayedMessage(event),
+      });
+    };
+    window.addEventListener(apiConnectionOkEvent, handleConnectionOk);
+    window.addEventListener(apiConnectionDelayedEvent, handleConnectionDelayed);
+    return () => {
+      window.removeEventListener(apiConnectionOkEvent, handleConnectionOk);
+      window.removeEventListener(apiConnectionDelayedEvent, handleConnectionDelayed);
+    };
+  }, []);
 
   useEffect(() => {
     setTitleDraft(selectedSession?.title ?? '');
@@ -213,34 +297,6 @@ export function App() {
   }, [selectedSessionId, messages.length, events.length]);
 
   useEffect(() => {
-    if (!pageVisible || !selectedSessionId || !canCallApi || detailLoadedSessionId !== selectedSessionId) return;
-
-    const abort = new AbortController();
-    streamEvents({
-      sessionId: selectedSessionId,
-      after: eventCursor.current,
-      token,
-      signal: abort.signal,
-      onEvent: (event) => {
-        eventCursor.current = Math.max(eventCursor.current, event.sequence);
-        setEvents((current) => upsertEvent(current, event));
-        if (shouldRefreshSessionDetail(event.type)) {
-          refreshMessagesArtifactsAndCallbacks(selectedSessionId).catch(() => undefined);
-          refreshSessions().catch(() => undefined);
-        }
-      },
-    }).catch((err: unknown) => {
-      if (!abort.signal.aborted) {
-        refreshSessionDetail(selectedSessionId).catch(() => undefined);
-        refreshSessions().catch(() => undefined);
-        setError(errorMessage(err));
-      }
-    });
-
-    return () => abort.abort();
-  }, [pageVisible, selectedSessionId, detailLoadedSessionId, canCallApi, token]);
-
-  useEffect(() => {
     if (!pageVisible || !canCallApi || !sessionsLoaded) return;
 
     const abort = new AbortController();
@@ -250,11 +306,22 @@ export function App() {
       signal: abort.signal,
       onEvent: (event) => {
         if (typeof event.id === 'number') globalEventCursor.current = Math.max(globalEventCursor.current, event.id);
+
+        const activeSessionId = selectedSessionIdRef.current;
+        if (event.sessionId === activeSessionId && detailLoadedSessionIdRef.current === activeSessionId) {
+          eventCursor.current = Math.max(eventCursor.current, event.sequence);
+          setEvents((current) => upsertEvent(current, event));
+          if (shouldRefreshSessionDetail(event.type)) {
+            refreshMessagesArtifactsAndCallbacks(activeSessionId).catch(() => undefined);
+          }
+        }
+
         if (shouldRefreshSessions(event.type)) refreshSessions().catch(() => undefined);
       },
     }).catch((err: unknown) => {
       if (!abort.signal.aborted) {
         refreshSessions().catch(() => undefined);
+        setConnectionStatus({ state: 'reconnecting', message: errorMessage(err) });
       }
     });
 
@@ -623,8 +690,9 @@ export function App() {
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {error ? <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</div> : null}
+      {!startupLoading && connectionStatus.state !== 'ok' ? <ConnectionStatusBanner status={connectionStatus} /> : null}
 
-      {startupLoading ? <StartupLoadingPanel /> : bearerAuthRequired && !token ? <BearerAuthPanel draftToken={draftToken} setDraftToken={setDraftToken} saveToken={saveToken} /> : sessionAuthRequired && !currentUser ? <SessionAuthPanel password={loginPassword} provider={health?.authProvider ?? 'static'} username={loginUsername} onPasswordChange={setLoginPassword} onSubmit={handleLogin} onUsernameChange={setLoginUsername} /> : (
+      {startupLoading ? <StartupLoadingPanel connectionStatus={connectionStatus} /> : bearerAuthRequired && !token ? <BearerAuthPanel draftToken={draftToken} setDraftToken={setDraftToken} saveToken={saveToken} /> : sessionAuthRequired && !currentUser ? <SessionAuthPanel password={loginPassword} provider={health?.authProvider ?? 'static'} username={loginUsername} onPasswordChange={setLoginPassword} onSubmit={handleLogin} onUsernameChange={setLoginUsername} /> : (
         <>
 
       {!sidebarOpen ? (
@@ -654,6 +722,7 @@ export function App() {
               authRequired={bearerAuthRequired || sessionAuthRequired}
               canCallApi={canCallApi}
               health={health}
+              connectionStatus={connectionStatus}
               loading={loading}
               search={threadSearch}
               selectedSessionId={selectedSessionId}
@@ -787,12 +856,30 @@ function LocalSandboxWarning() {
   );
 }
 
-function ThreadSidebar(props: {
+type ConnectionStatusBannerProps = {
+  status: ConnectionStatus;
+};
+
+function ConnectionStatusBanner(props: ConnectionStatusBannerProps) {
+  return (
+    <div className="border-b border-warning/50 bg-warning/15 px-3 py-2 text-sm text-warning-foreground dark:text-warning md:px-8 xl:px-20" role="status">
+      <div className="flex flex-wrap items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+        <p className="min-w-0 flex-1">
+          <strong>{connectionStatusTitle(props.status)}</strong> {props.status.message} {connectionLimitHint} Close inactive windows or keep one visible tab active.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type ThreadSidebarProps = {
   activeSessions: Session[];
   archivedSessions: Session[];
   archivedSessionsOpen: boolean;
   authRequired: boolean;
   canCallApi: boolean;
+  connectionStatus: ConnectionStatus;
   health: Health | null;
   loading: boolean;
   search: string;
@@ -809,7 +896,9 @@ function ThreadSidebar(props: {
   onSignOut: () => void;
   onThemeChange: (value: ThemePreference) => void;
   onUnarchive: (sessionId: string) => void;
-}) {
+};
+
+function ThreadSidebar(props: ThreadSidebarProps) {
   const searching = Boolean(props.search.trim());
 
   function handleArchivedToggle(event: SyntheticEvent<HTMLDetailsElement>) {
@@ -856,7 +945,7 @@ function ThreadSidebar(props: {
         ) : null}
       </div>
       <ThemeToggle preference={props.themePreference} onChange={props.onThemeChange} />
-      <ApiStatusFooter authRequired={props.authRequired} health={props.health} token={props.token} onSignOut={props.onSignOut} />
+      <ApiStatusFooter authRequired={props.authRequired} connectionStatus={props.connectionStatus} health={props.health} token={props.token} onSignOut={props.onSignOut} />
     </div>
   );
 }
@@ -891,23 +980,43 @@ function ThemeToggle(props: { preference: ThemePreference; onChange: (value: The
   );
 }
 
-function StartupLoadingPanel() {
+type StartupLoadingPanelProps = {
+  connectionStatus: ConnectionStatus;
+};
+
+function StartupLoadingPanel(props: StartupLoadingPanelProps) {
   return (
     <section className="grid min-h-screen place-items-center px-4">
       <Card className="max-w-lg p-6 text-center">
         <h2 className="text-lg font-semibold">Loading Deputies</h2>
         <p className="mt-2 text-sm text-muted-foreground">Restoring your session and workspace.</p>
+        {props.connectionStatus.state !== 'ok' ? (
+          <div className="mt-4 rounded-md border border-warning/50 bg-warning/10 p-3 text-left text-sm text-warning-foreground dark:text-warning" role="status">
+            <strong>{connectionStatusTitle(props.connectionStatus)}</strong>
+            <p className="mt-1">{props.connectionStatus.message} {connectionLimitHint}</p>
+          </div>
+        ) : null}
       </Card>
     </section>
   );
 }
 
-function ApiStatusFooter(props: { authRequired: boolean; health: Health | null; token: string; onSignOut: () => void }) {
+type ApiStatusFooterProps = {
+  authRequired: boolean;
+  connectionStatus: ConnectionStatus;
+  health: Health | null;
+  token: string;
+  onSignOut: () => void;
+};
+
+function ApiStatusFooter(props: ApiStatusFooterProps) {
+  const connected = props.health?.status === 'ok' && props.connectionStatus.state === 'ok';
   return (
     <div className="mt-3 shrink-0 border-t border-border pt-3 text-left text-xs text-muted-foreground">
       <div className="flex items-center gap-2">
-        <span className={cn('h-2 w-2 rounded-full', props.health?.status === 'ok' ? 'bg-success' : 'bg-warning')} />
+        <span className={cn('h-2 w-2 rounded-full', connected ? 'bg-success' : 'bg-warning')} />
         <strong className="text-foreground">{props.health ? `API ${props.health.status}` : 'Checking API'}</strong>
+        <span>{connectionStatusLabel(props.connectionStatus)}</span>
       </div>
       <p className="mt-1 truncate">{getApiBaseUrl()}</p>
       {props.health ? <p>{props.health.runMode} mode · auth {props.health.apiAuthMode}</p> : null}

@@ -22,6 +22,8 @@ type MockApiOptions = {
   onReplayCallback?: (callbackId: string) => void;
   onStreamOpen?: (push: StreamEventPusher) => void;
   onGlobalStreamOpen?: (push: StreamEventPusher) => void;
+  globalStreamStatus?: number;
+  hangSessions?: boolean;
   authMode?: 'none' | 'bearer' | 'session';
   sandboxProvider?: string;
   currentUser?: { username: string } | null;
@@ -29,6 +31,7 @@ type MockApiOptions = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   localStorage.clear();
   setVisibilityState('visible');
@@ -192,14 +195,14 @@ it('keeps a cancelled middle message inline with its surrounding batch', async (
 });
 
 it('shows a jump control instead of autoscrolling after the user scrolls up', async () => {
-  let pushStreamEvent: StreamEventPusher = () => undefined;
-  let streamOpen = false;
+  let pushGlobalEvent: StreamEventPusher = () => undefined;
+  let globalStreamOpen = false;
   const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
   mockApi({
     messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000130', sequence: 1, status: 'processing', prompt: 'long running work' })],
-    onStreamOpen: (push) => {
-      streamOpen = true;
-      pushStreamEvent = push;
+    onGlobalStreamOpen: (push) => {
+      globalStreamOpen = true;
+      pushGlobalEvent = push;
     },
   });
   render(<App />);
@@ -213,8 +216,8 @@ it('shows a jump control instead of autoscrolling after the user scrolls up', as
   fireEvent.scroll(messageLog);
   scrollIntoView.mockClear();
 
-  await waitFor(() => expect(streamOpen).toBe(true));
-  pushStreamEvent(eventFixture({ sequence: 1, type: 'agent_text_delta', messageId: '00000000-0000-4000-8000-000000000130', payload: { text: 'streaming diagnostics' } }));
+  await waitFor(() => expect(globalStreamOpen).toBe(true));
+  pushGlobalEvent(eventFixture({ id: 2, sequence: 1, type: 'agent_text_delta', messageId: '00000000-0000-4000-8000-000000000130', payload: { text: 'streaming diagnostics' } }));
 
   const jump = await screen.findByRole('button', { name: /Jump to latest/ });
   expect(scrollIntoView).not.toHaveBeenCalled();
@@ -223,10 +226,9 @@ it('shows a jump control instead of autoscrolling after the user scrolls up', as
   expect(scrollIntoView).toHaveBeenCalledWith({ block: 'end', behavior: 'smooth' });
 });
 
-it('does not hold SSE streams while the page is hidden', async () => {
+it('opens only the global SSE stream for updates', async () => {
   let streamOpenCount = 0;
   let globalStreamOpenCount = 0;
-  setVisibilityState('hidden');
   mockApi({
     onStreamOpen: () => {
       streamOpenCount += 1;
@@ -240,13 +242,27 @@ it('does not hold SSE streams while the page is hidden', async () => {
   await screen.findByRole('log', { name: 'Session messages' });
   await new Promise((resolve) => window.setTimeout(resolve, 0));
   expect(streamOpenCount).toBe(0);
-  expect(globalStreamOpenCount).toBe(0);
+  expect(globalStreamOpenCount).toBe(1);
+});
 
-  setVisibilityState('visible');
-  document.dispatchEvent(new Event('visibilitychange'));
+it('surfaces realtime connection failures with a multiple-window hint', async () => {
+  mockApi({ globalStreamStatus: 503 });
+  render(<App />);
 
-  await waitFor(() => expect(streamOpenCount).toBe(1));
-  await waitFor(() => expect(globalStreamOpenCount).toBe(1));
+  const banner = await screen.findByRole('status');
+  expect(banner).toHaveTextContent(/Realtime updates are reconnecting|Connection delayed/);
+  expect(banner).toHaveTextContent(/several windows/);
+  expect(screen.getByText(/Delayed|Reconnecting/)).toBeInTheDocument();
+});
+
+it('shows startup connection guidance before request timeout', async () => {
+  mockApi({ hangSessions: true });
+  render(<App />);
+
+  expect(await screen.findByText('Loading Deputies')).toBeInTheDocument();
+
+  expect(await screen.findByText(/Still waiting for the API to respond/, undefined, { timeout: 4_000 })).toBeInTheDocument();
+  expect(screen.getByText(/several windows/)).toBeInTheDocument();
 });
 
 it('labels active streamed text as progress and separates obvious sentence boundaries', async () => {
@@ -465,6 +481,7 @@ function mockApi(options: MockApiOptions = {}) {
     }
 
     if (url.pathname === '/sessions' && method === 'GET') {
+      if (options.hangSessions) return new Promise<Response>(() => undefined);
       return jsonResponse({ sessions: options.sessions ?? [currentSession] });
     }
 
@@ -503,7 +520,7 @@ function mockApi(options: MockApiOptions = {}) {
     }
 
     if (url.pathname === `/sessions/${currentSession.id}/events`) {
-      return jsonResponse({ events: options.events ?? [] });
+      return jsonResponse({ events: filterEventsAfter(options.events ?? [], url.searchParams.get('after')) });
     }
 
     if (url.pathname === `/sessions/${currentSession.id}/artifacts`) {
@@ -534,6 +551,7 @@ function mockApi(options: MockApiOptions = {}) {
     }
 
     if (url.pathname === '/events/stream') {
+      if (options.globalStreamStatus) return new Response(null, { status: options.globalStreamStatus });
       return new Response(new ReadableStream({
         start(controller) {
           const pushStreamEvent: StreamEventPusher = (event) => {
@@ -556,12 +574,22 @@ function messageFixture(input: { id: string; sequence: number; status: string; p
   };
 }
 
-function eventFixture(input: { sequence: number; type: string; payload: Record<string, unknown>; runId?: string; messageId?: string }) {
+function eventFixture(input: { sequence: number; type: string; payload: Record<string, unknown>; id?: number; runId?: string; messageId?: string }) {
   return {
     ...input,
     sessionId: session.id,
     createdAt: '2026-05-05T12:02:00.000Z',
   };
+}
+
+function filterEventsAfter(events: unknown[], after: string | null): unknown[] {
+  const cursor = Number(after ?? 0);
+  return events.filter((event) => {
+    if (!event || typeof event !== 'object') return true;
+    const record = event as { id?: unknown; sequence?: unknown };
+    const eventCursor = typeof record.id === 'number' ? record.id : record.sequence;
+    return typeof eventCursor !== 'number' || eventCursor > cursor;
+  });
 }
 
 function callbackFixture(input: { id: string; status: string; attempts: number; maxAttempts: number; lastError?: string }) {

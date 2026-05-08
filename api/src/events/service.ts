@@ -24,6 +24,7 @@ const globalEventTypes = new Set<NormalizedEventType>([
 
 type PersistedEvent<T extends NormalizedEventType = NormalizedEventType> = EventRecord & NormalizedEvent<T>;
 type EventSubscriber = (event: PersistedEvent) => void;
+type GlobalEventSubscriber = { handler: EventSubscriber; allEvents: boolean };
 
 type AppendEventBase<T extends NormalizedEventType> = {
   sessionId: string;
@@ -38,7 +39,7 @@ export type AppendEventInput<T extends NormalizedEventType = NormalizedEventType
 
 export class EventService {
   private readonly subscribers = new Map<string, Set<EventSubscriber>>();
-  private readonly globalSubscribers = new Set<EventSubscriber>();
+  private readonly globalSubscribers = new Set<GlobalEventSubscriber>();
 
   constructor(private readonly store: EventStore) {}
 
@@ -68,6 +69,10 @@ export class EventService {
     return (await this.store.listEvents(afterId)).filter(isGlobalEvent);
   }
 
+  async listAllEvents(afterId?: number): Promise<EventRecord[]> {
+    return this.store.listEvents(afterId);
+  }
+
   publishExternal(event: EventRecord): void {
     this.publish(event);
   }
@@ -84,17 +89,24 @@ export class EventService {
   }
 
   subscribeAll(subscriber: EventSubscriber): () => void {
-    this.globalSubscribers.add(subscriber);
+    return this.subscribeGlobal(subscriber, false);
+  }
+
+  subscribeAllEvents(subscriber: EventSubscriber): () => void {
+    return this.subscribeGlobal(subscriber, true);
+  }
+
+  private subscribeGlobal(subscriber: EventSubscriber, allEvents: boolean): () => void {
+    const record = { handler: subscriber, allEvents };
+    this.globalSubscribers.add(record);
     return () => {
-      this.globalSubscribers.delete(subscriber);
+      this.globalSubscribers.delete(record);
     };
   }
 
   private publish(event: PersistedEvent): void {
-    if (isGlobalEvent(event)) {
-      for (const subscriber of this.globalSubscribers) {
-        subscriber(event);
-      }
+    for (const subscriber of this.globalSubscribers) {
+      if (subscriber.allEvents || isGlobalEvent(event)) subscriber.handler(event);
     }
     for (const subscriber of this.subscribers.get(event.sessionId) ?? []) {
       subscriber(event);

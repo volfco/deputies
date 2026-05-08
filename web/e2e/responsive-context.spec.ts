@@ -66,7 +66,7 @@ async function mockApi(page: Page): Promise<void> {
       return;
     }
 
-    if (url.pathname === `/sessions/${sessionId}/events/stream`) {
+    if (url.pathname === '/events/stream') {
       await route.fulfill({
         body: '',
         headers: { 'content-type': 'text/event-stream' },
