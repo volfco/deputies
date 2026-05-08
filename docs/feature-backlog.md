@@ -47,6 +47,16 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Snapshot/image baking for common repos and build artifacts, with Flue startup refresh for stale or missing worktrees.
 - Upstream Flue cancellation improvement for built-in bash/tool execution.
 
+## Automations
+
+- Scheduled prompts for a session, repository, or integration source.
+- Recurring tasks with cron-like schedules, timezone support, pause/resume, and failure backoff.
+- One-off delayed tasks and reminders.
+- Automation ownership, audit trail, run history, and last/next-run visibility in the web UI.
+- Integration-triggered automations such as daily Slack summaries, weekly repository health checks, and scheduled GitHub issue/PR sweeps.
+- Guardrails for max frequency, concurrency, allowed repositories/sources, and external callback behavior.
+- Scheduler loop that enqueues normal messages into sessions instead of bypassing session/message/run invariants.
+
 ## Sandboxes
 
 - Local Docker provider, distinct from the existing `local` host-subprocess development provider.
