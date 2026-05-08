@@ -10,9 +10,9 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Preview URL detection and surfacing from sandbox/deployment output, including final callback links for Slack/GitHub and context-panel artifacts in the web UI.
 - GitHub collaborator permission gating in addition to the current repository, user, org, and trigger-phrase gates.
 - GitHub label-based triggers for teams that want non-mention workflows.
-- GitHub final callback links for PR/artifact URLs after provider-owned PR helpers exist.
-- Shared integration utilities for delivery dedupe, allowlists, external-thread session mapping, processed-item filtering, prompt section rendering, and callback target parsing before adding the next major integration.
-- Source-agnostic received/final-response lifecycle so integrations add lightweight received signals while callback senders own exactly one final external reply.
+- GitHub final callback links for provider-owned PR URLs after PR helpers exist.
+- Continue consolidating shared integration utilities, especially allowlist helpers, prompt section rendering, and callback target parsing before adding the next major integration.
+- Source-agnostic start/queued/final-response lifecycle so integrations add lightweight start signals while callback senders own exactly one final external reply.
 - Global runner/agent instruction injection for integration behavior that should not appear in chat-visible source prompts.
 - Linear integration for issue mentions, assignments, and comment follow-ups.
 - Generic webhook mapping/filter/template configuration beyond the current simple payload shape.
@@ -20,6 +20,8 @@ This is a living backlog for product, integration, runtime, and operations work.
 ## Web UI
 
 - Session tagging, filtering, and grouping.
+- Multiplayer-friendly session discovery controls without making sessions private by default.
+- Session filters for all sessions, started by me, participated in, and tag-based views.
 - User-selectable model, repository, branch, and execution settings.
 - Repository picker with saved defaults per user/team/source.
 - Session list pagination and server-side search.
@@ -27,7 +29,7 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Better run and sandbox status in the context panel.
 - Preview URL cards in the context panel, with source, expiry/status, and quick-open/copy actions.
 - Surface sandbox cleanup events and failures more clearly.
-- Show callback delivery status per session/message.
+- Expand callback delivery UI with filtering and clearer retry/failure history.
 - Improve archived-session browsing and bulk cleanup.
 - Playwright smoke tests for desktop/mobile flows.
 
@@ -39,7 +41,7 @@ This is a living backlog for product, integration, runtime, and operations work.
 - Multi-repository task support with one primary writable repo, auxiliary read-only context repos by default, and explicit multi-writable change sets when a task spans repos.
 - Prompt templates and snapshot tests for Slack/GitHub/Linear inputs.
 - Better repo resolution from Slack/GitHub/Linear context.
-- Populate `repository list` from GitHub App installation repositories instead of only `GITHUB_ALLOWED_REPOSITORIES`, while keeping the allowlist as an optional safety filter.
+- Populate `repository list` from GitHub App installation repositories instead of only `GITHUB_ALLOWED_REPOSITORIES`, while keeping the allowlist enforced at webhook intake and runtime token minting.
 - Setup/install hook observability beyond `repository_ready`.
 - Preview URL artifact emission from agent tools and sandbox processes, with normalization for common local/dev-server/deployment URL patterns.
 - Snapshot/image baking for common repos and build artifacts, with Flue startup refresh for stale or missing worktrees.
@@ -57,7 +59,11 @@ This is a living backlog for product, integration, runtime, and operations work.
 ## Scale And Operations
 
 - Multiple product users and organizations with separate auth, session ownership, quotas, and audit trails.
-- Per-user/per-team integration authorization policies for Slack, GitHub, Linear, and web UI entry points.
+- Session participants, including `createdByUserId` and users who send messages or otherwise participate.
+- Session tags as a general metadata layer, starting with API/manual tags and later integration-derived tags such as `github:owner/repo`, `slack:channel`, and `repo:owner/name`.
+- `GET /sessions` filters for `createdBy=me`, `participation=mine`, `tag=...`, and eventually source/repository filters.
+- Preserve the shared workspace model: session filtering is for discovery and noise reduction, not an RBAC or visibility boundary.
+- Per-user/per-team integration authorization policies for Slack, GitHub, Linear, and web UI entry points, beyond the current global allowlists.
 - Metrics endpoint or structured timing logs.
 - Pending-message, active-run, and worker-throughput dashboards.
 - Session/event table pagination and retention policies.

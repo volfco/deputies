@@ -1169,10 +1169,11 @@ function CancelRunButton(props: { cancelling: boolean; onCancelRun: () => void }
 }
 
 function Diagnostics(props: { events: AgentEvent[] }) {
+  const [open, setOpen] = useState(false);
   if (!props.events.length) return null;
 
   return (
-    <details className="min-w-0 rounded-md border border-slate-800 bg-slate-950/30 p-2">
+    <details className="min-w-0 rounded-md border border-slate-800 bg-slate-950/30 p-2" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer text-sm text-slate-400">Diagnostics · {props.events.length} events</summary>
       <div className="mt-2 grid min-w-0 gap-2">
         {props.events.map((event) => (
@@ -1184,6 +1185,7 @@ function Diagnostics(props: { events: AgentEvent[] }) {
             </div>
           </article>
         ))}
+        <Button className="justify-self-start border-slate-700 bg-slate-900/80 px-2 text-slate-200 hover:bg-slate-800" type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Collapse diagnostics</Button>
       </div>
     </details>
   );
