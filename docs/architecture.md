@@ -231,14 +231,16 @@ store -> postgres driver + shared record/event types
 Forbidden dependencies:
 
 ```txt
-api -> runner-flue
+api/app -> runner-flue, except src/index.ts
 integrations -> runner-flue
-runner-flue -> api
-store -> domain services
 sessions/messages -> integration-specific modules
+runner-flue -> api/app/integrations
+store -> domain services
 ```
 
-Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and makes tests easier. Provider SDKs should stay in provider-specific sandbox adapters, such as `api/src/sandbox/daytona.ts` for `@daytona/sdk`. Store implementations may import shared data types, but must not import session/message/event service classes.
+`api/src/index.ts` is the composition root exception. It is allowed to wire concrete stores, runners, sandboxes, and integrations because process startup is where configuration is translated into concrete dependencies. Other API/app modules must depend on service contracts instead of runner implementations.
+
+Only `runner-flue` should import `@flue/sdk`. This keeps Flue replaceable and makes tests easier. Provider SDKs should stay in provider-specific adapters, such as `api/src/sandbox/daytona.ts` for `@daytona/sdk`. Store implementations may import shared data types, but must not import session/message/event service classes.
 
 The HTTP transport uses Hono on Node via `@hono/node-server`. This keeps the API layer lightweight while giving us middleware hooks for auth, request IDs, CORS, body limits, and route grouping as integrations grow.
 

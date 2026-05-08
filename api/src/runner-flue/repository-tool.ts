@@ -1,6 +1,5 @@
 import type { ToolDef } from '@flue/sdk';
-import type { GitHubRepository, GitHubRepositoryAccess } from '../integrations/github/types.js';
-import type { RepositoryAccessProvider } from '../repositories/setup.js';
+import type { GitHubRepository, GitHubRepositoryAccess, RepositoryAccessProvider } from '../repositories/setup.js';
 import type { SandboxHandle } from '../sandbox/types.js';
 import type { RunnerInput } from '../runner/types.js';
 import type { AgentRef } from './git-tool.js';

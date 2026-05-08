@@ -1,5 +1,16 @@
-import type { GitHubRepository, GitHubRepositoryAccess } from '../integrations/github/types.js';
 import type { SandboxHandle } from '../sandbox/types.js';
+
+export type GitHubRepository = {
+  owner: string;
+  repo: string;
+};
+
+export type GitHubRepositoryAccess = GitHubRepository & {
+  provider: 'github';
+  cloneUrl: string;
+  expiresAt: Date;
+  auth: { type: 'bearer'; token: string };
+};
 
 export type RepositoryAccessProvider = {
   getRepositoryAccess(repository: GitHubRepository): Promise<GitHubRepositoryAccess>;

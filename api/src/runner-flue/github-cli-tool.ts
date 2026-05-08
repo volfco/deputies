@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolDef } from '@flue/sdk';
-import type { GitHubRepositoryAccess } from '../integrations/github/types.js';
+import type { GitHubRepositoryAccess } from '../repositories/setup.js';
 import { resolveActiveRepositoryAccess, type RepositoryToolServices } from './repository-tool.js';
 
 const BLOCKED_COMMANDS = new Set(['alias', 'auth', 'config', 'extension']);
