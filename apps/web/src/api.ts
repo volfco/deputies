@@ -93,14 +93,14 @@ export class ApiError extends Error {
   }
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3583').replace(/\/$/, '');
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const requestTimeoutMs = 15_000;
 const requestRetryDelayMs = 250;
 export const apiConnectionOkEvent = 'deputies:api-connection-ok';
 export const apiConnectionDelayedEvent = 'deputies:api-connection-delayed';
 
 export function getApiBaseUrl(): string {
-  return apiBaseUrl;
+  return apiBaseUrl || window.location.origin;
 }
 
 export async function getHealth(): Promise<Health> {

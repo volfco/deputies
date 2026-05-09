@@ -11,15 +11,16 @@ RUN pnpm install --frozen-lockfile
 
 COPY apps/web apps/web
 
-ARG VITE_API_BASE_URL=http://localhost:3583
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm --dir apps/web build
 
-FROM nginx:1.29-alpine AS runtime
+FROM caddy:2.10-alpine AS runtime
 
 ENV PORT=5173
+ENV API_UPSTREAM=http://api:3583
 
-COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
-COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+COPY apps/web/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/apps/web/dist /usr/share/caddy
 
 EXPOSE 5173

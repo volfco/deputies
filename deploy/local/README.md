@@ -5,7 +5,7 @@ This Compose stack runs the production-style containers locally:
 - `postgres`: local Postgres database
 - `api-migrate`: one-shot database migration job
 - `api`: compiled API and worker process
-- `web`: built Vite app served by nginx
+- `web`: built Vite app served by Caddy, with API routes proxied to `api`
 
 ## Prerequisites
 
@@ -30,13 +30,13 @@ docker compose -f deploy/local/docker-compose.yml up -d --build
 The services are available at:
 
 - Web: `http://localhost:5173`
-- API: `http://localhost:3583`
+- API direct: `http://localhost:3583`
 - Postgres: `localhost:5432`
 
-Check API health:
+Check proxied API health:
 
 ```sh
-curl http://localhost:3583/health
+curl http://localhost:5173/health
 ```
 
 ## Restart

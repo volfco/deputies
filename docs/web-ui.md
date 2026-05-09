@@ -11,10 +11,10 @@ pnpm api:dev
 pnpm web:dev
 ```
 
-The web app uses `VITE_API_BASE_URL` when set and otherwise calls `http://localhost:3583`. For session-cookie auth, the browser UI host and API host should use the same hostname family. For example, use `localhost` for both the Vite app and API instead of mixing `localhost` and `127.0.0.1`.
+The web app uses same-origin API requests by default. In Vite dev mode, `apps/web/vite.config.ts` proxies `/health`, `/auth`, `/sessions`, `/events`, and `/webhooks` to the API at `VITE_API_PROXY_TARGET` or `http://localhost:3583`.
 
 ```sh
-VITE_API_BASE_URL=http://localhost:3583 pnpm web:dev
+VITE_API_PROXY_TARGET=http://localhost:3583 pnpm web:dev
 ```
 
 ## Auth
@@ -38,7 +38,7 @@ AUTH_STATIC_USERNAME=dev
 AUTH_STATIC_PASSWORD=dev-secret
 AUTH_SESSION_SECRET=replace-with-random-local-secret
 AUTH_COOKIE_SECURE=false
-VITE_API_BASE_URL=http://localhost:3583
+AUTH_COOKIE_SAME_SITE=lax
 ```
 
 Local GitHub App session-auth example:
@@ -52,9 +52,8 @@ AUTH_SUCCESS_REDIRECT_URL=http://localhost:5173
 WEB_BASE_URL=http://localhost:5173
 GITHUB_APP_CLIENT_ID=Iv1.example
 GITHUB_APP_CLIENT_SECRET=github-app-client-secret
-GITHUB_APP_CALLBACK_URL=http://localhost:3583/auth/oauth/github/callback
+GITHUB_APP_CALLBACK_URL=http://localhost:5173/auth/oauth/github/callback
 AUTH_GITHUB_ALLOWED_USERS=your-github-login
-VITE_API_BASE_URL=http://localhost:3583
 ```
 
 For GitHub App login, configure the GitHub App's callback URL to exactly match `GITHUB_APP_CALLBACK_URL`. The same GitHub App can also provide runtime repository access through `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`; those are separate values from the app's user-authorization client ID and client secret.
@@ -88,4 +87,4 @@ The web app builds to static assets:
 pnpm web:build
 ```
 
-Deploy `apps/web/dist` to a CDN/static host and set `VITE_API_BASE_URL` to the public API origin at build time. Also set the API service's `WEB_BASE_URL` to the deployed web UI URL so the API allows that origin for credentialed CORS requests and uses it for integration session links. Do not bake bearer tokens, static passwords, or session secrets into the web build.
+For production-like deployments, serve `apps/web/dist` behind a reverse proxy that forwards API routes to the API service. Leave `VITE_API_BASE_URL` empty for same-origin requests. If the web assets are deployed without a proxy, set `VITE_API_BASE_URL` to the public API origin at build time and set the API service's `WEB_BASE_URL` to the deployed web UI URL so the API allows that origin for credentialed CORS requests and uses it for integration session links. Do not bake bearer tokens, static passwords, or session secrets into the web build.

@@ -533,7 +533,7 @@ async function setAuthSessionCookie(c: Context, config: AppConfig, store: AppSto
     createdAt: now,
     expiresAt: new Date(now.getTime() + sessionMaxAgeSeconds * 1000),
   });
-  c.header('set-cookie', createSessionCookie({ sessionId, secure: config.authCookieSecure }));
+  c.header('set-cookie', createSessionCookie(config, sessionId));
 }
 
 function serializeAuthUser(user: AuthUserRecord) {

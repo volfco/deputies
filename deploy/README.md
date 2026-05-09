@@ -1,15 +1,17 @@
 # Deployment Configurations
 
-This directory contains deployment-specific configuration for running Deputies outside local development.
+This directory contains deployment-specific configuration for running Deputies outside the pnpm development workflow.
 
-Deployable source lives under `apps/`:
+Deployable source and shared Dockerfiles live under `apps/`:
 
-- `apps/api/`: API and worker service.
-- `apps/web/`: static web UI build.
+- `apps/api/`: API and worker service, including `apps/api/Dockerfile`.
+- `apps/web/`: static web UI build, including `apps/web/Dockerfile`.
 
-Local development configuration lives under `deploy/local/`. Use the root `pnpm db:up` and `pnpm db:down` scripts instead of calling Docker Compose directly.
+Deployment target docs:
 
-Use one subdirectory per deployment target or infrastructure provider, for example:
+- `local/`: local production-style Docker Compose stack.
+
+Add one subdirectory per deployment target or infrastructure provider, for example:
 
 - `railway/`
 - `docker/`

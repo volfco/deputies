@@ -10,17 +10,18 @@ Slack webhooks do not use product API session or bearer auth.
 
 Real Slack must call a public HTTPS URL. `portless` is useful for local emulators, but it does not expose your machine to Slack's cloud.
 
-Use a tunnel such as ngrok or cloudflared:
+Use a tunnel such as ngrok or cloudflared pointed at the web proxy:
 
 ```sh
-ngrok http 3583
+ngrok http 5173
 ```
 
-Run the API with Slack config:
+Run the API with Slack config and the web proxy:
 
 ```sh
 cp .env.example .env.local
 set -a; . ./.env.local; set +a; pnpm api:dev
+pnpm web:dev
 ```
 
 Slack app settings:

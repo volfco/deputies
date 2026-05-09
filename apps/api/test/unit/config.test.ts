@@ -21,6 +21,7 @@ describe('loadConfig', () => {
       apiAuthMode: 'none',
       authProvider: 'static',
       authCookieSecure: false,
+      authCookieSameSite: 'lax',
       githubOAuthBaseUrl: 'https://github.com',
       authGithubAllowedUsers: [],
       authGithubAllowedOrganizations: [],
@@ -61,6 +62,7 @@ describe('loadConfig', () => {
         AUTH_STATIC_PASSWORD: 'password',
         AUTH_SESSION_SECRET: 'session-secret',
         AUTH_COOKIE_SECURE: 'true',
+        AUTH_COOKIE_SAME_SITE: 'none',
         AUTH_SUCCESS_REDIRECT_URL: 'https://deputies.example',
         WEB_BASE_URL: 'https://deputies.example/app',
         AUTH_GITHUB_ALLOWED_USERS: 'octocat, monalisa',
@@ -116,6 +118,7 @@ describe('loadConfig', () => {
       authStaticPassword: 'password',
       authSessionSecret: 'session-secret',
       authCookieSecure: true,
+      authCookieSameSite: 'none',
       authSuccessRedirectUrl: 'https://deputies.example',
       webBaseUrl: 'https://deputies.example/app',
       authGithubAllowedUsers: ['octocat', 'monalisa'],
@@ -268,6 +271,7 @@ describe('loadConfig', () => {
 
   it('rejects invalid enum values', () => {
     expect(() => loadConfig({ RUN_MODE: 'cloudflare' })).toThrow('Expected one of all, api, worker');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SAME_SITE: 'strict' })).toThrow('Expected one of lax, none');
   });
 
   it('rejects invalid boolean values', () => {

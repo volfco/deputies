@@ -15,7 +15,7 @@ services:
       TEST_DATABASE_URL: postgres://flue:flue@postgres:5432/flue_test
       AUTH_SUCCESS_REDIRECT_URL: http://localhost:5173
       WEB_BASE_URL: http://localhost:5173
-      GITHUB_APP_CALLBACK_URL: http://localhost:3583/auth/oauth/github/callback
+      GITHUB_APP_CALLBACK_URL: http://localhost:5173/auth/oauth/github/callback
     ports:
       - "3583:3583"
     depends_on:
@@ -44,9 +44,10 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_BASE_URL: http://localhost:3583
+        VITE_API_BASE_URL: ""
     environment:
       PORT: 5173
+      API_UPSTREAM: http://api:3583
     ports:
       - "5173:5173"
     depends_on:

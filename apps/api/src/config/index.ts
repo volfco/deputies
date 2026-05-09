@@ -4,6 +4,7 @@ export type SandboxProviderKind = 'fake' | 'local' | 'local-docker' | 'daytona' 
 export type AppStoreKind = 'memory' | 'postgres';
 export type ApiAuthMode = 'none' | 'bearer' | 'session';
 export type AuthProviderKind = 'static' | 'github';
+export type AuthCookieSameSite = 'lax' | 'none';
 
 export type AppConfig = {
   port: number;
@@ -24,6 +25,7 @@ export type AppConfig = {
   authStaticPassword?: string;
   authSessionSecret?: string;
   authCookieSecure: boolean;
+  authCookieSameSite: AuthCookieSameSite;
   authSuccessRedirectUrl?: string;
   webBaseUrl?: string;
   githubAppClientId?: string;
@@ -82,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     apiAuthMode: parseRequiredEnum(env.API_AUTH_MODE, ['none', 'bearer', 'session'], 'API_AUTH_MODE'),
     authProvider: parseEnum(env.AUTH_PROVIDER, ['static', 'github'], 'static'),
     authCookieSecure: parseBoolean(env.AUTH_COOKIE_SECURE, false, 'AUTH_COOKIE_SECURE'),
+    authCookieSameSite: parseEnum(env.AUTH_COOKIE_SAME_SITE, ['lax', 'none'], 'lax'),
     githubOAuthBaseUrl: env.GITHUB_OAUTH_BASE_URL ?? 'https://github.com',
     authGithubAllowedUsers: parseStringList(env.AUTH_GITHUB_ALLOWED_USERS),
     authGithubAllowedOrganizations: parseStringList(env.AUTH_GITHUB_ALLOWED_ORGANIZATIONS),
