@@ -60,3 +60,7 @@ pnpm web:build
 ```
 
 Do not claim Postgres-backed tests could not run until you have tried `./deploy/daytona/start-postgres.sh` or confirmed the sandbox is not using the Daytona image from `deploy/daytona/Dockerfile`.
+
+## Commits
+
+Commit messages should follow Conventional Commits style.
