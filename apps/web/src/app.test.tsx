@@ -122,6 +122,8 @@ it('keeps new-session action available from the sidebar on mobile', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'New session' }));
 
   expect(await screen.findByText('What needs doing?')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Open sessions' }));
+  expect(screen.getByRole('button', { name: 'Hide sidebar' })).toBeInTheDocument();
 });
 
 it('keeps the sidebar archive action exposed on mobile', async () => {
