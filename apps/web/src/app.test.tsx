@@ -110,17 +110,16 @@ it('keeps sidebar reachable after mobile open, hide, and reopen actions', async 
   expect(screen.getByRole('button', { name: 'Hide sidebar' })).toBeInTheDocument();
 });
 
-it('keeps fixed new-session action reachable from a selected session on mobile', async () => {
+it('keeps new-session action available from the sidebar on mobile', async () => {
   mockApi();
   render(<App />);
 
-  expect(await screen.findAllByRole('button', { name: 'New session' })).not.toHaveLength(0);
-
-  fireEvent.click(screen.getByRole('button', { name: 'Open sessions' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Open sessions' }));
   fireEvent.click(screen.getByRole('button', { name: /Existing session/ }));
   expect(await screen.findByRole('heading', { name: 'Existing session' })).toBeInTheDocument();
 
-  fireEvent.click(screen.getAllByRole('button', { name: 'New session' })[0]!);
+  fireEvent.click(screen.getByRole('button', { name: 'Open sessions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'New session' }));
 
   expect(await screen.findByText('What needs doing?')).toBeInTheDocument();
 });

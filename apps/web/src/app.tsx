@@ -869,17 +869,6 @@ export function App() {
       {startupLoading ? <StartupLoadingPanel connectionStatus={connectionStatus} /> : bearerAuthRequired && !token ? <BearerAuthPanel draftToken={draftToken} setDraftToken={setDraftToken} saveToken={saveToken} /> : sessionAuthRequired && !currentUser ? <SessionAuthPanel password={loginPassword} provider={health?.authProvider ?? 'static'} username={loginUsername} onPasswordChange={setLoginPassword} onSubmit={handleLogin} onUsernameChange={setLoginUsername} /> : (
         <>
 
-      {!sidebarOpen ? (
-        <div className="fixed left-3 top-3 z-30 flex gap-2 md:hidden">
-          <Button className="h-9 w-9 p-0 shadow-xl" variant="secondary" size="icon" onClick={expandSidebar} aria-label="Open sessions" title="Open sessions">
-            <PanelLeftOpen className="h-4 w-4" />
-          </Button>
-          <Button className="h-9 w-9 p-0 shadow-xl" variant="secondary" size="icon" onClick={startNewThread} aria-label="New session" title="New session" disabled={!canCallApi}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-      ) : null}
-
       <section className={cn('grid min-h-0 flex-1 grid-cols-1', sidebarCollapsed ? 'md:grid-cols-[3.75rem_minmax(0,1fr)]' : 'md:grid-cols-[18rem_minmax(0,1fr)]')}>
         {sidebarCollapsed ? (
           <aside className="hidden min-h-0 border-r border-border bg-card/95 p-3 md:flex">
@@ -936,10 +925,12 @@ export function App() {
               <ThreadHeader
                 editingTitle={editingTitle}
                 selectedSession={selectedSession}
+                showOpenSidebar={!sidebarOpen}
                 titleDraft={titleDraft}
                 onArchive={handleArchiveSession}
                 onCancelTitle={() => setEditingTitle(false)}
                 onEditTitle={() => setEditingTitle(true)}
+                onOpenSidebar={expandSidebar}
                 onTitleDraftChange={setTitleDraft}
                 onUpdateTitle={handleUpdateTitle}
               />
@@ -1349,30 +1340,39 @@ function MessageComposer(props: {
 function ThreadHeader(props: {
   editingTitle: boolean;
   selectedSession: Session;
+  showOpenSidebar: boolean;
   titleDraft: string;
   onArchive: () => void;
   onCancelTitle: () => void;
   onEditTitle: () => void;
+  onOpenSidebar: () => void;
   onTitleDraftChange: (value: string) => void;
   onUpdateTitle: (event: FormEvent) => void;
 }) {
   return (
     <section className="sticky top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
-      <div className="min-w-0 overflow-hidden">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Session</p>
-        {props.editingTitle ? (
-          <form className="mt-1 flex flex-wrap items-center gap-2" onSubmit={props.onUpdateTitle}>
-            <Input className="max-w-xl" value={props.titleDraft} onChange={(event) => props.onTitleDraftChange(event.target.value)} autoFocus />
-            <Button type="submit" disabled={!props.titleDraft.trim()}>Save</Button>
-            <Button type="button" variant="secondary" onClick={props.onCancelTitle}>Cancel</Button>
-          </form>
-        ) : (
-          <div className="mt-1 flex min-w-0 items-center gap-1">
-            <h2 className="min-w-0 truncate text-base font-semibold text-foreground">{props.selectedSession.title || 'Untitled session'}</h2>
-            <Button className="h-7 w-7 shrink-0 p-0" type="button" variant="ghost" size="icon" onClick={props.onEditTitle} aria-label="Edit title" title="Edit title"><Pencil className="h-3.5 w-3.5" /></Button>
-          </div>
-        )}
-        <p className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">{props.selectedSession.id}</p>
+      <div className="flex min-w-0 items-start gap-2 overflow-hidden">
+        {props.showOpenSidebar ? (
+          <Button className="mt-4 h-8 w-8 shrink-0 p-0 md:hidden" variant="ghost" size="icon" onClick={props.onOpenSidebar} aria-label="Open sessions" title="Open sessions">
+            <PanelLeftOpen className="h-4 w-4" />
+          </Button>
+        ) : null}
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Session</p>
+          {props.editingTitle ? (
+            <form className="mt-1 flex flex-wrap items-center gap-2" onSubmit={props.onUpdateTitle}>
+              <Input className="max-w-xl" value={props.titleDraft} onChange={(event) => props.onTitleDraftChange(event.target.value)} autoFocus />
+              <Button type="submit" disabled={!props.titleDraft.trim()}>Save</Button>
+              <Button type="button" variant="secondary" onClick={props.onCancelTitle}>Cancel</Button>
+            </form>
+          ) : (
+            <div className="mt-1 flex min-w-0 items-center gap-1">
+              <h2 className="min-w-0 truncate text-base font-semibold text-foreground">{props.selectedSession.title || 'Untitled session'}</h2>
+              <Button className="h-7 w-7 shrink-0 p-0" type="button" variant="ghost" size="icon" onClick={props.onEditTitle} aria-label="Edit title" title="Edit title"><Pencil className="h-3.5 w-3.5" /></Button>
+            </div>
+          )}
+          <p className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">{props.selectedSession.id}</p>
+        </div>
       </div>
       <div className="grid min-h-9 shrink-0 grid-cols-[auto_auto] items-center justify-items-end gap-2 justify-self-end">
         <Badge className={cn('col-start-1', statusTextClass(props.selectedSession.status))}>{props.selectedSession.status}</Badge>
