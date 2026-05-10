@@ -555,11 +555,14 @@ export function App() {
     const firstPrompt = newThreadPrompt.trim();
     if (createSessionInFlightRef.current || !firstPrompt) return;
     createSessionInFlightRef.current = true;
+    const firstRepository = newThreadRepository.trim();
+    blurFocusedTextControl();
+    setNewThreadPrompt('');
+    setNewThreadRepository('');
     setLoading(true);
     setError('');
     try {
       const session = await createSession({ title: titleFromPrompt(firstPrompt), token });
-      const firstRepository = newThreadRepository.trim();
       const message = await enqueueMessage({
         sessionId: session.id,
         prompt: firstPrompt,
@@ -576,11 +579,10 @@ export function App() {
       setArtifacts([]);
       setCallbacks([]);
       eventCursor.current = 0;
-      blurFocusedTextControl();
-      setNewThreadPrompt('');
-      setNewThreadRepository('');
       setIsCreatingThread(false);
     } catch (err) {
+      setNewThreadPrompt(firstPrompt);
+      setNewThreadRepository(firstRepository);
       handleApiError(err);
     } finally {
       setLoading(false);
@@ -1331,11 +1333,12 @@ function MessageComposer(props: {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const sent = await props.onSubmit({ prompt, repository });
-    if (sent) {
-      blurFocusedTextControl();
-      setPrompt('');
-    }
+    const submittedPrompt = prompt;
+    const submittedRepository = repository;
+    blurFocusedTextControl();
+    setPrompt('');
+    const sent = await props.onSubmit({ prompt: submittedPrompt, repository: submittedRepository });
+    if (!sent) setPrompt(submittedPrompt);
   }
 
   return (
