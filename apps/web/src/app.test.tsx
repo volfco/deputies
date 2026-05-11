@@ -705,6 +705,23 @@ it('renders tool diagnostics as readable activity with raw details collapsed', a
   expect(screen.getAllByText('Debug details')).toHaveLength(2);
 });
 
+it('labels unmatched tool start diagnostics as started instead of running', async () => {
+  mockApi({
+    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000127', sequence: 1, status: 'completed', prompt: 'inspect env' })],
+    events: [
+      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { sequences: [1], batchSize: 1 } }),
+      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { toolName: 'shell', toolCallId: 'tool-1', args: { command: 'pnpm test' } } }),
+    ],
+  });
+  render(<App />);
+
+  fireEvent.click(await screen.findByText(/Activity · 2 events/));
+
+  expect(screen.getByText('Command started: pnpm test')).toBeInTheDocument();
+  expect(screen.getByText('started')).toBeInTheDocument();
+  expect(screen.queryByText('running')).not.toBeInTheDocument();
+});
+
 it('renders custom tool text content without exposing the result envelope', async () => {
   mockApi({
     messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000125', sequence: 1, status: 'completed', prompt: 'push branch' })],

@@ -268,7 +268,7 @@ type DiagnosticActivity = {
   key: string;
   title: string;
   subtitle: string;
-  status: 'running' | 'completed' | 'failed' | 'info';
+  status: 'started' | 'completed' | 'failed' | 'info';
   createdAt: string;
   command?: string;
   detail?: string;
@@ -396,7 +396,7 @@ function formatToolActivity(start: AgentEvent | undefined, finish: AgentEvent | 
     key: `tool-${start?.sequence ?? 'missing'}-${finish?.sequence ?? 'running'}`,
     title: toolActivityTitle(toolName, command, taskPrompt, isError, Boolean(finish), Boolean(customTool)),
     subtitle: toolActivitySubtitle(start, finish),
-    status: finish ? (isError ? 'failed' : 'completed') : 'running',
+    status: finish ? (isError ? 'failed' : 'completed') : 'started',
     createdAt: (start ?? finish)!.createdAt,
     rawEvents: [start, finish].filter((item): item is AgentEvent => Boolean(item)),
   };
@@ -478,14 +478,14 @@ function standaloneActivityDetail(event: AgentEvent): string | undefined {
 }
 
 function diagnosticStatusLabel(status: DiagnosticActivity['status']): string {
-  if (status === 'running') return 'running';
+  if (status === 'started') return 'started';
   if (status === 'completed') return 'done';
   if (status === 'failed') return 'failed';
   return 'info';
 }
 
 function diagnosticStatusClass(status: DiagnosticActivity['status']): string {
-  if (status === 'running') return 'text-info';
+  if (status === 'started') return 'text-info';
   if (status === 'completed') return 'text-success';
   if (status === 'failed') return 'text-destructive';
   return 'text-muted-foreground';
