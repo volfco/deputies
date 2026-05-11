@@ -393,7 +393,7 @@ it('keeps a cancelled middle message inline with its surrounding batch', async (
   const response = screen.getByText('Deputy response');
 
   expect(message12.compareDocumentPosition(response)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-  expect(screen.getAllByText(/Diagnostics/)).toHaveLength(1);
+  expect(screen.getAllByText(/Activity/)).toHaveLength(1);
 });
 
 it('shows a jump control instead of autoscrolling after the user scrolls up', async () => {
@@ -660,8 +660,59 @@ it('shows run diagnostics for a single-message response', async () => {
 
   await screen.findByText('single response');
 
-  expect(screen.getByText(/Diagnostics · 2 events/)).toBeInTheDocument();
-  expect(screen.getByText('sandbox_ready')).toBeInTheDocument();
+  expect(screen.getByText(/Activity · 2 events/)).toBeInTheDocument();
+  expect(screen.getByText('fake sandbox ready')).toBeInTheDocument();
+});
+
+it('renders tool diagnostics as readable activity with raw details collapsed', async () => {
+  mockApi({
+    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000124', sequence: 1, status: 'completed', prompt: 'inspect env' })],
+    events: [
+      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { sequences: [1], batchSize: 1 } }),
+      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { toolName: 'shell', toolCallId: 'tool-1', args: { command: 'pnpm test' } } }),
+      eventFixture({ sequence: 3, type: 'tool_finished', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { toolName: 'shell', toolCallId: 'tool-1', isError: true, result: 'Tests failed' } }),
+      eventFixture({ sequence: 4, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { text: 'I ran the tests.' } }),
+    ],
+  });
+  render(<App />);
+
+  await screen.findByText('I ran the tests.');
+  fireEvent.click(screen.getByText(/Activity · 3 events/));
+
+  expect(screen.getByText('Command failed: pnpm test')).toBeInTheDocument();
+  expect(screen.getByText('pnpm test')).toBeInTheDocument();
+  expect(screen.getByText('Tests failed')).toBeInTheDocument();
+  expect(screen.getAllByText('Debug details')).toHaveLength(2);
+});
+
+it('renders custom tool text content without exposing the result envelope', async () => {
+  mockApi({
+    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000125', sequence: 1, status: 'completed', prompt: 'push branch' })],
+    events: [
+      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000225', messageId: '00000000-0000-4000-8000-000000000125', payload: { sequences: [1], batchSize: 1 } }),
+      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000225', messageId: '00000000-0000-4000-8000-000000000125', payload: { toolName: 'git', toolCallId: 'tool-1' } }),
+      eventFixture({
+        sequence: 3,
+        type: 'tool_finished',
+        runId: '00000000-0000-4000-8000-000000000225',
+        messageId: '00000000-0000-4000-8000-000000000125',
+        payload: {
+          toolName: 'git',
+          toolCallId: 'tool-1',
+          isError: false,
+          result: { content: [{ text: 'exitCode: 0\nstderr:\nremote: Create a pull request', type: 'text' }], details: { customTool: 'git' } },
+        },
+      }),
+    ],
+  });
+  render(<App />);
+
+  fireEvent.click(await screen.findByText(/Activity · 3 events/));
+
+  expect(screen.getByText('Git custom tool completed')).toBeInTheDocument();
+  const visibleToolOutput = screen.getByText(/remote: Create a pull request/, { selector: 'p' });
+  expect(visibleToolOutput).toBeInTheDocument();
+  expect(visibleToolOutput).not.toHaveTextContent('customTool');
 });
 
 it('identifies upstream sandbox provider failures during sandbox startup', async () => {
@@ -676,7 +727,7 @@ it('identifies upstream sandbox provider failures during sandbox startup', async
   });
   render(<App />);
 
-  fireEvent.click(await screen.findByText(/Diagnostics · 4 events/));
+  fireEvent.click(await screen.findByText(/Activity · 4 events/));
 
   expect(screen.getByText('Likely sandbox provider issue')).toBeInTheDocument();
   expect(screen.getByText(/starting a daytona sandbox/)).toBeInTheDocument();

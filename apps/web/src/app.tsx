@@ -1781,6 +1781,18 @@ function JsonPayload(props: { value: unknown }) {
   return <HighlightedCode code={JSON.stringify(props.value, null, 2)} language="json" wrap chrome={false} />;
 }
 
+type DiagnosticActivity = {
+  key: string;
+  title: string;
+  subtitle: string;
+  status: 'running' | 'completed' | 'failed' | 'info';
+  createdAt: string;
+  command?: string;
+  detail?: string;
+  error?: string;
+  rawEvents: AgentEvent[];
+};
+
 type DiagnosticFailureAnalysis = {
   title: string;
   detail: string;
@@ -1814,26 +1826,244 @@ function RetryMessagesButton(props: { count?: number; disabled?: boolean; onRetr
 function Diagnostics(props: { events: AgentEvent[] }) {
   const [open, setOpen] = useState(false);
   const failureAnalysis = analyzeDiagnosticFailure(props.events);
+  const activities = buildDiagnosticActivities(props.events);
   if (!props.events.length) return null;
 
   return (
     <details className="min-w-0 rounded-md border border-border bg-muted/30 p-2" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="cursor-pointer text-sm text-muted-foreground">Diagnostics · {props.events.length} events</summary>
+      <summary className="cursor-pointer text-sm text-muted-foreground">Activity · {props.events.length} events</summary>
       <div className="mt-2 grid min-w-0 gap-2">
         {failureAnalysis ? <FailureAnalysisNotice analysis={failureAnalysis} /> : null}
-        {props.events.map((event) => (
-          <article className="min-w-0 rounded-md border border-border bg-card/80 p-2" key={`${event.sessionId}-${event.sequence}`}>
-            <span className="text-xs text-muted-foreground">#{event.sequence} · {formatDate(event.createdAt)}</span>
-            <strong className="mt-1 block text-sm font-medium text-foreground">{event.type}</strong>
-            <div className="max-h-44 min-w-0 overflow-auto text-xs [&_figure]:my-2 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
-              <JsonPayload value={event.payload} />
-            </div>
-          </article>
-        ))}
-        <Button className="justify-self-start px-2" type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Collapse diagnostics</Button>
+        {activities.map((activity) => <DiagnosticActivityCard activity={activity} key={activity.key} />)}
+        <Button className="justify-self-start px-2" type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Collapse activity</Button>
       </div>
     </details>
   );
+}
+
+function DiagnosticActivityCard(props: { activity: DiagnosticActivity }) {
+  const { activity } = props;
+  return (
+    <article className="min-w-0 rounded-md border border-border bg-card/80 p-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span className="text-xs text-muted-foreground">{formatDate(activity.createdAt)} · {activity.subtitle}</span>
+          <strong className="mt-1 block break-words text-sm font-medium text-foreground">{activity.title}</strong>
+        </div>
+        <Badge className={diagnosticStatusClass(activity.status)}>{diagnosticStatusLabel(activity.status)}</Badge>
+      </div>
+      {activity.command ? <HighlightedCode code={activity.command} language="bash" wrap chrome={false} /> : null}
+      {activity.detail ? <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{activity.detail}</p> : null}
+      {activity.error ? <p className="mt-2 whitespace-pre-wrap break-words rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm leading-6 text-destructive">{activity.error}</p> : null}
+      <details className="mt-2 min-w-0">
+        <summary className="cursor-pointer text-xs text-muted-foreground">Debug details</summary>
+        <div className="mt-2 grid max-h-64 min-w-0 gap-2 overflow-auto text-xs [&_figure]:my-0 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
+          {activity.rawEvents.map((event) => (
+            <div className="min-w-0 rounded border border-border p-2" key={`${event.sessionId}-${event.sequence}`}>
+              <span className="text-muted-foreground">#{event.sequence} · {event.type}</span>
+              <JsonPayload value={event.payload} />
+            </div>
+          ))}
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function buildDiagnosticActivities(events: AgentEvent[]): DiagnosticActivity[] {
+  const activities: DiagnosticActivity[] = [];
+  const startsByKey = new Map<string, AgentEvent>();
+  const consumedStarts = new Set<AgentEvent>();
+
+  for (const event of events) {
+    if (event.type === 'tool_started') {
+      startsByKey.set(toolActivityKey(event) ?? `event-${event.sequence}`, event);
+      continue;
+    }
+
+    if (event.type === 'tool_finished') {
+      const start = startsByKey.get(toolActivityKey(event) ?? '');
+      if (start) consumedStarts.add(start);
+      activities.push(formatToolActivity(start, event));
+      continue;
+    }
+
+    activities.push(formatStandaloneActivity(event));
+  }
+
+  for (const event of events) {
+    if (event.type !== 'tool_started' || consumedStarts.has(event)) continue;
+    activities.push(formatToolActivity(event, null));
+  }
+
+  return activities.sort((a, b) => firstActivitySequence(a) - firstActivitySequence(b));
+}
+
+function formatToolActivity(start: AgentEvent | undefined, finish: AgentEvent | null): DiagnosticActivity {
+  const event = finish ?? start!;
+  const payload = { ...(start?.payload ?? {}), ...(finish?.payload ?? {}) };
+  const toolName = stringValue(payload.toolName) ?? 'tool';
+  const isError = finish ? payload.isError === true : false;
+  const command = toolCommand(start, finish);
+  const taskPrompt = toolName === 'task' ? stringValue(payload.prompt) : undefined;
+  const resultPreview = previewValue(payload.result);
+  const errorPreview = previewValue(payload.error) ?? (isError ? resultPreview : undefined);
+  const customTool = customToolName(payload.result);
+
+  const activity: DiagnosticActivity = {
+    key: `tool-${start?.sequence ?? 'missing'}-${finish?.sequence ?? 'running'}`,
+    title: toolActivityTitle(toolName, command, taskPrompt, isError, Boolean(finish), Boolean(customTool)),
+    subtitle: toolActivitySubtitle(start, finish),
+    status: finish ? (isError ? 'failed' : 'completed') : 'running',
+    createdAt: (start ?? finish)!.createdAt,
+    rawEvents: [start, finish].filter((item): item is AgentEvent => Boolean(item)),
+  };
+  if (command) activity.command = command;
+  if (!errorPreview && resultPreview) activity.detail = resultPreview;
+  if (errorPreview) activity.error = errorPreview;
+  return activity;
+}
+
+function formatStandaloneActivity(event: AgentEvent): DiagnosticActivity {
+  const isFailure = event.type === 'run_failed' || event.type === 'message_failed' || event.payload.isError === true;
+  const provider = stringValue(event.payload.provider);
+  const error = previewValue(event.payload.error);
+  const activity: DiagnosticActivity = {
+    key: `event-${event.sequence}`,
+    title: standaloneActivityTitle(event, provider, isFailure),
+    subtitle: `#${event.sequence}`,
+    status: isFailure ? 'failed' : 'info',
+    createdAt: event.createdAt,
+    rawEvents: [event],
+  };
+  const detail = standaloneActivityDetail(event);
+  if (!error && detail) activity.detail = detail;
+  if (error) activity.error = error;
+  return activity;
+}
+
+function toolActivityKey(event: AgentEvent): string | null {
+  const payload = event.payload;
+  const key = stringValue(payload.toolCallId) ?? stringValue(payload.taskId) ?? stringValue(payload.operationId);
+  if (key) return key;
+  const args = payload.args;
+  if (args && typeof args === 'object') return stringValue((args as Record<string, unknown>).operationId) ?? null;
+  return null;
+}
+
+function toolActivitySubtitle(start: AgentEvent | undefined, finish: AgentEvent | null): string {
+  if (start && finish) return `#${start.sequence} to #${finish.sequence}`;
+  return `#${start?.sequence ?? finish?.sequence}`;
+}
+
+function toolCommand(start: AgentEvent | undefined, finish: AgentEvent | null): string | undefined {
+  const startArgs = start?.payload.args;
+  if (startArgs && typeof startArgs === 'object') {
+    const command = stringValue((startArgs as Record<string, unknown>).command);
+    if (command) return command;
+  }
+
+  const result = finish?.payload.result;
+  if (result && typeof result === 'object') return stringValue((result as Record<string, unknown>).command);
+  return undefined;
+}
+
+function toolActivityTitle(toolName: string, command: string | undefined, taskPrompt: string | undefined, isError: boolean, finished: boolean, customTool: boolean): string {
+  const status = finished ? (isError ? 'failed' : 'completed') : 'started';
+  if (command) return `Command ${status}: ${singleLine(command, 80)}`;
+  if (taskPrompt) return `Task ${status}: ${singleLine(taskPrompt, 80)}`;
+  return `${humanizeEventName(toolName)}${customTool ? ' custom tool' : ''} ${status}`;
+}
+
+function standaloneActivityTitle(event: AgentEvent, provider: string | undefined, isFailure: boolean): string {
+  if (event.type === 'message_started') return 'Message run started';
+  if (event.type === 'sandbox_starting') return `Starting ${provider ?? 'sandbox'} sandbox`;
+  if (event.type === 'sandbox_ready') return `${provider ?? 'Sandbox'} sandbox ready`;
+  if (event.type === 'run_completed') return 'Run completed';
+  if (event.type === 'run_failed') return 'Run failed';
+  if (event.type === 'message_failed') return 'Message failed';
+  if (event.type === 'message_completed') return 'Message completed';
+  return `${humanizeEventName(event.type)}${isFailure ? ' failed' : ''}`;
+}
+
+function standaloneActivityDetail(event: AgentEvent): string | undefined {
+  if (event.type === 'message_started') {
+    const batchSize = typeof event.payload.batchSize === 'number' ? event.payload.batchSize : undefined;
+    return batchSize && batchSize > 1 ? `${batchSize} queued messages are running together.` : undefined;
+  }
+  if (event.type === 'sandbox_ready' && event.payload.created === true) return 'Sandbox was created for this run.';
+  return previewValue(event.payload.message) ?? previewValue(event.payload.result);
+}
+
+function diagnosticStatusLabel(status: DiagnosticActivity['status']): string {
+  if (status === 'running') return 'running';
+  if (status === 'completed') return 'done';
+  if (status === 'failed') return 'failed';
+  return 'info';
+}
+
+function diagnosticStatusClass(status: DiagnosticActivity['status']): string {
+  if (status === 'running') return 'text-info';
+  if (status === 'completed') return 'text-success';
+  if (status === 'failed') return 'text-destructive';
+  return 'text-muted-foreground';
+}
+
+function firstActivitySequence(activity: DiagnosticActivity): number {
+  return Math.min(...activity.rawEvents.map((event) => event.sequence));
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function previewValue(value: unknown): string | undefined {
+  if (typeof value === 'string') return singleLine(value.trim(), 600);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (!value || typeof value !== 'object') return undefined;
+  const contentText = previewTextContent(value as Record<string, unknown>);
+  if (contentText) return contentText;
+  try {
+    return singleLine(JSON.stringify(value, null, 2), 600);
+  } catch {
+    return undefined;
+  }
+}
+
+function previewTextContent(value: Record<string, unknown>): string | undefined {
+  if (!Array.isArray(value.content)) return undefined;
+  const text = value.content
+    .map((item) => {
+      if (!item || typeof item !== 'object') return undefined;
+      return stringValue((item as Record<string, unknown>).text);
+    })
+    .filter((item): item is string => Boolean(item))
+    .join('\n')
+    .trim();
+  if (!text) return undefined;
+  return truncateText(text, 1200);
+}
+
+function customToolName(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const details = (value as Record<string, unknown>).details;
+  if (!details || typeof details !== 'object') return undefined;
+  return stringValue((details as Record<string, unknown>).customTool);
+}
+
+function singleLine(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function humanizeEventName(value: string): string {
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function MobileContextPanel(props: { repository: string | null; artifacts: Artifact[]; callbacks: CallbackDelivery[]; onReplayCallback: (callbackId: string) => void }) {
