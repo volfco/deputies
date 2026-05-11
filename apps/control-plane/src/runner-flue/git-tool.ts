@@ -9,10 +9,7 @@ export type AgentRef = {
   current?: FlueAgentPort;
 };
 
-export function createGitTool(input: {
-  agentRef: AgentRef;
-  repository: RepositoryToolServices;
-}): ToolDef {
+export function createGitTool(input: { agentRef: AgentRef; repository: RepositoryToolServices }): ToolDef {
   return {
     name: 'git',
     description:
@@ -97,9 +94,7 @@ function formatShellResult(result: { exitCode: number; stdout: string; stderr: s
 }
 
 function redactSecrets(value: string, token: string): string {
-  return value
-    .replaceAll(token, '[redacted]')
-    .replace(/gh[ousr]_[A-Za-z0-9_]+/g, '[redacted]');
+  return value.replaceAll(token, '[redacted]').replace(/gh[ousr]_[A-Za-z0-9_]+/g, '[redacted]');
 }
 
 function quoteShell(value: string): string {

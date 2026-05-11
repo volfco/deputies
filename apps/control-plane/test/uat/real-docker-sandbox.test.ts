@@ -32,7 +32,9 @@ describe.skipIf(!enabled)('real Docker sandbox UAT', () => {
     expect(first.created).toBe(true);
     await first.sandbox.fs?.writeFile('resume.txt', 'kept');
     await expect(first.sandbox.fs?.readFile('resume.txt')).resolves.toBe('kept');
-    await expect(first.sandbox.exec({ command: 'printf first', cwd: first.sandbox.workspacePath, timeoutMs: 5_000 })).resolves.toMatchObject({ exitCode: 0, stdout: 'first' });
+    await expect(
+      first.sandbox.exec({ command: 'printf first', cwd: first.sandbox.workspacePath, timeoutMs: 5_000 }),
+    ).resolves.toMatchObject({ exitCode: 0, stdout: 'first' });
 
     await provider.stop(first.record);
     await store.updateSandbox({ ...first.record, status: 'stopped', updatedAt: new Date() });
@@ -42,7 +44,9 @@ describe.skipIf(!enabled)('real Docker sandbox UAT', () => {
     expect(second.created).toBe(false);
     expect(second.sandbox.providerSandboxId).toBe(first.sandbox.providerSandboxId);
     await expect(second.sandbox.fs?.readFile('resume.txt')).resolves.toBe('kept');
-    await expect(second.sandbox.exec({ command: 'printf resumed', cwd: second.sandbox.workspacePath, timeoutMs: 5_000 })).resolves.toMatchObject({ exitCode: 0, stdout: 'resumed' });
+    await expect(
+      second.sandbox.exec({ command: 'printf resumed', cwd: second.sandbox.workspacePath, timeoutMs: 5_000 }),
+    ).resolves.toMatchObject({ exitCode: 0, stdout: 'resumed' });
   }, 60_000);
 });
 
@@ -60,7 +64,13 @@ class MemorySandboxStore implements SandboxStore {
   }
 
   async listActiveSandboxes(sessionId: string, provider: string): Promise<SandboxRecord[]> {
-    if (!this.record || this.record.sessionId !== sessionId || this.record.provider !== provider || this.record.destroyedAt) return [];
+    if (
+      !this.record ||
+      this.record.sessionId !== sessionId ||
+      this.record.provider !== provider ||
+      this.record.destroyedAt
+    )
+      return [];
     if (!['ready', 'stopped', 'unhealthy'].includes(this.record.status)) return [];
     return [this.record];
   }
@@ -81,18 +91,24 @@ class MemorySandboxStore implements SandboxStore {
 
 async function requireDockerImage(name: string): Promise<void> {
   const result = await docker(['image', 'inspect', name], { allowFailure: true });
-  if (result.exitCode !== 0) throw new Error(`Docker image ${name} is required. Build it with: docker build -f deploy/docker/Dockerfile -t ${name} .`);
+  if (result.exitCode !== 0)
+    throw new Error(
+      `Docker image ${name} is required. Build it with: docker build -f deploy/docker/Dockerfile -t ${name} .`,
+    );
 }
 
 async function cleanupDockerSandboxes(): Promise<void> {
-  const result = await docker([
-    'ps',
-    '-aq',
-    '--filter',
-    'label=deputies.sandbox-provider=docker',
-    '--filter',
-    `label=deputies.session-id=${sessionId}`,
-  ], { allowFailure: true });
+  const result = await docker(
+    [
+      'ps',
+      '-aq',
+      '--filter',
+      'label=deputies.sandbox-provider=docker',
+      '--filter',
+      `label=deputies.session-id=${sessionId}`,
+    ],
+    { allowFailure: true },
+  );
   const ids = result.stdout.trim().split('\n').filter(Boolean);
   if (!ids.length) return;
   await docker(['rm', '-f', ...ids], { allowFailure: true });
@@ -107,12 +123,17 @@ function docker(args: string[], options: { allowFailure?: boolean } = {}): Promi
     let stderr = '';
     child.stdout.setEncoding('utf-8');
     child.stderr.setEncoding('utf-8');
-    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
-    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
     child.on('error', reject);
     child.on('close', (code) => {
       const exitCode = code ?? 1;
-      if (exitCode !== 0 && !options.allowFailure) reject(new Error(stderr || stdout || `docker ${args[0] ?? ''} failed`));
+      if (exitCode !== 0 && !options.allowFailure)
+        reject(new Error(stderr || stdout || `docker ${args[0] ?? ''} failed`));
       else resolve({ exitCode, stdout, stderr });
     });
   });

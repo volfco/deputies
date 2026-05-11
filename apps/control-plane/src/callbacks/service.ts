@@ -38,7 +38,10 @@ export class CallbackService {
     private readonly events?: EventService,
   ) {}
 
-  async enqueueCompletion(input: { claimed: ClaimedMessage; result: RunnerResult }): Promise<CallbackDeliveryRecord | null> {
+  async enqueueCompletion(input: {
+    claimed: ClaimedMessage;
+    result: RunnerResult;
+  }): Promise<CallbackDeliveryRecord | null> {
     const callback = getCompletionCallback(input.claimed.message.context);
     if (!callback) return null;
 
@@ -73,8 +76,13 @@ export class CallbackService {
 
   async requestReplay(input: { sessionId: string; deliveryId: string }): Promise<CallbackDeliveryRecord> {
     const requestedAt = new Date();
-    const delivery = await this.store.requestCallbackReplay({ sessionId: input.sessionId, deliveryId: input.deliveryId, requestedAt });
-    if (!delivery) throw new CallbackServiceError('conflict', 'Callback delivery is not failed or does not exist for this session');
+    const delivery = await this.store.requestCallbackReplay({
+      sessionId: input.sessionId,
+      deliveryId: input.deliveryId,
+      requestedAt,
+    });
+    if (!delivery)
+      throw new CallbackServiceError('conflict', 'Callback delivery is not failed or does not exist for this session');
     await this.events?.append({
       sessionId: delivery.sessionId,
       ...(delivery.runId ? { runId: delivery.runId } : {}),
@@ -201,7 +209,16 @@ function getCompletionCallback(context: Record<string, unknown> | undefined): Co
   const owner = 'owner' in callback ? callback.owner : undefined;
   const repo = 'repo' in callback ? callback.repo : undefined;
   const issueNumber = 'issueNumber' in callback ? callback.issueNumber : undefined;
-  if (type === 'github' && typeof owner === 'string' && owner && typeof repo === 'string' && repo && typeof issueNumber === 'number' && Number.isInteger(issueNumber) && issueNumber > 0) {
+  if (
+    type === 'github' &&
+    typeof owner === 'string' &&
+    owner &&
+    typeof repo === 'string' &&
+    repo &&
+    typeof issueNumber === 'number' &&
+    Number.isInteger(issueNumber) &&
+    issueNumber > 0
+  ) {
     const target: Record<string, unknown> = { owner, repo, issueNumber };
     copyExternalReplyMetadata(callback, target);
     return { type: 'github', target };

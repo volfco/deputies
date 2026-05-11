@@ -11,16 +11,19 @@ describe('GitHub OAuth emulate UAT', () => {
   let baseUrl: string;
 
   beforeEach(async () => {
-    server = createServer(loadConfig({
-      API_AUTH_MODE: 'session',
-      AUTH_PROVIDER: 'github',
-      AUTH_SESSION_SECRET: 'test-session-secret',
-      GITHUB_APP_CLIENT_ID: 'deputies-github-app-client',
-      GITHUB_APP_CLIENT_SECRET: 'deputies-github-app-secret',
-      GITHUB_OAUTH_BASE_URL: githubEmulatorUrl,
-      AUTH_GITHUB_ALLOWED_USERS: 'octocat',
-      GITHUB_API_BASE_URL: githubEmulatorUrl,
-    }), createServices());
+    server = createServer(
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_PROVIDER: 'github',
+        AUTH_SESSION_SECRET: 'test-session-secret',
+        GITHUB_APP_CLIENT_ID: 'deputies-github-app-client',
+        GITHUB_APP_CLIENT_SECRET: 'deputies-github-app-secret',
+        GITHUB_OAUTH_BASE_URL: githubEmulatorUrl,
+        AUTH_GITHUB_ALLOWED_USERS: 'octocat',
+        GITHUB_API_BASE_URL: githubEmulatorUrl,
+      }),
+      createServices(),
+    );
     baseUrl = await listen(server);
   });
 

@@ -1,16 +1,10 @@
-import type {
-  FlueEvent,
-  SandboxFactory,
-  SessionData,
-  ShellResult,
-  ToolDef,
-} from "@flue/sdk";
-import type { RunnerInput, RunnerResult } from "../runner/types.js";
-import type { SandboxHandle } from "../sandbox/types.js";
+import type { FlueEvent, SandboxFactory, SessionData, ShellResult, ToolDef } from '@flue/sdk';
+import type { RunnerInput, RunnerResult } from '../runner/types.js';
+import type { SandboxHandle } from '../sandbox/types.js';
 
 export type FlueRunnerOptions = {
   model: string;
-  sandbox?: "empty" | "local" | SandboxFactory;
+  sandbox?: 'empty' | 'local' | SandboxFactory;
   cwd?: string;
 };
 

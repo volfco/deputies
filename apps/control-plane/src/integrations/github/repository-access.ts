@@ -54,11 +54,18 @@ export class GitHubRepositoryAccessService {
     return installation.id;
   }
 
-  private async getInstallationToken(installationId: number, repository: GitHubRepository): Promise<GitHubInstallationToken> {
+  private async getInstallationToken(
+    installationId: number,
+    repository: GitHubRepository,
+  ): Promise<GitHubInstallationToken> {
     const key = repositoryKey(repository).toLowerCase();
     const cached = this.tokensByRepository.get(key);
     if (cached && cached.expiresAt.getTime() - this.now().getTime() > 60_000) return cached;
-    const token = await this.options.client.createInstallationAccessToken({ installationId, appJwt: this.createAppJwt(), repositories: [repository.repo] });
+    const token = await this.options.client.createInstallationAccessToken({
+      installationId,
+      appJwt: this.createAppJwt(),
+      repositories: [repository.repo],
+    });
     const record = { ...token, installationId };
     this.tokensByRepository.set(key, record);
     return record;
@@ -72,7 +79,11 @@ export class GitHubRepositoryAccessService {
     if (!this.allowedRepositories.length) return;
     const key = repositoryKey(repository).toLowerCase();
     const allowed = isRepositoryAllowed(repository, this.allowedRepositories);
-    if (!allowed) throw new GitHubRepositoryAccessError('unauthorized_repository', `GitHub repository is not allowed: ${repository.owner}/${repository.repo}`);
+    if (!allowed)
+      throw new GitHubRepositoryAccessError(
+        'unauthorized_repository',
+        `GitHub repository is not allowed: ${repository.owner}/${repository.repo}`,
+      );
   }
 }
 

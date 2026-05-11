@@ -253,7 +253,9 @@ it('refreshes sessions when a queued message starts processing', async () => {
   await waitFor(() => expect(pushGlobalEvent).toBeDefined());
 
   sessions[0] = { ...session, status: 'active' };
-  pushGlobalEvent?.(eventFixture({ id: 2, sequence: 1, type: 'message_started', payload: { sequences: [1], batchSize: 1 } }));
+  pushGlobalEvent?.(
+    eventFixture({ id: 2, sequence: 1, type: 'message_started', payload: { sequences: [1], batchSize: 1 } }),
+  );
 
   expect(await screen.findAllByText('active')).not.toHaveLength(0);
 });
@@ -292,14 +294,16 @@ it('shows and calls cancel task on the active message', async () => {
   let cancelled = false;
   mockApi({
     sessionOverride: { status: 'active' },
-    messages: [{
-      id: '00000000-0000-4000-8000-000000000102',
-      sessionId: session.id,
-      sequence: 1,
-      status: 'processing',
-      prompt: 'running work',
-      createdAt: '2026-05-05T12:01:00.000Z',
-    }],
+    messages: [
+      {
+        id: '00000000-0000-4000-8000-000000000102',
+        sessionId: session.id,
+        sequence: 1,
+        status: 'processing',
+        prompt: 'running work',
+        createdAt: '2026-05-05T12:01:00.000Z',
+      },
+    ],
     onCancelRun: () => {
       cancelled = true;
     },
@@ -315,14 +319,16 @@ it('shows and calls cancel task on the active message', async () => {
 it('shows cancelling state on the active message cancel action', async () => {
   mockApi({
     sessionOverride: { status: 'active' },
-    messages: [{
-      id: '00000000-0000-4000-8000-000000000102',
-      sessionId: session.id,
-      sequence: 1,
-      status: 'cancelling',
-      prompt: 'stopping work',
-      createdAt: '2026-05-05T12:01:00.000Z',
-    }],
+    messages: [
+      {
+        id: '00000000-0000-4000-8000-000000000102',
+        sessionId: session.id,
+        sequence: 1,
+        status: 'cancelling',
+        prompt: 'stopping work',
+        createdAt: '2026-05-05T12:01:00.000Z',
+      },
+    ],
   });
   render(<App />);
 
@@ -333,7 +339,14 @@ it('shows cancelling state on the active message cancel action', async () => {
 it('retries a failed message from its message card', async () => {
   const retriedMessageIds: string[] = [];
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000120', sequence: 1, status: 'failed', prompt: 'try this again' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000120',
+        sequence: 1,
+        status: 'failed',
+        prompt: 'try this again',
+      }),
+    ],
     onRetryMessage: (messageId) => retriedMessageIds.push(messageId),
   });
   render(<App />);
@@ -349,17 +362,37 @@ it('retries all failed messages in a failed message group', async () => {
   const retriedMessageIds: string[] = [];
   mockApi({
     messages: [
-      messageFixture({ id: '00000000-0000-4000-8000-000000000121', sequence: 1, status: 'failed', prompt: 'first failed task' }),
-      messageFixture({ id: '00000000-0000-4000-8000-000000000122', sequence: 2, status: 'failed', prompt: 'second failed task' }),
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000121',
+        sequence: 1,
+        status: 'failed',
+        prompt: 'first failed task',
+      }),
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000122',
+        sequence: 2,
+        status: 'failed',
+        prompt: 'second failed task',
+      }),
     ],
-    events: [eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000220', messageId: '00000000-0000-4000-8000-000000000121', payload: { sequences: [1, 2], batchSize: 2 } })],
+    events: [
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        payload: { sequences: [1, 2], batchSize: 2 },
+      }),
+    ],
     onRetryMessage: (messageId) => retriedMessageIds.push(messageId),
   });
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Retry 2 failed' }));
 
-  await waitFor(() => expect(retriedMessageIds).toEqual(['00000000-0000-4000-8000-000000000121', '00000000-0000-4000-8000-000000000122']));
+  await waitFor(() =>
+    expect(retriedMessageIds).toEqual(['00000000-0000-4000-8000-000000000121', '00000000-0000-4000-8000-000000000122']),
+  );
   expect(await screen.findByRole('article', { name: 'Message 3' })).toHaveTextContent('first failed task');
   expect(await screen.findByRole('article', { name: 'Message 4' })).toHaveTextContent('second failed task');
 });
@@ -395,15 +428,52 @@ it('requires restoring archived sessions before sending messages', async () => {
 it('keeps a cancelled middle message inline with its surrounding batch', async () => {
   mockApi({
     messages: [
-      messageFixture({ id: '00000000-0000-4000-8000-000000000110', sequence: 10, status: 'completed', prompt: 'please sleep for 30 seconds' }),
-      messageFixture({ id: '00000000-0000-4000-8000-000000000111', sequence: 11, status: 'completed', prompt: 'message 1' }),
-      messageFixture({ id: '00000000-0000-4000-8000-000000000112', sequence: 12, status: 'cancelled', prompt: 'message 2' }),
-      messageFixture({ id: '00000000-0000-4000-8000-000000000113', sequence: 13, status: 'completed', prompt: 'message 3' }),
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000110',
+        sequence: 10,
+        status: 'completed',
+        prompt: 'please sleep for 30 seconds',
+      }),
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000111',
+        sequence: 11,
+        status: 'completed',
+        prompt: 'message 1',
+      }),
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000112',
+        sequence: 12,
+        status: 'cancelled',
+        prompt: 'message 2',
+      }),
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000113',
+        sequence: 13,
+        status: 'completed',
+        prompt: 'message 3',
+      }),
     ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000210', messageId: '00000000-0000-4000-8000-000000000110', payload: { sequences: [10, 11, 13], batchSize: 3 } }),
-      eventFixture({ sequence: 2, type: 'message_cancelled', messageId: '00000000-0000-4000-8000-000000000112', payload: { sequence: 12 } }),
-      eventFixture({ sequence: 3, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000210', messageId: '00000000-0000-4000-8000-000000000110', payload: { text: 'batch response' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000210',
+        messageId: '00000000-0000-4000-8000-000000000110',
+        payload: { sequences: [10, 11, 13], batchSize: 3 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'message_cancelled',
+        messageId: '00000000-0000-4000-8000-000000000112',
+        payload: { sequence: 12 },
+      }),
+      eventFixture({
+        sequence: 3,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000210',
+        messageId: '00000000-0000-4000-8000-000000000110',
+        payload: { text: 'batch response' },
+      }),
     ],
   });
   render(<App />);
@@ -421,7 +491,14 @@ it('shows a jump control instead of autoscrolling after the user scrolls up', as
   let globalStreamOpen = false;
   const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000130', sequence: 1, status: 'processing', prompt: 'long running work' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000130',
+        sequence: 1,
+        status: 'processing',
+        prompt: 'long running work',
+      }),
+    ],
     onGlobalStreamOpen: (push) => {
       globalStreamOpen = true;
       pushGlobalEvent = push;
@@ -439,7 +516,15 @@ it('shows a jump control instead of autoscrolling after the user scrolls up', as
   scrollIntoView.mockClear();
 
   await waitFor(() => expect(globalStreamOpen).toBe(true));
-  pushGlobalEvent(eventFixture({ id: 2, sequence: 1, type: 'agent_text_delta', messageId: '00000000-0000-4000-8000-000000000130', payload: { text: 'streaming diagnostics' } }));
+  pushGlobalEvent(
+    eventFixture({
+      id: 2,
+      sequence: 1,
+      type: 'agent_text_delta',
+      messageId: '00000000-0000-4000-8000-000000000130',
+      payload: { text: 'streaming diagnostics' },
+    }),
+  );
 
   const jump = await screen.findByRole('button', { name: /Jump to latest/ });
   expect(scrollIntoView).not.toHaveBeenCalled();
@@ -453,7 +538,14 @@ it('pauses autoscroll while the message composer has focus', async () => {
   let globalStreamOpen = false;
   const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView);
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000137', sequence: 1, status: 'processing', prompt: 'long running work' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000137',
+        sequence: 1,
+        status: 'processing',
+        prompt: 'long running work',
+      }),
+    ],
     onGlobalStreamOpen: (push) => {
       globalStreamOpen = true;
       pushGlobalEvent = push;
@@ -472,7 +564,15 @@ it('pauses autoscroll while the message composer has focus', async () => {
   scrollIntoView.mockClear();
 
   await waitFor(() => expect(globalStreamOpen).toBe(true));
-  pushGlobalEvent(eventFixture({ id: 2, sequence: 1, type: 'agent_text_delta', messageId: '00000000-0000-4000-8000-000000000137', payload: { text: 'streaming while typing' } }));
+  pushGlobalEvent(
+    eventFixture({
+      id: 2,
+      sequence: 1,
+      type: 'agent_text_delta',
+      messageId: '00000000-0000-4000-8000-000000000137',
+      payload: { text: 'streaming while typing' },
+    }),
+  );
 
   expect(await screen.findByText('streaming while typing')).toBeInTheDocument();
   expect(scrollIntoView).not.toHaveBeenCalled();
@@ -482,7 +582,14 @@ it('pauses autoscroll while the message composer has focus', async () => {
 
 it('scrolls session messages when wheeling outside nested scroll areas', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000133', sequence: 1, status: 'completed', prompt: 'scrollable work' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000133',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'scrollable work',
+      }),
+    ],
   });
   render(<App />);
 
@@ -498,11 +605,15 @@ it('scrolls session messages when wheeling outside nested scroll areas', async (
 
 it('does not redirect wheel events when the sessions area can scroll', async () => {
   mockApi({
-    sessions: [
-      session,
-      { ...session, id: '00000000-0000-4000-8000-000000000002', title: 'Second session' },
+    sessions: [session, { ...session, id: '00000000-0000-4000-8000-000000000002', title: 'Second session' }],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000134',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'scrollable work',
+      }),
     ],
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000134', sequence: 1, status: 'completed', prompt: 'scrollable work' })],
   });
   render(<App />);
 
@@ -530,11 +641,15 @@ it('does not redirect wheel events when the sessions area can scroll', async () 
 
 it('scrolls session messages from the sessions area when it has no scrollbar', async () => {
   mockApi({
-    sessions: [
-      session,
-      { ...session, id: '00000000-0000-4000-8000-000000000002', title: 'Second session' },
+    sessions: [session, { ...session, id: '00000000-0000-4000-8000-000000000002', title: 'Second session' }],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000136',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'scrollable work',
+      }),
     ],
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000136', sequence: 1, status: 'completed', prompt: 'scrollable work' })],
   });
   render(<App />);
 
@@ -556,7 +671,14 @@ it('scrolls session messages from the sessions area when it has no scrollbar', a
 
 it('lets nested chat panes scroll first and releases wheel scroll at their edge', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000135', sequence: 1, status: 'completed', prompt: 'nested scroll work' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000135',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'nested scroll work',
+      }),
+    ],
   });
   render(<App />);
 
@@ -617,7 +739,9 @@ it('shows startup connection guidance before request timeout', async () => {
 
   expect(await screen.findByText('Loading Deputies')).toBeInTheDocument();
 
-  expect(await screen.findByText(/Still waiting for the API to respond/, undefined, { timeout: 4_000 })).toBeInTheDocument();
+  expect(
+    await screen.findByText(/Still waiting for the API to respond/, undefined, { timeout: 4_000 }),
+  ).toBeInTheDocument();
   expect(screen.getByText(/several windows/)).toBeInTheDocument();
 });
 
@@ -633,7 +757,10 @@ it('uses a reconnecting wake state instead of generic slow request guidance afte
   vi.advanceTimersByTime(6_000);
   setVisibilityState('visible');
   fireEvent(document, new Event('visibilitychange'));
-  fireEvent(window, new CustomEvent('deputies:api-connection-delayed', { detail: { message: 'Request timed out: /sessions' } }));
+  fireEvent(
+    window,
+    new CustomEvent('deputies:api-connection-delayed', { detail: { message: 'Request timed out: /sessions' } }),
+  );
 
   const banner = (await screen.findByText('Reconnecting after sleep.')).closest('[role="status"]');
   expect(banner).toHaveTextContent('We will retry automatically');
@@ -642,9 +769,22 @@ it('uses a reconnecting wake state instead of generic slow request guidance afte
 
 it('labels active streamed text as progress and separates obvious sentence boundaries', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000131', sequence: 1, status: 'processing', prompt: 'inspect env' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000131',
+        sequence: 1,
+        status: 'processing',
+        prompt: 'inspect env',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000231', messageId: '00000000-0000-4000-8000-000000000131', payload: { text: 'Checking environment.Found Node:System:Ready' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000231',
+        messageId: '00000000-0000-4000-8000-000000000131',
+        payload: { text: 'Checking environment.Found Node:System:Ready' },
+      }),
     ],
   });
   render(<App />);
@@ -656,9 +796,22 @@ it('labels active streamed text as progress and separates obvious sentence bound
 
 it('labels completed assistant text as a response', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000132', sequence: 1, status: 'completed', prompt: 'inspect env' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000132',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'inspect env',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000232', messageId: '00000000-0000-4000-8000-000000000132', payload: { text: 'Done.' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000232',
+        messageId: '00000000-0000-4000-8000-000000000132',
+        payload: { text: 'Done.' },
+      }),
     ],
   });
   render(<App />);
@@ -669,11 +822,36 @@ it('labels completed assistant text as a response', async () => {
 
 it('shows run diagnostics for a single-message response', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000120', sequence: 1, status: 'completed', prompt: 'single message' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000120',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'single message',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000220', messageId: '00000000-0000-4000-8000-000000000120', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'sandbox_ready', runId: '00000000-0000-4000-8000-000000000220', messageId: '00000000-0000-4000-8000-000000000120', payload: { provider: 'fake', created: true } }),
-      eventFixture({ sequence: 3, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000220', messageId: '00000000-0000-4000-8000-000000000120', payload: { text: 'single response' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000120',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'sandbox_ready',
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000120',
+        payload: { provider: 'fake', created: true },
+      }),
+      eventFixture({
+        sequence: 3,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000120',
+        payload: { text: 'single response' },
+      }),
     ],
   });
   render(<App />);
@@ -686,12 +864,43 @@ it('shows run diagnostics for a single-message response', async () => {
 
 it('renders tool diagnostics as readable activity with raw details collapsed', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000124', sequence: 1, status: 'completed', prompt: 'inspect env' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000124',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'inspect env',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { toolName: 'shell', toolCallId: 'tool-1', args: { command: 'pnpm test' } } }),
-      eventFixture({ sequence: 3, type: 'tool_finished', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { toolName: 'shell', toolCallId: 'tool-1', isError: true, result: 'Tests failed' } }),
-      eventFixture({ sequence: 4, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000224', messageId: '00000000-0000-4000-8000-000000000124', payload: { text: 'I ran the tests.' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000224',
+        messageId: '00000000-0000-4000-8000-000000000124',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'tool_started',
+        runId: '00000000-0000-4000-8000-000000000224',
+        messageId: '00000000-0000-4000-8000-000000000124',
+        payload: { toolName: 'shell', toolCallId: 'tool-1', args: { command: 'pnpm test' } },
+      }),
+      eventFixture({
+        sequence: 3,
+        type: 'tool_finished',
+        runId: '00000000-0000-4000-8000-000000000224',
+        messageId: '00000000-0000-4000-8000-000000000124',
+        payload: { toolName: 'shell', toolCallId: 'tool-1', isError: true, result: 'Tests failed' },
+      }),
+      eventFixture({
+        sequence: 4,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000224',
+        messageId: '00000000-0000-4000-8000-000000000124',
+        payload: { text: 'I ran the tests.' },
+      }),
     ],
   });
   render(<App />);
@@ -707,10 +916,29 @@ it('renders tool diagnostics as readable activity with raw details collapsed', a
 
 it('labels unmatched tool start diagnostics as started instead of running', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000127', sequence: 1, status: 'completed', prompt: 'inspect env' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000127',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'inspect env',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { toolName: 'shell', toolCallId: 'tool-1', args: { command: 'pnpm test' } } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000227',
+        messageId: '00000000-0000-4000-8000-000000000127',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'tool_started',
+        runId: '00000000-0000-4000-8000-000000000227',
+        messageId: '00000000-0000-4000-8000-000000000127',
+        payload: { toolName: 'shell', toolCallId: 'tool-1', args: { command: 'pnpm test' } },
+      }),
     ],
   });
   render(<App />);
@@ -724,10 +952,29 @@ it('labels unmatched tool start diagnostics as started instead of running', asyn
 
 it('renders custom tool text content without exposing the result envelope', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000125', sequence: 1, status: 'completed', prompt: 'push branch' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000125',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'push branch',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000225', messageId: '00000000-0000-4000-8000-000000000125', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000225', messageId: '00000000-0000-4000-8000-000000000125', payload: { toolName: 'git', toolCallId: 'tool-1' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000225',
+        messageId: '00000000-0000-4000-8000-000000000125',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'tool_started',
+        runId: '00000000-0000-4000-8000-000000000225',
+        messageId: '00000000-0000-4000-8000-000000000125',
+        payload: { toolName: 'git', toolCallId: 'tool-1' },
+      }),
       eventFixture({
         sequence: 3,
         type: 'tool_finished',
@@ -737,7 +984,10 @@ it('renders custom tool text content without exposing the result envelope', asyn
           toolName: 'git',
           toolCallId: 'tool-1',
           isError: false,
-          result: { content: [{ text: 'exitCode: 0\nstderr:\nremote: Create a pull request', type: 'text' }], details: { customTool: 'git' } },
+          result: {
+            content: [{ text: 'exitCode: 0\nstderr:\nremote: Create a pull request', type: 'text' }],
+            details: { customTool: 'git' },
+          },
         },
       }),
     ],
@@ -753,13 +1003,41 @@ it('renders custom tool text content without exposing the result envelope', asyn
 });
 
 it('contains long diagnostic output in a scrollable panel', async () => {
-  const longOutput = Array.from({ length: 12 }, (_, index) => `line ${index + 1}: expect(messageLogHeight).toBeGreaterThan(300);`).join('\n');
+  const longOutput = Array.from(
+    { length: 12 },
+    (_, index) => `line ${index + 1}: expect(messageLogHeight).toBeGreaterThan(300);`,
+  ).join('\n');
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000127', sequence: 1, status: 'completed', prompt: 'read a large file' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000127',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'read a large file',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'tool_started', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { toolName: 'read', toolCallId: 'tool-1' } }),
-      eventFixture({ sequence: 3, type: 'tool_finished', runId: '00000000-0000-4000-8000-000000000227', messageId: '00000000-0000-4000-8000-000000000127', payload: { toolName: 'read', toolCallId: 'tool-1', result: longOutput } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000227',
+        messageId: '00000000-0000-4000-8000-000000000127',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'tool_started',
+        runId: '00000000-0000-4000-8000-000000000227',
+        messageId: '00000000-0000-4000-8000-000000000127',
+        payload: { toolName: 'read', toolCallId: 'tool-1' },
+      }),
+      eventFixture({
+        sequence: 3,
+        type: 'tool_finished',
+        runId: '00000000-0000-4000-8000-000000000227',
+        messageId: '00000000-0000-4000-8000-000000000127',
+        payload: { toolName: 'read', toolCallId: 'tool-1', result: longOutput },
+      }),
     ],
   });
   render(<App />);
@@ -774,12 +1052,47 @@ it('contains long diagnostic output in a scrollable panel', async () => {
 
 it('identifies upstream sandbox provider failures during sandbox startup', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000123', sequence: 7, status: 'failed', prompt: 'please create a PR with these changes' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000123',
+        sequence: 7,
+        status: 'failed',
+        prompt: 'please create a PR with these changes',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000223', messageId: '00000000-0000-4000-8000-000000000123', payload: { sequences: [7], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'sandbox_starting', runId: '00000000-0000-4000-8000-000000000223', messageId: '00000000-0000-4000-8000-000000000123', payload: { provider: 'daytona' } }),
-      eventFixture({ sequence: 3, type: 'run_failed', runId: '00000000-0000-4000-8000-000000000223', messageId: '00000000-0000-4000-8000-000000000123', payload: { error: '<html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>' } }),
-      eventFixture({ sequence: 4, type: 'message_failed', runId: '00000000-0000-4000-8000-000000000223', messageId: '00000000-0000-4000-8000-000000000123', payload: { error: '<html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000223',
+        messageId: '00000000-0000-4000-8000-000000000123',
+        payload: { sequences: [7], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'sandbox_starting',
+        runId: '00000000-0000-4000-8000-000000000223',
+        messageId: '00000000-0000-4000-8000-000000000123',
+        payload: { provider: 'daytona' },
+      }),
+      eventFixture({
+        sequence: 3,
+        type: 'run_failed',
+        runId: '00000000-0000-4000-8000-000000000223',
+        messageId: '00000000-0000-4000-8000-000000000123',
+        payload: {
+          error: '<html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>',
+        },
+      }),
+      eventFixture({
+        sequence: 4,
+        type: 'message_failed',
+        runId: '00000000-0000-4000-8000-000000000223',
+        messageId: '00000000-0000-4000-8000-000000000123',
+        payload: {
+          error: '<html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1></body></html>',
+        },
+      }),
     ],
   });
   render(<App />);
@@ -793,12 +1106,43 @@ it('identifies upstream sandbox provider failures during sandbox startup', async
 
 it('prefers final assistant response over streamed deltas', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000121', sequence: 1, status: 'completed', prompt: 'single message' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000121',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'single message',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000221', messageId: '00000000-0000-4000-8000-000000000121', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000221', messageId: '00000000-0000-4000-8000-000000000121', payload: { text: 'corrupted ' } }),
-      eventFixture({ sequence: 3, type: 'agent_text_delta', runId: '00000000-0000-4000-8000-000000000221', messageId: '00000000-0000-4000-8000-000000000121', payload: { text: 'stream' } }),
-      eventFixture({ sequence: 4, type: 'agent_response_final', runId: '00000000-0000-4000-8000-000000000221', messageId: '00000000-0000-4000-8000-000000000121', payload: { text: 'canonical final response' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        payload: { text: 'corrupted ' },
+      }),
+      eventFixture({
+        sequence: 3,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        payload: { text: 'stream' },
+      }),
+      eventFixture({
+        sequence: 4,
+        type: 'agent_response_final',
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        payload: { text: 'canonical final response' },
+      }),
     ],
   });
   render(<App />);
@@ -811,10 +1155,31 @@ it('renders assistant markdown with copyable highlighted code blocks and without
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000122', sequence: 1, status: 'completed', prompt: '**please summarize**' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000122',
+        sequence: 1,
+        status: 'completed',
+        prompt: '**please summarize**',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'message_started', runId: '00000000-0000-4000-8000-000000000222', messageId: '00000000-0000-4000-8000-000000000122', payload: { sequences: [1], batchSize: 1 } }),
-      eventFixture({ sequence: 2, type: 'agent_response_final', runId: '00000000-0000-4000-8000-000000000222', messageId: '00000000-0000-4000-8000-000000000122', payload: { text: '# Summary\n\n- **Done**\n\n```ts\nconst ok = true;\n```\n\n| Alpha | Beta | Gamma | Delta |\n| --- | --- | --- | --- |\n| one | two | three | four |\n\n[Docs](https://example.com)\n\n<script>alert(1)</script>' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'message_started',
+        runId: '00000000-0000-4000-8000-000000000222',
+        messageId: '00000000-0000-4000-8000-000000000122',
+        payload: { sequences: [1], batchSize: 1 },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'agent_response_final',
+        runId: '00000000-0000-4000-8000-000000000222',
+        messageId: '00000000-0000-4000-8000-000000000122',
+        payload: {
+          text: '# Summary\n\n- **Done**\n\n```ts\nconst ok = true;\n```\n\n| Alpha | Beta | Gamma | Delta |\n| --- | --- | --- | --- |\n| one | two | three | four |\n\n[Docs](https://example.com)\n\n<script>alert(1)</script>',
+        },
+      }),
     ],
   });
   render(<App />);
@@ -840,9 +1205,22 @@ it('renders assistant markdown with copyable highlighted code blocks and without
 
 it('does not re-highlight assistant code while editing the session title', async () => {
   mockApi({
-    messages: [messageFixture({ id: '00000000-0000-4000-8000-000000000126', sequence: 1, status: 'completed', prompt: 'show code' })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000126',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'show code',
+      }),
+    ],
     events: [
-      eventFixture({ sequence: 1, type: 'agent_response_final', runId: '00000000-0000-4000-8000-000000000226', messageId: '00000000-0000-4000-8000-000000000126', payload: { text: '```ts\nconst ok = true;\n```' } }),
+      eventFixture({
+        sequence: 1,
+        type: 'agent_response_final',
+        runId: '00000000-0000-4000-8000-000000000226',
+        messageId: '00000000-0000-4000-8000-000000000126',
+        payload: { text: '```ts\nconst ok = true;\n```' },
+      }),
     ],
   });
   render(<App />);
@@ -859,12 +1237,14 @@ it('does not re-highlight assistant code while editing the session title', async
 
 it('renders user prompts as plain text so Slack author lines are visible', async () => {
   mockApi({
-    messages: [messageFixture({
-      id: '00000000-0000-4000-8000-000000000123',
-      sequence: 1,
-      status: 'completed',
-      prompt: 'Current tagged Slack message:\n---\n[sid]: reply "hello"',
-    })],
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000123',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'Current tagged Slack message:\n---\n[sid]: reply "hello"',
+      }),
+    ],
   });
   render(<App />);
 
@@ -888,7 +1268,8 @@ it('labels transcript-only integration entries as not queued', async () => {
         status: 'cancelled',
         source: 'github_notice',
         context: { transcriptOnly: true },
-        prompt: 'This Deputies session is archived, so I did not queue your message. Reply `unarchive and proceed` to restore the session and queue your reply.',
+        prompt:
+          'This Deputies session is archived, so I did not queue your message. Reply `unarchive and proceed` to restore the session and queue your reply.',
       }),
     ],
   });
@@ -903,7 +1284,15 @@ it('labels transcript-only integration entries as not queued', async () => {
 it('shows callback delivery status and replays failed callbacks', async () => {
   const replays: string[] = [];
   mockApi({
-    callbacks: [callbackFixture({ id: '00000000-0000-4000-8000-000000000301', status: 'failed', attempts: 5, maxAttempts: 5, lastError: 'HTTP callback returned 500' })],
+    callbacks: [
+      callbackFixture({
+        id: '00000000-0000-4000-8000-000000000301',
+        status: 'failed',
+        attempts: 5,
+        maxAttempts: 5,
+        lastError: 'HTTP callback returned 500',
+      }),
+    ],
     onReplayCallback: (callbackId) => replays.push(callbackId),
   });
   render(<App />);
@@ -925,7 +1314,12 @@ it('preserves selected archived session and archived section after refresh', asy
   mockApi({
     sessionOverride: archivedSession,
     sessions: [
-      { ...session, id: '00000000-0000-4000-8000-000000000002', title: 'Top active', updatedAt: '2026-05-05T12:05:00.000Z' },
+      {
+        ...session,
+        id: '00000000-0000-4000-8000-000000000002',
+        title: 'Top active',
+        updatedAt: '2026-05-05T12:05:00.000Z',
+      },
       archivedSession,
     ],
   });
@@ -960,10 +1354,16 @@ it('restores the selected session before waiting for the restore request', async
   render(<App />);
 
   expect(await screen.findByText('This session is archived.')).toBeInTheDocument();
-  fireEvent.click(screen.getAllByRole('button', { name: 'Restore session' }).find((button) => button.textContent?.includes('Restore session'))!);
+  fireEvent.click(
+    screen
+      .getAllByRole('button', { name: 'Restore session' })
+      .find((button) => button.textContent?.includes('Restore session'))!,
+  );
 
   expect(screen.queryByText('This session is archived.')).not.toBeInTheDocument();
-  expect(screen.getByPlaceholderText('Ask your deputy to investigate, change code, or follow up...')).not.toBeDisabled();
+  expect(
+    screen.getByPlaceholderText('Ask your deputy to investigate, change code, or follow up...'),
+  ).not.toBeDisabled();
 });
 
 it('warns when running in local sandbox mode', async () => {
@@ -985,11 +1385,18 @@ function mockApi(options: MockApiOptions = {}) {
     const method = init?.method ?? 'GET';
 
     if (url.pathname === '/health') {
-      return jsonResponse({ status: 'ok', runMode: 'all', apiAuthMode: options.authMode ?? 'none', sandboxProvider: options.sandboxProvider ?? 'fake' });
+      return jsonResponse({
+        status: 'ok',
+        runMode: 'all',
+        apiAuthMode: options.authMode ?? 'none',
+        sandboxProvider: options.sandboxProvider ?? 'fake',
+      });
     }
 
     if (url.pathname === '/auth/me') {
-      return currentUser ? jsonResponse({ user: currentUser }) : jsonResponse({ error: 'unauthorized', message: 'Missing or invalid session' }, 401);
+      return currentUser
+        ? jsonResponse({ user: currentUser })
+        : jsonResponse({ error: 'unauthorized', message: 'Missing or invalid session' }, 401);
     }
 
     if (url.pathname === '/auth/login' && method === 'POST') {
@@ -1053,7 +1460,9 @@ function mockApi(options: MockApiOptions = {}) {
     if (retryMessageMatch && method === 'POST') {
       const messageId = retryMessageMatch[1]!;
       options.onRetryMessage?.(messageId);
-      const failedMessage = messages.find((message) => (message as { id?: string }).id === messageId) as { prompt?: string; source?: string; context?: Record<string, unknown> } | undefined;
+      const failedMessage = messages.find((message) => (message as { id?: string }).id === messageId) as
+        | { prompt?: string; source?: string; context?: Record<string, unknown> }
+        | undefined;
       const retriedMessage = {
         id: `00000000-0000-4000-8000-0000000009${messages.length + 1}`,
         sessionId: currentSession.id,
@@ -1089,32 +1498,44 @@ function mockApi(options: MockApiOptions = {}) {
     if (replayMatch && method === 'POST') {
       const callbackId = replayMatch[1]!;
       options.onReplayCallback?.(callbackId);
-      callbacks = callbacks.map((callback) => ({ ...(callback as object), status: 'pending', maxAttempts: 6, updatedAt: '2026-05-05T12:04:00.000Z', nextAttemptAt: '2026-05-05T12:04:00.000Z' }));
+      callbacks = callbacks.map((callback) => ({
+        ...(callback as object),
+        status: 'pending',
+        maxAttempts: 6,
+        updatedAt: '2026-05-05T12:04:00.000Z',
+        nextAttemptAt: '2026-05-05T12:04:00.000Z',
+      }));
       return jsonResponse({ callback: callbacks.find((callback) => (callback as { id?: string }).id === callbackId) });
     }
 
     if (url.pathname === `/sessions/${currentSession.id}/events/stream`) {
-      return new Response(new ReadableStream({
-        start(controller) {
-          const pushStreamEvent: StreamEventPusher = (event) => {
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
-          };
-          options.onStreamOpen?.(pushStreamEvent);
-        },
-      }), { status: 200 });
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            const pushStreamEvent: StreamEventPusher = (event) => {
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+            };
+            options.onStreamOpen?.(pushStreamEvent);
+          },
+        }),
+        { status: 200 },
+      );
     }
 
     if (url.pathname === '/events/stream') {
       options.onGlobalStreamRequest?.(url);
       if (options.globalStreamStatus) return new Response(null, { status: options.globalStreamStatus });
-      return new Response(new ReadableStream({
-        start(controller) {
-          const pushStreamEvent: StreamEventPusher = (event) => {
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
-          };
-          options.onGlobalStreamOpen?.(pushStreamEvent);
-        },
-      }), { status: 200 });
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            const pushStreamEvent: StreamEventPusher = (event) => {
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+            };
+            options.onGlobalStreamOpen?.(pushStreamEvent);
+          },
+        }),
+        { status: 200 },
+      );
     }
 
     return jsonResponse({ error: 'not_found', message: 'Not found' }, 404);
@@ -1139,7 +1560,14 @@ function setScrollMetrics(element: Element | null, metrics: ScrollMetrics): HTML
   return element;
 }
 
-function messageFixture(input: { id: string; sequence: number; status: string; prompt: string; source?: string; context?: Record<string, unknown> }) {
+function messageFixture(input: {
+  id: string;
+  sequence: number;
+  status: string;
+  prompt: string;
+  source?: string;
+  context?: Record<string, unknown>;
+}) {
   return {
     ...input,
     sessionId: session.id,
@@ -1148,19 +1576,29 @@ function messageFixture(input: { id: string; sequence: number; status: string; p
 }
 
 function mockMobileTextEntryViewport() {
-  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    matches: query === '(hover: none) and (pointer: coarse)',
-    media: query,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })));
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(hover: none) and (pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
 }
 
-function eventFixture(input: { sequence: number; type: string; payload: Record<string, unknown>; id?: number; runId?: string; messageId?: string }) {
+function eventFixture(input: {
+  sequence: number;
+  type: string;
+  payload: Record<string, unknown>;
+  id?: number;
+  runId?: string;
+  messageId?: string;
+}) {
   return {
     ...input,
     sessionId: session.id,
@@ -1178,7 +1616,13 @@ function filterEventsAfter(events: unknown[], after: string | null): unknown[] {
   });
 }
 
-function callbackFixture(input: { id: string; status: string; attempts: number; maxAttempts: number; lastError?: string }) {
+function callbackFixture(input: {
+  id: string;
+  status: string;
+  attempts: number;
+  maxAttempts: number;
+  lastError?: string;
+}) {
   return {
     ...input,
     sessionId: session.id,

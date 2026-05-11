@@ -29,12 +29,31 @@ describe('GitHub CLI Flue tool', () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init: init ?? {} });
-      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/7' }), { status: 201 });
+      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/7' }), {
+        status: 201,
+      });
     };
     const tool = createGitHubCliTool(repositoryServices(), { fetchImpl });
     const abort = new AbortController();
 
-    const result = await tool.execute({ args: ['pr', 'create', '--title', 'Add feature', '--body', '- Details', '--head', 'sp/feature', '--base', 'main', '--draft'] }, abort.signal);
+    const result = await tool.execute(
+      {
+        args: [
+          'pr',
+          'create',
+          '--title',
+          'Add feature',
+          '--body',
+          '- Details',
+          '--head',
+          'sp/feature',
+          '--base',
+          'main',
+          '--draft',
+        ],
+      },
+      abort.signal,
+    );
 
     expect(result).toBe('exitCode: 0\nstdout:\nhttps://github.com/manaflow-ai/manaflow/pull/7');
     expect(requests).toHaveLength(1);
@@ -60,7 +79,8 @@ describe('GitHub CLI Flue tool', () => {
     };
     services.agentRef.current = {
       shell: async (command: string) => {
-        if (command === 'git log -1 --pretty=format:%s%n%n%b') return { exitCode: 0, stdout: 'Filled title\n\nFilled body', stderr: '' };
+        if (command === 'git log -1 --pretty=format:%s%n%n%b')
+          return { exitCode: 0, stdout: 'Filled title\n\nFilled body', stderr: '' };
         if (command === 'git branch --show-current') return { exitCode: 0, stdout: 'sp/filled\n', stderr: '' };
         return { exitCode: 1, stdout: '', stderr: 'unexpected command' };
       },
@@ -69,7 +89,9 @@ describe('GitHub CLI Flue tool', () => {
       if (String(url).endsWith('/repos/manaflow-ai/manaflow') && init?.method === 'GET') {
         return new Response(JSON.stringify({ default_branch: 'main' }), { status: 200 });
       }
-      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/8' }), { status: 201 });
+      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/8' }), {
+        status: 201,
+      });
     };
     const tool = createGitHubCliTool(services, { fetchImpl });
 
@@ -82,11 +104,28 @@ describe('GitHub CLI Flue tool', () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init: init ?? {} });
-      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/7', number: 7 }), { status: 200 });
+      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/7', number: 7 }), {
+        status: 200,
+      });
     };
     const tool = createGitHubCliTool(repositoryServices(), { fetchImpl });
 
-    const result = await tool.execute({ args: ['pr', 'edit', '7', '--title', 'Updated', '--body', 'New body', '--base', 'develop', '--state', 'open', '--no-maintainer-edit'] });
+    const result = await tool.execute({
+      args: [
+        'pr',
+        'edit',
+        '7',
+        '--title',
+        'Updated',
+        '--body',
+        'New body',
+        '--base',
+        'develop',
+        '--state',
+        'open',
+        '--no-maintainer-edit',
+      ],
+    });
 
     expect(result).toBe('exitCode: 0\nstdout:\nhttps://github.com/manaflow-ai/manaflow/pull/7');
     expect(requests).toHaveLength(1);
@@ -120,7 +159,9 @@ describe('GitHub CLI Flue tool', () => {
       if (String(url).includes('/pulls?')) {
         return new Response(JSON.stringify([{ number: 9 }]), { status: 200 });
       }
-      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/9', number: 9 }), { status: 200 });
+      return new Response(JSON.stringify({ html_url: 'https://github.com/manaflow-ai/manaflow/pull/9', number: 9 }), {
+        status: 200,
+      });
     };
     const tool = createGitHubCliTool(services, { fetchImpl });
     const abort = new AbortController();
@@ -128,27 +169,45 @@ describe('GitHub CLI Flue tool', () => {
     const result = await tool.execute({ args: ['pr', 'edit', '--title', 'Branch update'] }, abort.signal);
 
     expect(result).toContain('/pull/9');
-    expect(requests[0]?.url).toBe('https://api.github.com/repos/manaflow-ai/manaflow/pulls?head=manaflow-ai%3Asp%2Fedit&state=all&per_page=1');
+    expect(requests[0]?.url).toBe(
+      'https://api.github.com/repos/manaflow-ai/manaflow/pulls?head=manaflow-ai%3Asp%2Fedit&state=all&per_page=1',
+    );
     expect(requests[0]?.init.signal).toBe(abort.signal);
     expect(requests[1]?.url).toBe('https://api.github.com/repos/manaflow-ai/manaflow/pulls/9');
     expect(requests[1]?.init.signal).toBe(abort.signal);
   });
 
   it('rejects auth and clone escape-hatch commands', async () => {
-    const tool = createGitHubCliTool(repositoryServices(), { runner: async () => ({ exitCode: 0, stdout: '', stderr: '' }) });
+    const tool = createGitHubCliTool(repositoryServices(), {
+      runner: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    });
 
     await expect(tool.execute({ args: ['auth', 'token'] })).rejects.toThrow('gh auth is not available');
-    await expect(tool.execute({ args: ['repo', 'clone', 'manaflow-ai/manaflow'] })).rejects.toThrow('gh repo clone is not available');
+    await expect(tool.execute({ args: ['repo', 'clone', 'manaflow-ai/manaflow'] })).rejects.toThrow(
+      'gh repo clone is not available',
+    );
     await expect(tool.execute({ args: ['gh', 'issue', 'list'] })).rejects.toThrow('omit the gh executable name');
-    await expect(tool.execute({ args: ['api', 'repos/manaflow-ai/manaflow/git/refs/heads/main'] })).rejects.toThrow('GitHub Git Database API routes');
+    await expect(tool.execute({ args: ['api', 'repos/manaflow-ai/manaflow/git/refs/heads/main'] })).rejects.toThrow(
+      'GitHub Git Database API routes',
+    );
   });
 
   it('rejects direct issue and PR comment posting', async () => {
-    const tool = createGitHubCliTool(repositoryServices(), { runner: async () => ({ exitCode: 0, stdout: '', stderr: '' }) });
+    const tool = createGitHubCliTool(repositoryServices(), {
+      runner: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+    });
 
-    await expect(tool.execute({ args: ['issue', 'comment', '42', '--body', 'Done'] })).rejects.toThrow('Posting GitHub issue/PR comments directly through gh is not available');
-    await expect(tool.execute({ args: ['pr', 'comment', '42', '--body', 'Done'] })).rejects.toThrow('Posting GitHub issue/PR comments directly through gh is not available');
-    await expect(tool.execute({ args: ['api', 'repos/manaflow-ai/manaflow/issues/42/comments', '--method', 'POST', '-f', 'body=Done'] })).rejects.toThrow('Posting GitHub issue/PR comments directly through gh is not available');
+    await expect(tool.execute({ args: ['issue', 'comment', '42', '--body', 'Done'] })).rejects.toThrow(
+      'Posting GitHub issue/PR comments directly through gh is not available',
+    );
+    await expect(tool.execute({ args: ['pr', 'comment', '42', '--body', 'Done'] })).rejects.toThrow(
+      'Posting GitHub issue/PR comments directly through gh is not available',
+    );
+    await expect(
+      tool.execute({
+        args: ['api', 'repos/manaflow-ai/manaflow/issues/42/comments', '--method', 'POST', '-f', 'body=Done'],
+      }),
+    ).rejects.toThrow('Posting GitHub issue/PR comments directly through gh is not available');
   });
 
   it('requires an active repository', async () => {
@@ -171,7 +230,11 @@ const access: GitHubRepositoryAccess = {
 
 function repositoryServices(): RepositoryToolServices {
   return {
-    github: { async getRepositoryAccess() { return access; } },
+    github: {
+      async getRepositoryAccess() {
+        return access;
+      },
+    },
     sandbox: { workspacePath: '/workspace' } as never,
     agentRef: {},
     state: { context: { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } } },

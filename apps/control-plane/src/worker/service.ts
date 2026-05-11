@@ -5,11 +5,24 @@ import type { EventService } from '../events/service.js';
 import type { Runner } from '../runner/types.js';
 import { SandboxLifecycleService } from '../sandbox/service.js';
 import type { SandboxProvider } from '../sandbox/types.js';
-import type { ArtifactRecord, CallbackStore, ClaimedMessageBatch, CreateArtifactRecord, MessageRecord, RunRecord, RunStore, SandboxStore, SessionStore } from '../store/types.js';
+import type {
+  ArtifactRecord,
+  CallbackStore,
+  ClaimedMessageBatch,
+  CreateArtifactRecord,
+  MessageRecord,
+  RunRecord,
+  RunStore,
+  SandboxStore,
+  SessionStore,
+} from '../store/types.js';
 
-type WorkerStore = RunStore & SessionStore & SandboxStore & CallbackStore & {
-  createArtifact(record: CreateArtifactRecord): Promise<ArtifactRecord>;
-};
+type WorkerStore = RunStore &
+  SessionStore &
+  SandboxStore &
+  CallbackStore & {
+    createArtifact(record: CreateArtifactRecord): Promise<ArtifactRecord>;
+  };
 
 export type RunProgressNotifier = {
   onRunStarted?(input: { message: MessageRecord; run: RunRecord }): Promise<void>;
@@ -71,12 +84,22 @@ export class WorkerService {
       if (await this.finalizeCancellationIfRequested(claimed.run.id)) return true;
       const completed = await this.options.store.completeRunBatch({ runId: claimed.run.id, completedAt: new Date() });
       for (const message of completed.messages) {
-        await this.options.events.append({ sessionId: message.sessionId, runId: completed.run.id, messageId: message.id, type: 'message_completed', payload: { sequence: message.sequence } });
+        await this.options.events.append({
+          sessionId: message.sessionId,
+          runId: completed.run.id,
+          messageId: message.id,
+          type: 'message_completed',
+          payload: { sequence: message.sequence },
+        });
       }
     } catch (error) {
       if (await this.finalizeCancellationIfRequested(claimed.run.id)) return true;
       const message = error instanceof Error ? error.message : 'Unknown worker error';
-      const failed = await this.options.store.failRunBatch({ runId: claimed.run.id, failedAt: new Date(), error: message });
+      const failed = await this.options.store.failRunBatch({
+        runId: claimed.run.id,
+        failedAt: new Date(),
+        error: message,
+      });
       await this.options.events.append({
         sessionId: failed.messages[0]!.sessionId,
         runId: failed.run.id,
@@ -85,7 +108,13 @@ export class WorkerService {
         payload: { error: message },
       });
       for (const failedMessage of failed.messages) {
-        await this.options.events.append({ sessionId: failedMessage.sessionId, runId: failed.run.id, messageId: failedMessage.id, type: 'message_failed', payload: { error: message } });
+        await this.options.events.append({
+          sessionId: failedMessage.sessionId,
+          runId: failed.run.id,
+          messageId: failedMessage.id,
+          type: 'message_failed',
+          payload: { error: message },
+        });
       }
     }
 
@@ -223,7 +252,10 @@ export class WorkerService {
         messageId: primary.id,
         result,
       });
-      await new CallbackService(this.options.store).enqueueCompletion({ claimed: { message: primary, run: claimed.run }, result });
+      await new CallbackService(this.options.store).enqueueCompletion({
+        claimed: { message: primary, run: claimed.run },
+        result,
+      });
     } finally {
       await this.options.store.updateSandbox({ ...record, updatedAt: new Date() });
     }
@@ -236,17 +268,30 @@ export class WorkerService {
 
   private async finalizeCancellationIfRequested(runId: string): Promise<boolean> {
     if (!(await this.isRunCancellationRequested(runId))) return false;
-    const cancelled = await this.options.store.finalizeRunCancellation({ runId, cancelledAt: new Date(), error: 'Run cancelled by user' });
+    const cancelled = await this.options.store.finalizeRunCancellation({
+      runId,
+      cancelledAt: new Date(),
+      error: 'Run cancelled by user',
+    });
     const primary = cancelled.messages[0]!;
     await this.options.events.append({
       sessionId: primary.sessionId,
       runId: cancelled.run.id,
       messageId: primary.id,
       type: 'run_cancelled',
-      payload: { sequences: cancelled.messages.map((message) => message.sequence), batchSize: cancelled.messages.length },
+      payload: {
+        sequences: cancelled.messages.map((message) => message.sequence),
+        batchSize: cancelled.messages.length,
+      },
     });
     for (const message of cancelled.messages) {
-      await this.options.events.append({ sessionId: message.sessionId, runId: cancelled.run.id, messageId: message.id, type: 'message_cancelled', payload: { sequence: message.sequence } });
+      await this.options.events.append({
+        sessionId: message.sessionId,
+        runId: cancelled.run.id,
+        messageId: message.id,
+        type: 'message_cancelled',
+        payload: { sequence: message.sequence },
+      });
     }
     return true;
   }
@@ -272,7 +317,10 @@ function buildBatchPrompt(messages: ClaimedMessageBatch['messages']): string {
 }
 
 function buildBatchContext(messages: ClaimedMessageBatch['messages']): Record<string, unknown> {
-  const context = messages.reduce<Record<string, unknown>>((merged, message) => ({ ...merged, ...(message.context ?? {}) }), {});
+  const context = messages.reduce<Record<string, unknown>>(
+    (merged, message) => ({ ...merged, ...(message.context ?? {}) }),
+    {},
+  );
   return context;
 }
 

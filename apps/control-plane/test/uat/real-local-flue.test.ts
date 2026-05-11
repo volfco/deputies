@@ -33,30 +33,33 @@ describe.skipIf(!enabled || !hasRequiredEnv)('real Flue + local sandbox UAT', ()
     const remotePath = await createLocalGitRemote(sandbox);
     const events: unknown[] = [];
 
-    const result = await new FlueRunner(
-      new RealFlueAgentFactory({ model: requireFlueModel(config) }),
-      { repositoryAccess: { github: new LocalGitAccessProvider(remotePath) } },
-    ).run({
+    const result = await new FlueRunner(new RealFlueAgentFactory({ model: requireFlueModel(config) }), {
+      repositoryAccess: { github: new LocalGitAccessProvider(remotePath) },
+    }).run({
       sessionId: 'real-local-flue-uat',
       runId: 'real-local-flue-uat-run',
       messageId: 'real-local-flue-uat-message',
       prompt: 'Use the shell to run `cat README.md`, then reply with the exact file contents only.',
       context: { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } },
       sandbox,
-      emit: async (event) => { events.push(event); },
+      emit: async (event) => {
+        events.push(event);
+      },
     });
 
     expect(result.text).toContain('LOCAL_FLUE_UAT_OK');
     expect(JSON.stringify(events)).not.toContain('ghs_secret_token');
-    expect(events).toContainEqual(expect.objectContaining({
-      type: 'repository_ready',
-      payload: expect.objectContaining({
-        provider: 'github',
-        owner: 'manaflow-ai',
-        repo: 'manaflow',
-        workspacePath: `${sandbox.workspacePath}/manaflow`,
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'repository_ready',
+        payload: expect.objectContaining({
+          provider: 'github',
+          owner: 'manaflow-ai',
+          repo: 'manaflow',
+          workspacePath: `${sandbox.workspacePath}/manaflow`,
+        }),
       }),
-    }));
+    );
     await expect(sandbox.fs?.readFile('manaflow/README.md')).resolves.toBe('LOCAL_FLUE_UAT_OK\n');
   }, 180_000);
 });

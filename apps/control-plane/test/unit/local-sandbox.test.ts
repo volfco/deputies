@@ -73,11 +73,15 @@ describe('LocalSandboxProvider', () => {
     const provider = new LocalSandboxProvider({ rootDir });
     const sandbox = await provider.create({ sessionId: 'session-1' });
 
-    await expect(sandbox.exec({ command: 'printf "${DEPUTIES_LOCAL_SANDBOX_TEST_SECRET:-missing}"' })).resolves.toMatchObject({
+    await expect(
+      sandbox.exec({ command: 'printf "${DEPUTIES_LOCAL_SANDBOX_TEST_SECRET:-missing}"' }),
+    ).resolves.toMatchObject({
       exitCode: 0,
       stdout: 'missing',
     });
-    await expect(sandbox.exec({ command: 'printf "$EXPLICIT_VALUE"', env: { EXPLICIT_VALUE: 'visible' } })).resolves.toMatchObject({
+    await expect(
+      sandbox.exec({ command: 'printf "$EXPLICIT_VALUE"', env: { EXPLICIT_VALUE: 'visible' } }),
+    ).resolves.toMatchObject({
       exitCode: 0,
       stdout: 'visible',
     });
@@ -124,8 +128,12 @@ describe('LocalSandboxProvider', () => {
 
     expect(result.exitCode).toBe(0);
     await expect(sandbox.fs?.readFile('manaflow/README.md')).resolves.toBe('hello local git\n');
-    await expect(sandbox.exec({ command: 'git config user.name', cwd: setup!.workspacePath })).resolves.toMatchObject({ stdout: 'DevDeputies\n' });
-    await expect(sandbox.exec({ command: 'git remote get-url origin', cwd: setup!.workspacePath })).resolves.toMatchObject({ stdout: `${remotePath}\n` });
+    await expect(sandbox.exec({ command: 'git config user.name', cwd: setup!.workspacePath })).resolves.toMatchObject({
+      stdout: 'DevDeputies\n',
+    });
+    await expect(
+      sandbox.exec({ command: 'git remote get-url origin', cwd: setup!.workspacePath }),
+    ).resolves.toMatchObject({ stdout: `${remotePath}\n` });
     expect(`${result.stdout}\n${result.stderr}`).not.toContain('ghs_secret_token');
   });
 
@@ -158,20 +166,33 @@ describe('LocalSandboxProvider', () => {
       },
     };
 
-    const result = await new FlueRunner(factory, { repositoryAccess: { github: new LocalGitAccessProvider(remotePath) } }).run({
+    const result = await new FlueRunner(factory, {
+      repositoryAccess: { github: new LocalGitAccessProvider(remotePath) },
+    }).run({
       sessionId: 'session-1',
       runId: 'run-1',
       messageId: 'message-1',
       prompt: 'inspect repo',
       context: { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } },
       sandbox,
-      emit: async (event) => { events.push(event); },
+      emit: async (event) => {
+        events.push(event);
+      },
     });
 
     expect(calls[0]).toMatchObject({ cwd: `${sandbox.workspacePath}/manaflow` });
     expect(result.text).toBe('readme: hello local git');
-    expect(events.map((event) => event.type)).toEqual(['run_started', 'repository_ready', 'agent_text_delta', 'run_completed']);
-    expect(events[1]?.payload).toMatchObject({ owner: 'manaflow-ai', repo: 'manaflow', workspacePath: `${sandbox.workspacePath}/manaflow` });
+    expect(events.map((event) => event.type)).toEqual([
+      'run_started',
+      'repository_ready',
+      'agent_text_delta',
+      'run_completed',
+    ]);
+    expect(events[1]?.payload).toMatchObject({
+      owner: 'manaflow-ai',
+      repo: 'manaflow',
+      workspacePath: `${sandbox.workspacePath}/manaflow`,
+    });
     await expect(sandbox.fs?.readFile('manaflow/README.md')).resolves.toBe('hello local git\n');
   });
 });
@@ -197,7 +218,10 @@ async function createLocalGitRemote(sandbox: SandboxHandle): Promise<string> {
   return `${sandbox.workspacePath}/remote.git`;
 }
 
-function shellInput(command: string, options: { cwd?: string; env?: Record<string, string>; timeout?: number } | undefined): SandboxExecInput {
+function shellInput(
+  command: string,
+  options: { cwd?: string; env?: Record<string, string>; timeout?: number } | undefined,
+): SandboxExecInput {
   const input: SandboxExecInput = { command };
   if (options?.cwd) input.cwd = options.cwd;
   if (options?.env) input.env = options.env;

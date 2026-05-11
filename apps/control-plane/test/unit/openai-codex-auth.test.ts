@@ -7,14 +7,17 @@ describe('loadOpenAICodexApiKey', () => {
   it('loads Codex OAuth credentials from a Pi auth file', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'deputies-codex-auth-'));
     const authFile = join(dir, 'auth.json');
-    await writeFile(authFile, JSON.stringify({
-      'openai-codex': {
-        type: 'oauth',
-        access: 'codex-access-token',
-        refresh: 'codex-refresh-token',
-        expires: Date.now() + 60_000,
-      },
-    }));
+    await writeFile(
+      authFile,
+      JSON.stringify({
+        'openai-codex': {
+          type: 'oauth',
+          access: 'codex-access-token',
+          refresh: 'codex-refresh-token',
+          expires: Date.now() + 60_000,
+        },
+      }),
+    );
 
     try {
       await expect(loadOpenAICodexApiKey(authFile)).resolves.toEqual({
@@ -65,14 +68,16 @@ describe('loadOpenAICodexApiKey', () => {
   it('loads Codex OAuth credentials from an environment base64 value', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'deputies-codex-auth-'));
     const authFile = join(dir, 'auth.json');
-    const authBase64 = Buffer.from(JSON.stringify({
-      'openai-codex': {
-        type: 'oauth',
-        access: 'codex-access-token',
-        refresh: 'codex-refresh-token',
-        expires: Date.now() + 60_000,
-      },
-    })).toString('base64');
+    const authBase64 = Buffer.from(
+      JSON.stringify({
+        'openai-codex': {
+          type: 'oauth',
+          access: 'codex-access-token',
+          refresh: 'codex-refresh-token',
+          expires: Date.now() + 60_000,
+        },
+      }),
+    ).toString('base64');
 
     try {
       await expect(loadOpenAICodexApiKey({ authFile, authBase64 })).resolves.toEqual({

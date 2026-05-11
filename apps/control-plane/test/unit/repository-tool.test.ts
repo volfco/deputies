@@ -25,12 +25,19 @@ describe('repository Flue tool', () => {
     });
     const tool = createRepositoryTool(services);
 
-    const result = await tool.execute({ action: 'set', owner: 'manaflow-ai', repo: 'manaflow', reason: 'User mentioned the app' });
+    const result = await tool.execute({
+      action: 'set',
+      owner: 'manaflow-ai',
+      repo: 'manaflow',
+      reason: 'User mentioned the app',
+    });
 
     expect(result).toContain('Active repository set to manaflow-ai/manaflow');
     expect(result).toContain('use repository({ action: "prepare" }) now');
     expect(updates).toEqual([{ repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } }]);
-    expect(services.state.context).toEqual({ repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } });
+    expect(services.state.context).toEqual({
+      repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' },
+    });
   });
 
   it('clears prepared state when changing repositories', async () => {
@@ -41,12 +48,18 @@ describe('repository Flue tool', () => {
       access,
       workspacePath: '/workspace/manaflow',
     };
-    services.github = { async getRepositoryAccess(repository) { return { ...access, owner: repository.owner, repo: repository.repo }; } };
+    services.github = {
+      async getRepositoryAccess(repository) {
+        return { ...access, owner: repository.owner, repo: repository.repo };
+      },
+    };
     const tool = createRepositoryTool(services);
 
     await tool.execute({ action: 'set', owner: 'manaflow-ai', repo: 'other-repo' });
 
-    expect(services.state.context).toEqual({ repository: { provider: 'github', owner: 'manaflow-ai', repo: 'other-repo' } });
+    expect(services.state.context).toEqual({
+      repository: { provider: 'github', owner: 'manaflow-ai', repo: 'other-repo' },
+    });
     expect(services.state.prepared).toBeUndefined();
   });
 
@@ -55,7 +68,9 @@ describe('repository Flue tool', () => {
     const events: NormalizedEvent[] = [];
     const agentRef: AgentRef = {
       current: {
-        async session() { throw new Error('not used'); },
+        async session() {
+          throw new Error('not used');
+        },
         async shell(command, options) {
           const shell: { command: string; cwd?: string; env?: Record<string, string> } = { command };
           if (options?.cwd) shell.cwd = options.cwd;
@@ -65,7 +80,12 @@ describe('repository Flue tool', () => {
         },
       },
     };
-    const services = repositoryServices({ agentRef, emit: async (event) => { events.push(event); } });
+    const services = repositoryServices({
+      agentRef,
+      emit: async (event) => {
+        events.push(event);
+      },
+    });
     services.state.context = { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } };
     const tool = createRepositoryTool(services);
 
@@ -77,7 +97,9 @@ describe('repository Flue tool', () => {
     expect(shells[0]?.command).toContain('default_branch="$(git -C');
     expect(shells[0]?.command).toContain('checkout -B "$default_branch" "origin/$default_branch"');
     expect(shells[0]?.command).toContain("git -C '/workspace/manaflow' config user.name 'DevDeputies'");
-    expect(shells[0]?.command).toContain("git -C '/workspace/manaflow' config user.email 'devdeputies@users.noreply.github.com'");
+    expect(shells[0]?.command).toContain(
+      "git -C '/workspace/manaflow' config user.email 'devdeputies@users.noreply.github.com'",
+    );
     expect(shells[0]?.command).not.toContain('ghs_secret_token');
     expect(shells[0]?.env).toEqual({
       GITHUB_AUTH_HEADER: `Authorization: Basic ${Buffer.from('x-access-token:ghs_secret_token').toString('base64')}`,
@@ -105,8 +127,12 @@ const access: GitHubRepositoryAccess = {
 function repositoryServices(overrides: Partial<RepositoryToolServices> = {}): RepositoryToolServices {
   return {
     github: {
-      async getRepositoryAccess() { return access; },
-      listAllowedRepositories() { return ['manaflow-ai/manaflow']; },
+      async getRepositoryAccess() {
+        return access;
+      },
+      listAllowedRepositories() {
+        return ['manaflow-ai/manaflow'];
+      },
     },
     sandbox: { workspacePath: '/workspace' } as never,
     agentRef: {},

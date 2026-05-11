@@ -224,15 +224,15 @@ Provider-specific differences should be expressed through capabilities, not `if 
 
 Examples:
 
-| Capability | Meaning |
-|---|---|
-| `persistentFilesystem` | Files survive between runs without snapshot restore. |
-| `snapshots` | Provider can save and restore filesystem state. |
-| `stopStart` | Provider can stop and later restart the same sandbox. |
-| `exec` | Provider supports direct command execution. |
-| `filesystem` | Provider supports file operations without shelling out. |
-| `streamingLogs` | Provider can stream runtime logs. |
-| `portForwarding` | Provider can expose dev server ports. |
+| Capability             | Meaning                                                 |
+| ---------------------- | ------------------------------------------------------- |
+| `persistentFilesystem` | Files survive between runs without snapshot restore.    |
+| `snapshots`            | Provider can save and restore filesystem state.         |
+| `stopStart`            | Provider can stop and later restart the same sandbox.   |
+| `exec`                 | Provider supports direct command execution.             |
+| `filesystem`           | Provider supports file operations without shelling out. |
+| `streamingLogs`        | Provider can stream runtime logs.                       |
+| `portForwarding`       | Provider can expose dev server ports.                   |
 
 The lifecycle manager should select behavior based on capabilities.
 

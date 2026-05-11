@@ -1,19 +1,32 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
 import { createGitHubAppJwt } from '../../src/integrations/github/auth.js';
 import type { GitHubClient } from '../../src/integrations/github/client.js';
-import { GitHubRepositoryAccessError, GitHubRepositoryAccessService } from '../../src/integrations/github/repository-access.js';
+import {
+  GitHubRepositoryAccessError,
+  GitHubRepositoryAccessService,
+} from '../../src/integrations/github/repository-access.js';
 
 describe('GitHub App runtime access', () => {
   it('creates a signed GitHub App JWT', () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
-    const token = createGitHubAppJwt({ appId: '12345', privateKey: privatePem, now: new Date('2026-05-06T12:00:00.000Z') });
+    const token = createGitHubAppJwt({
+      appId: '12345',
+      privateKey: privatePem,
+      now: new Date('2026-05-06T12:00:00.000Z'),
+    });
     const [header, payload, signature] = token.split('.');
     if (!header || !payload || !signature) throw new Error('Expected JWT parts');
 
     expect(JSON.parse(Buffer.from(header, 'base64url').toString())).toEqual({ alg: 'RS256', typ: 'JWT' });
-    expect(JSON.parse(Buffer.from(payload, 'base64url').toString())).toMatchObject({ iss: '12345', iat: 1778068740, exp: 1778069340 });
-    expect(verify('RSA-SHA256', Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature, 'base64url'))).toBe(true);
+    expect(JSON.parse(Buffer.from(payload, 'base64url').toString())).toMatchObject({
+      iss: '12345',
+      iat: 1778068740,
+      exp: 1778069340,
+    });
+    expect(
+      verify('RSA-SHA256', Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature, 'base64url')),
+    ).toBe(true);
   });
 
   it('resolves and caches installation tokens for allowed repositories', async () => {
@@ -30,7 +43,13 @@ describe('GitHub App runtime access', () => {
     const first = await service.getRepositoryAccess({ owner: 'acme', repo: 'widget' });
     const second = await service.getRepositoryAccess({ owner: 'acme', repo: 'widget' });
 
-    expect(first).toMatchObject({ provider: 'github', owner: 'acme', repo: 'widget', cloneUrl: 'https://github.com/acme/widget.git', auth: { type: 'bearer', token: 'installation-token-1' } });
+    expect(first).toMatchObject({
+      provider: 'github',
+      owner: 'acme',
+      repo: 'widget',
+      cloneUrl: 'https://github.com/acme/widget.git',
+      auth: { type: 'bearer', token: 'installation-token-1' },
+    });
     expect(second.auth.token).toBe('installation-token-1');
     expect(client.installationLookups).toEqual(['acme/widget']);
     expect(client.tokenRequests).toEqual([{ installationId: 9001, repositories: ['widget'] }]);
@@ -102,7 +121,9 @@ describe('GitHub App runtime access', () => {
       allowedRepositories: ['acme/widget'],
     });
 
-    await expect(service.getRepositoryAccess({ owner: 'other', repo: 'repo' })).rejects.toBeInstanceOf(GitHubRepositoryAccessError);
+    await expect(service.getRepositoryAccess({ owner: 'other', repo: 'repo' })).rejects.toBeInstanceOf(
+      GitHubRepositoryAccessError,
+    );
   });
 });
 
@@ -116,10 +137,20 @@ class FakeGitHubClient {
     return { id: 9001 };
   }
 
-  async createInstallationAccessToken(input: { installationId: number; appJwt: string; repositories?: string[] }): Promise<{ token: string; expiresAt: Date }> {
+  async createInstallationAccessToken(input: {
+    installationId: number;
+    appJwt: string;
+    repositories?: string[];
+  }): Promise<{ token: string; expiresAt: Date }> {
     expect(input.appJwt.split('.')).toHaveLength(3);
-    this.tokenRequests.push({ installationId: input.installationId, ...(input.repositories ? { repositories: input.repositories } : {}) });
-    return { token: `installation-token-${this.tokenRequests.length}`, expiresAt: new Date('2026-05-06T13:00:00.000Z') };
+    this.tokenRequests.push({
+      installationId: input.installationId,
+      ...(input.repositories ? { repositories: input.repositories } : {}),
+    });
+    return {
+      token: `installation-token-${this.tokenRequests.length}`,
+      expiresAt: new Date('2026-05-06T13:00:00.000Z'),
+    };
   }
 }
 

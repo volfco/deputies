@@ -22,7 +22,9 @@ describe.skipIf(process.env.RUN_SLACK_EMULATE_TEST !== 'true')('Slack emulate', 
     try {
       const channel = await getFirstChannelId(slack.url);
       const thread = await postMessage(slack.url, { channel, text: 'initial thread message' });
-      const sender = new SlackCompletionCallbackSender(new SlackClient({ apiBaseUrl: `${slack.url}/api`, botToken: token }));
+      const sender = new SlackCompletionCallbackSender(
+        new SlackClient({ apiBaseUrl: `${slack.url}/api`, botToken: token }),
+      );
 
       await sender.deliver(
         { type: 'slack', target: { channel, threadTs: thread.ts, messageTs: thread.ts } },
@@ -49,12 +51,20 @@ async function getFirstChannelId(baseUrl: string): Promise<string> {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
   });
-  const body = (await response.json()) as { ok: boolean; channels?: Array<{ id: string; name: string }>; error?: string };
-  if (!body.ok || !body.channels?.[0]) throw new Error(`Unable to list emulated Slack channels: ${body.error ?? 'missing channel'}`);
+  const body = (await response.json()) as {
+    ok: boolean;
+    channels?: Array<{ id: string; name: string }>;
+    error?: string;
+  };
+  if (!body.ok || !body.channels?.[0])
+    throw new Error(`Unable to list emulated Slack channels: ${body.error ?? 'missing channel'}`);
   return body.channels[0].id;
 }
 
-async function postMessage(baseUrl: string, input: { channel: string; text: string; threadTs?: string }): Promise<{ ts: string }> {
+async function postMessage(
+  baseUrl: string,
+  input: { channel: string; text: string; threadTs?: string },
+): Promise<{ ts: string }> {
   const response = await fetch(`${baseUrl}/api/chat.postMessage`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
@@ -72,6 +82,7 @@ async function getReplies(baseUrl: string, channel: string, threadTs: string): P
     body: JSON.stringify({ channel, ts: threadTs }),
   });
   const body = (await response.json()) as { ok: boolean; messages?: Array<{ text: string }>; error?: string };
-  if (!body.ok || !body.messages) throw new Error(`Unable to fetch emulated Slack replies: ${body.error ?? 'missing messages'}`);
+  if (!body.ok || !body.messages)
+    throw new Error(`Unable to fetch emulated Slack replies: ${body.error ?? 'missing messages'}`);
   return body.messages;
 }

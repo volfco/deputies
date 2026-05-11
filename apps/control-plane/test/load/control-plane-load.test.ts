@@ -8,7 +8,15 @@ import { MessageService } from '../../src/messages/service.js';
 import { FakeRunner } from '../../src/runner/fake.js';
 import type { Runner, RunnerInput, RunnerResult } from '../../src/runner/types.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
-import type { ConnectSandboxInput, CreateSandboxInput, SandboxCapabilities, SandboxHandle, SandboxHealth, SandboxProvider, SandboxRef } from '../../src/sandbox/types.js';
+import type {
+  ConnectSandboxInput,
+  CreateSandboxInput,
+  SandboxCapabilities,
+  SandboxHandle,
+  SandboxHealth,
+  SandboxProvider,
+  SandboxRef,
+} from '../../src/sandbox/types.js';
 import { SessionService } from '../../src/sessions/service.js';
 import { PostgresStore } from '../../src/store/postgres.js';
 import { WorkerService } from '../../src/worker/service.js';
@@ -41,7 +49,10 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
 
   beforeAll(async () => {
     await runMigrations(testDatabaseUrl!);
-    pool = new Pool({ connectionString: testDatabaseUrl, max: Math.max(workerCount + contentionWorkerCount + webhookConcurrency + 8, 20) });
+    pool = new Pool({
+      connectionString: testDatabaseUrl,
+      max: Math.max(workerCount + contentionWorkerCount + webhookConcurrency + 8, 20),
+    });
     store = new PostgresStore(pool);
   });
 
@@ -69,12 +80,20 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
     const processedRunsByWorker = new Array<number>(workerCount).fill(0);
     const startedAt = performance.now();
 
-    await Promise.all(processedRunsByWorker.map(async (_, index) => {
-      const worker = createWorker({ store: profiledStore, events, runner, sandboxProvider, leaseOwner: `load-worker-${index + 1}` });
-      while (await processNextProfiler.measure('processNext', () => worker.processNext())) {
-        processedRunsByWorker[index] = (processedRunsByWorker[index] ?? 0) + 1;
-      }
-    }));
+    await Promise.all(
+      processedRunsByWorker.map(async (_, index) => {
+        const worker = createWorker({
+          store: profiledStore,
+          events,
+          runner,
+          sandboxProvider,
+          leaseOwner: `load-worker-${index + 1}`,
+        });
+        while (await processNextProfiler.measure('processNext', () => worker.processNext())) {
+          processedRunsByWorker[index] = (processedRunsByWorker[index] ?? 0) + 1;
+        }
+      }),
+    );
 
     const elapsedSeconds = secondsSince(startedAt);
     const [messageCounts, runCounts, eventCount, sandboxCount] = await Promise.all([
@@ -99,7 +118,10 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
       eventCount,
       sandboxCount,
       approximateStoreCallsPerRun: round(storeProfiler.totalCount / Math.max(processedRuns, 1), 2),
-      approximateEventAppendsPerRun: round((eventProfiler.snapshot().append?.count ?? 0) / Math.max(processedRuns, 1), 2),
+      approximateEventAppendsPerRun: round(
+        (eventProfiler.snapshot().append?.count ?? 0) / Math.max(processedRuns, 1),
+        2,
+      ),
       processNext: processNextProfiler.summary(),
       storeMethods: storeProfiler.summary({ top: 16 }),
       eventMethods: eventProfiler.summary(),
@@ -123,21 +145,23 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
     const claimedRunIds = new Set<string>();
     const claimedMessageIds = new Set<string>();
 
-    await Promise.all(claimedByWorker.map(async (_, index) => {
-      while (true) {
-        const batch = await store.claimNextPendingMessageBatch({
-          runId: uuidFromInt('7000', (index + 1) * 1_000_000 + claimedByWorker[index]! + 1),
-          runnerType: 'fake',
-          leaseOwner: `contention-worker-${index + 1}`,
-          leaseExpiresAt: new Date(Date.now() + 60_000),
-          now: new Date(),
-        });
-        if (!batch) return;
-        claimedByWorker[index] = claimedByWorker[index]! + 1;
-        claimedRunIds.add(batch.run.id);
-        for (const message of batch.messages) claimedMessageIds.add(message.id);
-      }
-    }));
+    await Promise.all(
+      claimedByWorker.map(async (_, index) => {
+        while (true) {
+          const batch = await store.claimNextPendingMessageBatch({
+            runId: uuidFromInt('7000', (index + 1) * 1_000_000 + claimedByWorker[index]! + 1),
+            runnerType: 'fake',
+            leaseOwner: `contention-worker-${index + 1}`,
+            leaseExpiresAt: new Date(Date.now() + 60_000),
+            now: new Date(),
+          });
+          if (!batch) return;
+          claimedByWorker[index] = claimedByWorker[index]! + 1;
+          claimedRunIds.add(batch.run.id);
+          for (const message of batch.messages) claimedMessageIds.add(message.id);
+        }
+      }),
+    );
 
     const elapsedSeconds = secondsSince(startedAt);
     const [messageCounts, sessionCounts, runCounts] = await Promise.all([
@@ -146,7 +170,19 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
       countByStatus(pool, 'runs'),
     ]);
     const claimedRuns = claimedByWorker.reduce((sum, count) => sum + count, 0);
-    await writeLoadSummary('queue_contention', { sessionCount: contentionSessionCount, workerCount: contentionWorkerCount, expectedClaimableSessions, elapsedSeconds, claimsPerSecond: rate(claimedRuns, elapsedSeconds), claimedRuns, claimedMessages: claimedMessageIds.size, claimedByWorker, messageCounts, sessionCounts, runCounts });
+    await writeLoadSummary('queue_contention', {
+      sessionCount: contentionSessionCount,
+      workerCount: contentionWorkerCount,
+      expectedClaimableSessions,
+      elapsedSeconds,
+      claimsPerSecond: rate(claimedRuns, elapsedSeconds),
+      claimedRuns,
+      claimedMessages: claimedMessageIds.size,
+      claimedByWorker,
+      messageCounts,
+      sessionCounts,
+      runCounts,
+    });
 
     expect(claimedRuns).toBe(expectedClaimableSessions);
     expect(claimedRunIds.size).toBe(claimedRuns);
@@ -162,14 +198,29 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
 
   it('keeps session-list and event-replay read paths bounded with large seeded histories', async () => {
     const hotSessionId = uuidFromInt('8100', 1);
-    await seedReadHeavyDataset(pool, { sessionCount: readSessionCount, eventsPerSession: readEventsPerSession, hotSessionEvents: readHotSessionEvents });
+    await seedReadHeavyDataset(pool, {
+      sessionCount: readSessionCount,
+      eventsPerSession: readEventsPerSession,
+      hotSessionEvents: readHotSessionEvents,
+    });
 
     const listSessions = await measureAsync(() => store.listSessions());
     const listAllEvents = await measureAsync(() => store.listEvents(0));
     const hotSessionEvents = await measureAsync(() => store.getEvents(hotSessionId));
-    const afterCursorEvents = await measureAsync(() => store.listEvents(Math.floor((readSessionCount * readEventsPerSession) / 2)));
+    const afterCursorEvents = await measureAsync(() =>
+      store.listEvents(Math.floor((readSessionCount * readEventsPerSession) / 2)),
+    );
 
-    await writeLoadSummary('read_paths', { sessionCount: readSessionCount, eventsPerSession: readEventsPerSession, hotSessionEventCount: readHotSessionEvents, totalEvents: readSessionCount * readEventsPerSession + readHotSessionEvents, listSessions: summarizeMeasurement(listSessions), listAllEvents: summarizeMeasurement(listAllEvents), hotSessionReplay: summarizeMeasurement(hotSessionEvents), afterCursorEvents: summarizeMeasurement(afterCursorEvents) });
+    await writeLoadSummary('read_paths', {
+      sessionCount: readSessionCount,
+      eventsPerSession: readEventsPerSession,
+      hotSessionEventCount: readHotSessionEvents,
+      totalEvents: readSessionCount * readEventsPerSession + readHotSessionEvents,
+      listSessions: summarizeMeasurement(listSessions),
+      listAllEvents: summarizeMeasurement(listAllEvents),
+      hotSessionReplay: summarizeMeasurement(hotSessionEvents),
+      afterCursorEvents: summarizeMeasurement(afterCursorEvents),
+    });
 
     expect(listSessions.value).toHaveLength(readSessionCount + 1);
     expect(listAllEvents.value).toHaveLength(readSessionCount * readEventsPerSession + readHotSessionEvents);
@@ -183,12 +234,26 @@ describe.skipIf(!testDatabaseUrl)('control-plane load', () => {
   it('ingests generic webhook deliveries with dedupe under concurrent load', async () => {
     await seedWebhookSource(pool);
     const events = new EventService(store);
-    const service = new GenericWebhookService(store, new SessionService(store, events), new MessageService(store, events));
+    const service = new GenericWebhookService(
+      store,
+      new SessionService(store, events),
+      new MessageService(store, events),
+    );
     const startedAt = performance.now();
 
     const results = await runConcurrent(webhookDeliveryCount, webhookConcurrency, async (index) => {
       const dedupeIndex = index % 10 === 0 ? index - 1 : index;
-      return service.handle({ sourceKey: 'load-generic', authorization: 'Bearer load-token', payload: { threadId: `thread-${Math.floor(index / 3)}`, dedupeKey: `delivery-${Math.max(dedupeIndex, 0)}`, prompt: `Load webhook prompt ${index}`, title: `Webhook load thread ${Math.floor(index / 3)}`, context: { index, duplicateOf: dedupeIndex === index ? undefined : dedupeIndex } } });
+      return service.handle({
+        sourceKey: 'load-generic',
+        authorization: 'Bearer load-token',
+        payload: {
+          threadId: `thread-${Math.floor(index / 3)}`,
+          dedupeKey: `delivery-${Math.max(dedupeIndex, 0)}`,
+          prompt: `Load webhook prompt ${index}`,
+          title: `Webhook load thread ${Math.floor(index / 3)}`,
+          context: { index, duplicateOf: dedupeIndex === index ? undefined : dedupeIndex },
+        },
+      });
     });
 
     const elapsedSeconds = secondsSince(startedAt);
@@ -276,7 +341,9 @@ class MethodProfiler {
     return Object.fromEntries(Array.from(this.stats.entries()).map(([name, item]) => [name, { ...item }]));
   }
 
-  summary(options: { top?: number } = {}): Record<string, { count: number; totalMs: number; avgMs: number; maxMs: number }> {
+  summary(
+    options: { top?: number } = {},
+  ): Record<string, { count: number; totalMs: number; avgMs: number; maxMs: number }> {
     return Object.fromEntries(
       Array.from(this.stats.entries())
         .sort(([, left], [, right]) => right.totalMs - left.totalMs)
@@ -305,7 +372,10 @@ function profileObject<T extends object>(target: T, profiler: MethodProfiler): T
 }
 
 class ProfilingRunner implements Runner {
-  constructor(private readonly delegate: Runner, private readonly profiler: MethodProfiler) {}
+  constructor(
+    private readonly delegate: Runner,
+    private readonly profiler: MethodProfiler,
+  ) {}
 
   async run(input: RunnerInput): Promise<RunnerResult> {
     return this.profiler.measure('run', () => this.delegate.run(input));
@@ -316,7 +386,10 @@ class ProfilingSandboxProvider implements SandboxProvider {
   readonly name: string;
   readonly capabilities: SandboxCapabilities;
 
-  constructor(private readonly delegate: SandboxProvider, private readonly profiler: MethodProfiler) {
+  constructor(
+    private readonly delegate: SandboxProvider,
+    private readonly profiler: MethodProfiler,
+  ) {
     this.name = delegate.name;
     this.capabilities = delegate.capabilities;
   }
@@ -352,7 +425,10 @@ async function truncateAppTables(pool: Pool): Promise<void> {
   );
 }
 
-async function seedPendingBacklog(pool: Pool, input: { sessionCount: number; messagesPerSession: number }): Promise<void> {
+async function seedPendingBacklog(
+  pool: Pool,
+  input: { sessionCount: number; messagesPerSession: number },
+): Promise<void> {
   await pool.query(
     `INSERT INTO sessions (id, status, title, created_at, updated_at)
      SELECT session_id, 'idle', 'Load session ' || session_index, now(), now()
@@ -447,7 +523,10 @@ async function countClaimableContentionSessions(pool: Pool): Promise<number> {
   return Number(result.rows[0]!.count);
 }
 
-async function seedReadHeavyDataset(pool: Pool, input: { sessionCount: number; eventsPerSession: number; hotSessionEvents: number }): Promise<void> {
+async function seedReadHeavyDataset(
+  pool: Pool,
+  input: { sessionCount: number; eventsPerSession: number; hotSessionEvents: number },
+): Promise<void> {
   const hotSessionId = uuidFromInt('8100', 1);
   await pool.query(
     `INSERT INTO sessions (id, status, title, context, created_at, updated_at)
@@ -530,8 +609,13 @@ async function runConcurrent<T>(count: number, concurrency: number, task: (index
   return results;
 }
 
-async function countByStatus(pool: Pool, table: 'messages' | 'runs' | 'sessions' | 'integration_deliveries'): Promise<Record<string, number>> {
-  const result = await pool.query<{ status: string; count: string }>(`SELECT status, count(*)::text AS count FROM ${table} GROUP BY status ORDER BY status`);
+async function countByStatus(
+  pool: Pool,
+  table: 'messages' | 'runs' | 'sessions' | 'integration_deliveries',
+): Promise<Record<string, number>> {
+  const result = await pool.query<{ status: string; count: string }>(
+    `SELECT status, count(*)::text AS count FROM ${table} GROUP BY status ORDER BY status`,
+  );
   return Object.fromEntries(result.rows.map((row) => [row.status, Number(row.count)]));
 }
 
@@ -547,7 +631,10 @@ async function measureAsync<T>(fn: () => Promise<T>): Promise<{ value: T; elapse
 }
 
 function summarizeMeasurement<T>(measurement: { value: T; elapsedMs: number }): { elapsedMs: number; rows?: number } {
-  return { elapsedMs: measurement.elapsedMs, ...(Array.isArray(measurement.value) ? { rows: measurement.value.length } : {}) };
+  return {
+    elapsedMs: measurement.elapsedMs,
+    ...(Array.isArray(measurement.value) ? { rows: measurement.value.length } : {}),
+  };
 }
 
 async function writeLoadSummary(name: string, metrics: Record<string, unknown>): Promise<Record<string, unknown>> {

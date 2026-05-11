@@ -144,12 +144,18 @@ export class InProcessDockerOrchestrator implements DockerOrchestrator {
     const args = [
       'run',
       '-d',
-      '--name', name,
-      '--label', 'deputies.sandbox-provider=docker',
-      '--label', `deputies.session-id=${input.sessionId}`,
-      '-e', `DEPUTIES_SANDBOX_TOKEN=${bridgeToken}`,
-      '-e', `DEPUTIES_WORKSPACE=${this.workspacePath}`,
-      '-p', `127.0.0.1::${bridgePort}`,
+      '--name',
+      name,
+      '--label',
+      'deputies.sandbox-provider=docker',
+      '--label',
+      `deputies.session-id=${input.sessionId}`,
+      '-e',
+      `DEPUTIES_SANDBOX_TOKEN=${bridgeToken}`,
+      '-e',
+      `DEPUTIES_WORKSPACE=${this.workspacePath}`,
+      '-p',
+      `127.0.0.1::${bridgePort}`,
     ];
     if (this.options.network) args.push('--network', this.options.network);
     if (this.options.memory) args.push('--memory', this.options.memory);
@@ -181,7 +187,7 @@ export class InProcessDockerOrchestrator implements DockerOrchestrator {
 
     const inspected = await this.inspect(input.providerSandboxId);
     const metadata = readMetadata(input.metadata ?? {});
-    const bridgeUrl = metadata.bridgeUrl ?? await this.bridgeUrl(input.providerSandboxId);
+    const bridgeUrl = metadata.bridgeUrl ?? (await this.bridgeUrl(input.providerSandboxId));
     if (!metadata.bridgeToken) throw new Error('Docker sandbox metadata is missing bridgeToken');
     const descriptor = this.descriptor({
       providerSandboxId: inspected.id,
@@ -199,7 +205,8 @@ export class InProcessDockerOrchestrator implements DockerOrchestrator {
     try {
       const inspected = await this.inspect(input.providerSandboxId);
       if (inspected.state === 'running') return { status: 'ready', checkedAt: new Date() };
-      if (inspected.state === 'created' || inspected.state === 'restarting') return { status: 'starting', checkedAt: new Date() };
+      if (inspected.state === 'created' || inspected.state === 'restarting')
+        return { status: 'starting', checkedAt: new Date() };
       if (inspected.state === 'exited') return { status: 'stopped', checkedAt: new Date() };
       return { status: 'unhealthy', message: `Docker container state: ${inspected.state}`, checkedAt: new Date() };
     } catch (error) {
@@ -227,7 +234,10 @@ export class InProcessDockerOrchestrator implements DockerOrchestrator {
   }
 
   async readFile(input: DockerFileInput): Promise<Uint8Array> {
-    const response = await bridgeFetch(await this.connectedDescriptor(input), `/fs/read?path=${encodeURIComponent(input.path)}`);
+    const response = await bridgeFetch(
+      await this.connectedDescriptor(input),
+      `/fs/read?path=${encodeURIComponent(input.path)}`,
+    );
     return new Uint8Array(await response.arrayBuffer());
   }
 
@@ -239,26 +249,38 @@ export class InProcessDockerOrchestrator implements DockerOrchestrator {
   }
 
   async stat(input: DockerFileInput): Promise<FileStat> {
-    const body = await readBridgeJson(await bridgeFetch(await this.connectedDescriptor(input), `/fs/stat?path=${encodeURIComponent(input.path)}`));
+    const body = await readBridgeJson(
+      await bridgeFetch(await this.connectedDescriptor(input), `/fs/stat?path=${encodeURIComponent(input.path)}`),
+    );
     return parseFileStat(body);
   }
 
   async readdir(input: DockerFileInput): Promise<string[]> {
-    const body = await readBridgeJson(await bridgeFetch(await this.connectedDescriptor(input), `/fs/readdir?path=${encodeURIComponent(input.path)}`));
+    const body = await readBridgeJson(
+      await bridgeFetch(await this.connectedDescriptor(input), `/fs/readdir?path=${encodeURIComponent(input.path)}`),
+    );
     return readStringArray(readObject(body).entries);
   }
 
   async exists(input: DockerFileInput): Promise<boolean> {
-    const body = await readBridgeJson(await bridgeFetch(await this.connectedDescriptor(input), `/fs/exists?path=${encodeURIComponent(input.path)}`));
+    const body = await readBridgeJson(
+      await bridgeFetch(await this.connectedDescriptor(input), `/fs/exists?path=${encodeURIComponent(input.path)}`),
+    );
     return readObject(body).exists === true;
   }
 
   async mkdir(input: DockerMkdirInput): Promise<void> {
-    await bridgeFetch(await this.connectedDescriptor(input), '/fs/mkdir', { method: 'POST', body: JSON.stringify({ path: input.path, recursive: input.recursive }) });
+    await bridgeFetch(await this.connectedDescriptor(input), '/fs/mkdir', {
+      method: 'POST',
+      body: JSON.stringify({ path: input.path, recursive: input.recursive }),
+    });
   }
 
   async rm(input: DockerRmInput): Promise<void> {
-    await bridgeFetch(await this.connectedDescriptor(input), '/fs/rm', { method: 'POST', body: JSON.stringify({ path: input.path, recursive: input.recursive, force: input.force }) });
+    await bridgeFetch(await this.connectedDescriptor(input), '/fs/rm', {
+      method: 'POST',
+      body: JSON.stringify({ path: input.path, recursive: input.recursive, force: input.force }),
+    });
   }
 
   private async connectedDescriptor(input: DockerSandboxRef): Promise<DockerSandboxDescriptor> {
@@ -322,11 +344,16 @@ export class HttpDockerOrchestratorClient implements DockerOrchestrator {
   }
 
   connect(input: DockerConnectSandboxInput): Promise<DockerSandboxDescriptor> {
-    return this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/connect`, input) as Promise<DockerSandboxDescriptor>;
+    return this.post(
+      `/sandboxes/${encodeURIComponent(input.providerSandboxId)}/connect`,
+      input,
+    ) as Promise<DockerSandboxDescriptor>;
   }
 
   health(input: DockerSandboxRef): Promise<SandboxHealth> {
-    return this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/health`, input).then(parseSandboxHealth);
+    return this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/health`, input).then(
+      parseSandboxHealth,
+    );
   }
 
   async start(input: DockerSandboxRef): Promise<void> {
@@ -346,7 +373,9 @@ export class HttpDockerOrchestratorClient implements DockerOrchestrator {
   }
 
   async readFile(input: DockerFileInput): Promise<Uint8Array> {
-    const body = readObject(await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/read`, input));
+    const body = readObject(
+      await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/read`, input),
+    );
     if (typeof body.contentBase64 !== 'string') throw new Error('Invalid Docker orchestrator readFile response');
     return new Uint8Array(Buffer.from(body.contentBase64, 'base64'));
   }
@@ -363,11 +392,17 @@ export class HttpDockerOrchestratorClient implements DockerOrchestrator {
   }
 
   async readdir(input: DockerFileInput): Promise<string[]> {
-    return readStringArray(readObject(await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/readdir`, input)).entries);
+    return readStringArray(
+      readObject(await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/readdir`, input))
+        .entries,
+    );
   }
 
   async exists(input: DockerFileInput): Promise<boolean> {
-    return readObject(await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/exists`, input)).exists === true;
+    return (
+      readObject(await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/exists`, input))
+        .exists === true
+    );
   }
 
   async mkdir(input: DockerMkdirInput): Promise<void> {
@@ -385,7 +420,7 @@ export class HttpDockerOrchestratorClient implements DockerOrchestrator {
       body: JSON.stringify(body),
     });
     const text = await response.text();
-    const parsed = text ? JSON.parse(text) as unknown : {};
+    const parsed = text ? (JSON.parse(text) as unknown) : {};
     if (!response.ok) {
       const error = readObject(parsed).error;
       throw new Error(typeof error === 'string' ? error : `Docker orchestrator request failed: ${response.status}`);
@@ -400,31 +435,73 @@ export class HttpDockerOrchestratorClient implements DockerOrchestrator {
   }
 }
 
-export function createDockerOrchestratorHttpHandler(orchestrator: DockerOrchestrator, token?: string): (request: Request) => Promise<Response> {
+export function createDockerOrchestratorHttpHandler(
+  orchestrator: DockerOrchestrator,
+  token?: string,
+): (request: Request) => Promise<Response> {
   return async (request) => {
     try {
-      if (token && request.headers.get('authorization') !== `Bearer ${token}`) return jsonResponse(401, { error: 'unauthorized' });
+      if (token && request.headers.get('authorization') !== `Bearer ${token}`)
+        return jsonResponse(401, { error: 'unauthorized' });
       const url = new URL(request.url);
       const match = url.pathname.match(/^\/sandboxes\/([^/]+)\/(.+)$/);
-      if (request.method === 'POST' && url.pathname === '/sandboxes') return jsonResponse(200, await orchestrator.create(await request.json() as DockerCreateSandboxInput));
+      if (request.method === 'POST' && url.pathname === '/sandboxes')
+        return jsonResponse(200, await orchestrator.create((await request.json()) as DockerCreateSandboxInput));
       if (request.method !== 'POST' || !match) return jsonResponse(404, { error: 'not_found' });
       const body = readObject(await request.json());
       const ref = { providerSandboxId: decodeURIComponent(match[1]!), sessionId: readSessionId(body) };
       switch (match[2]) {
-        case 'connect': return jsonResponse(200, await orchestrator.connect({ ...ref, metadata: readObject(body.metadata ?? {}) }));
-        case 'health': return jsonResponse(200, await orchestrator.health(ref));
-        case 'start': await orchestrator.start(ref); return jsonResponse(200, { ok: true });
-        case 'stop': await orchestrator.stop(ref); return jsonResponse(200, { ok: true });
-        case 'destroy': await orchestrator.destroy(ref); return jsonResponse(200, { ok: true });
-        case 'exec': return jsonResponse(200, await orchestrator.exec(dockerExecInput(ref, body)));
-        case 'fs/read': return jsonResponse(200, { contentBase64: Buffer.from(await orchestrator.readFile({ ...ref, path: readString(body.path, 'path') })).toString('base64') });
-        case 'fs/write': await orchestrator.writeFile({ ...ref, path: readString(body.path, 'path'), content: Buffer.from(readString(body.contentBase64, 'contentBase64'), 'base64') }); return jsonResponse(200, { ok: true });
-        case 'fs/stat': return jsonResponse(200, await orchestrator.stat({ ...ref, path: readString(body.path, 'path') }));
-        case 'fs/readdir': return jsonResponse(200, { entries: await orchestrator.readdir({ ...ref, path: readString(body.path, 'path') }) });
-        case 'fs/exists': return jsonResponse(200, { exists: await orchestrator.exists({ ...ref, path: readString(body.path, 'path') }) });
-        case 'fs/mkdir': await orchestrator.mkdir({ ...ref, path: readString(body.path, 'path'), recursive: body.recursive === true }); return jsonResponse(200, { ok: true });
-        case 'fs/rm': await orchestrator.rm({ ...ref, path: readString(body.path, 'path'), recursive: body.recursive === true, force: body.force === true }); return jsonResponse(200, { ok: true });
-        default: return jsonResponse(404, { error: 'not_found' });
+        case 'connect':
+          return jsonResponse(200, await orchestrator.connect({ ...ref, metadata: readObject(body.metadata ?? {}) }));
+        case 'health':
+          return jsonResponse(200, await orchestrator.health(ref));
+        case 'start':
+          await orchestrator.start(ref);
+          return jsonResponse(200, { ok: true });
+        case 'stop':
+          await orchestrator.stop(ref);
+          return jsonResponse(200, { ok: true });
+        case 'destroy':
+          await orchestrator.destroy(ref);
+          return jsonResponse(200, { ok: true });
+        case 'exec':
+          return jsonResponse(200, await orchestrator.exec(dockerExecInput(ref, body)));
+        case 'fs/read':
+          return jsonResponse(200, {
+            contentBase64: Buffer.from(
+              await orchestrator.readFile({ ...ref, path: readString(body.path, 'path') }),
+            ).toString('base64'),
+          });
+        case 'fs/write':
+          await orchestrator.writeFile({
+            ...ref,
+            path: readString(body.path, 'path'),
+            content: Buffer.from(readString(body.contentBase64, 'contentBase64'), 'base64'),
+          });
+          return jsonResponse(200, { ok: true });
+        case 'fs/stat':
+          return jsonResponse(200, await orchestrator.stat({ ...ref, path: readString(body.path, 'path') }));
+        case 'fs/readdir':
+          return jsonResponse(200, {
+            entries: await orchestrator.readdir({ ...ref, path: readString(body.path, 'path') }),
+          });
+        case 'fs/exists':
+          return jsonResponse(200, {
+            exists: await orchestrator.exists({ ...ref, path: readString(body.path, 'path') }),
+          });
+        case 'fs/mkdir':
+          await orchestrator.mkdir({ ...ref, path: readString(body.path, 'path'), recursive: body.recursive === true });
+          return jsonResponse(200, { ok: true });
+        case 'fs/rm':
+          await orchestrator.rm({
+            ...ref,
+            path: readString(body.path, 'path'),
+            recursive: body.recursive === true,
+            force: body.force === true,
+          });
+          return jsonResponse(200, { ok: true });
+        default:
+          return jsonResponse(404, { error: 'not_found' });
       }
     } catch (error) {
       return jsonResponse(500, { error: error instanceof Error ? error.message : 'Unknown Docker orchestrator error' });
@@ -467,7 +544,9 @@ function createDockerFileSystem(orchestrator: DockerOrchestrator, ref: DockerSan
 }
 
 async function execBridge(descriptor: DockerSandboxDescriptor, input: SandboxExecInput): Promise<SandboxExecResult> {
-  const result = await readBridgeJson(await bridgeFetch(descriptor, '/exec', { method: 'POST', body: JSON.stringify(input) }));
+  const result = await readBridgeJson(
+    await bridgeFetch(descriptor, '/exec', { method: 'POST', body: JSON.stringify(input) }),
+  );
   const body = readObject(result);
   return {
     exitCode: readNumber(body.exitCode, 'exitCode'),
@@ -478,7 +557,11 @@ async function execBridge(descriptor: DockerSandboxDescriptor, input: SandboxExe
   };
 }
 
-async function bridgeFetch(descriptor: DockerSandboxDescriptor, path: string, init: RequestInit = {}): Promise<Response> {
+async function bridgeFetch(
+  descriptor: DockerSandboxDescriptor,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
   const response = await fetch(`${descriptor.bridgeUrl}${path}`, {
     ...init,
     headers: { authorization: `Bearer ${descriptor.bridgeToken}`, ...init.headers },
@@ -509,19 +592,27 @@ async function waitForBridge(descriptor: DockerSandboxDescriptor): Promise<void>
   throw lastError instanceof Error ? lastError : new Error('Docker sandbox bridge did not become ready');
 }
 
-function docker(args: string[], options: { allowFailure?: boolean } = {}): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+function docker(
+  args: string[],
+  options: { allowFailure?: boolean } = {},
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolveResult, reject) => {
     const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf-8');
     child.stderr.setEncoding('utf-8');
-    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
-    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
     child.on('error', reject);
     child.on('close', (code) => {
       const exitCode = code ?? 1;
-      if (exitCode !== 0 && !options.allowFailure) reject(new Error(stderr || stdout || `docker ${args[0] ?? ''} failed`));
+      if (exitCode !== 0 && !options.allowFailure)
+        reject(new Error(stderr || stdout || `docker ${args[0] ?? ''} failed`));
       else resolveResult({ exitCode, stdout, stderr });
     });
   });
@@ -541,7 +632,14 @@ function parseFileStat(value: unknown): FileStat {
 function parseSandboxHealth(value: unknown): SandboxHealth {
   const body = readObject(value);
   const status = readString(body.status, 'status');
-  if (status !== 'starting' && status !== 'ready' && status !== 'stopped' && status !== 'unhealthy' && status !== 'missing') throw new Error(`Invalid sandbox health status: ${status}`);
+  if (
+    status !== 'starting' &&
+    status !== 'ready' &&
+    status !== 'stopped' &&
+    status !== 'unhealthy' &&
+    status !== 'missing'
+  )
+    throw new Error(`Invalid sandbox health status: ${status}`);
   const health: SandboxHealth = { status, checkedAt: new Date(readString(body.checkedAt, 'checkedAt')) };
   if (typeof body.message === 'string') health.message = body.message;
   return health;
@@ -604,7 +702,8 @@ function readNumber(value: unknown, name: string): number {
 }
 
 function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) throw new Error('Expected string array');
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string'))
+    throw new Error('Expected string array');
   return value;
 }
 

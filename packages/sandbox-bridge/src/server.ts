@@ -86,18 +86,24 @@ export function createSandboxBridgeServer(options: SandboxBridgeOptions): Server
       }
 
       if (request.method === 'GET' && url.pathname === '/fs/readdir') {
-        writeJson(response, 200, { entries: await readdir(resolveWorkspacePath(workspacePath, requirePathParam(url))) });
+        writeJson(response, 200, {
+          entries: await readdir(resolveWorkspacePath(workspacePath, requirePathParam(url))),
+        });
         return;
       }
 
       if (request.method === 'GET' && url.pathname === '/fs/exists') {
-        writeJson(response, 200, { exists: await pathExists(resolveWorkspacePath(workspacePath, requirePathParam(url))) });
+        writeJson(response, 200, {
+          exists: await pathExists(resolveWorkspacePath(workspacePath, requirePathParam(url))),
+        });
         return;
       }
 
       if (request.method === 'POST' && url.pathname === '/fs/mkdir') {
         const body = await readJson(request, maxBodyBytes);
-        await mkdir(resolveWorkspacePath(workspacePath, requireJsonPath(body)), { recursive: Boolean(readObject(body).recursive) });
+        await mkdir(resolveWorkspacePath(workspacePath, requireJsonPath(body)), {
+          recursive: Boolean(readObject(body).recursive),
+        });
         writeJson(response, 200, { ok: true });
         return;
       }
@@ -114,16 +120,14 @@ export function createSandboxBridgeServer(options: SandboxBridgeOptions): Server
 
       writeJson(response, 404, { error: 'not_found' });
     } catch (error) {
-      writeJson(response, statusCodeForError(error), { error: error instanceof Error ? error.message : 'Unknown bridge error' });
+      writeJson(response, statusCodeForError(error), {
+        error: error instanceof Error ? error.message : 'Unknown bridge error',
+      });
     }
   });
 }
 
-async function execCommand(
-  workspacePath: string,
-  input: ParsedExecRequest,
-  maxOutputBytes: number,
-) {
+async function execCommand(workspacePath: string, input: ParsedExecRequest, maxOutputBytes: number) {
   const startedAt = new Date();
   const cwd = input.cwd ? resolveWorkspacePath(workspacePath, input.cwd) : workspacePath;
   const env = createCommandEnv(input.env);
@@ -139,15 +143,21 @@ async function execCommand(
     let stdout = '';
     let stderr = '';
     let timedOut = false;
-    const timer = timeoutMs ? setTimeout(() => {
-      timedOut = true;
-      killProcessGroup(child.pid);
-    }, timeoutMs) : undefined;
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          killProcessGroup(child.pid);
+        }, timeoutMs)
+      : undefined;
 
     child.stdout.setEncoding('utf-8');
     child.stderr.setEncoding('utf-8');
-    child.stdout.on('data', (chunk: string) => { stdout = appendBounded(stdout, chunk, maxOutputBytes); });
-    child.stderr.on('data', (chunk: string) => { stderr = appendBounded(stderr, chunk, maxOutputBytes); });
+    child.stdout.on('data', (chunk: string) => {
+      stdout = appendBounded(stdout, chunk, maxOutputBytes);
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr = appendBounded(stderr, chunk, maxOutputBytes);
+    });
     child.on('error', reject);
     child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       if (timer) clearTimeout(timer);
@@ -169,8 +179,12 @@ function parseExecRequest(value: unknown): ParsedExecRequest {
   const input = readObject(value);
   if (typeof input.command !== 'string' || !input.command.trim()) throw new BridgeHttpError(400, 'command is required');
   if (input.cwd !== undefined && typeof input.cwd !== 'string') throw new BridgeHttpError(400, 'cwd must be a string');
-  if (input.stdin !== undefined && typeof input.stdin !== 'string') throw new BridgeHttpError(400, 'stdin must be a string');
-  if (input.timeoutMs !== undefined && (typeof input.timeoutMs !== 'number' || !Number.isInteger(input.timeoutMs) || input.timeoutMs < 1)) {
+  if (input.stdin !== undefined && typeof input.stdin !== 'string')
+    throw new BridgeHttpError(400, 'stdin must be a string');
+  if (
+    input.timeoutMs !== undefined &&
+    (typeof input.timeoutMs !== 'number' || !Number.isInteger(input.timeoutMs) || input.timeoutMs < 1)
+  ) {
     throw new BridgeHttpError(400, 'timeoutMs must be a positive integer');
   }
   if (input.env !== undefined) validateEnv(input.env);
@@ -221,7 +235,8 @@ function requireJsonPath(value: unknown): string {
 }
 
 function readObject(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new BridgeHttpError(400, 'Expected JSON object');
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new BridgeHttpError(400, 'Expected JSON object');
   return value as Record<string, unknown>;
 }
 

@@ -20,7 +20,11 @@ export class GitHubIssueContextFetcher {
     private readonly access: GitHubIssueContextAccessProvider,
   ) {}
 
-  async listIssueComments(input: { owner: string; repo: string; issueNumber: number }): Promise<GitHubIssueThreadComment[]> {
+  async listIssueComments(input: {
+    owner: string;
+    repo: string;
+    issueNumber: number;
+  }): Promise<GitHubIssueThreadComment[]> {
     const repositoryAccess = await this.access.getRepositoryAccess({ owner: input.owner, repo: input.repo });
     return this.client.listIssueComments({ ...input, token: repositoryAccess.auth.token });
   }

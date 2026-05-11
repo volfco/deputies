@@ -33,7 +33,10 @@ export function archivedRecoveryTranscriptPrompt(text: string): string {
   return `${text}\n\n[Session restored. No agent run was started because this message only contained the recovery phrase.]`;
 }
 
-export function unprocessedArchivedTranscriptMessages(messages: MessageRecord[], source: 'github' | 'slack'): MessageRecord[] {
+export function unprocessedArchivedTranscriptMessages(
+  messages: MessageRecord[],
+  source: 'github' | 'slack',
+): MessageRecord[] {
   const alreadyIncluded = new Set(messages.flatMap(includedArchivedMessageIds));
   return messages.filter((message) => {
     if (message.source !== source || message.status !== 'cancelled' || !message.context?.transcriptOnly) return false;
@@ -42,9 +45,15 @@ export function unprocessedArchivedTranscriptMessages(messages: MessageRecord[],
   });
 }
 
-export function archivedRecoveryWorkPrompt(input: { sourceLabel: string; archivedMessages: MessageRecord[]; recoveryText: string }): string {
+export function archivedRecoveryWorkPrompt(input: {
+  sourceLabel: string;
+  archivedMessages: MessageRecord[];
+  recoveryText: string;
+}): string {
   const lines = [`${input.sourceLabel} archived-session recovery:`, '---'];
-  lines.push('The session was archived when these messages arrived. The user has now replied with the recovery phrase, so process the archived messages below.');
+  lines.push(
+    'The session was archived when these messages arrived. The user has now replied with the recovery phrase, so process the archived messages below.',
+  );
   lines.push('', 'Archived messages:', '---');
   for (const message of input.archivedMessages) {
     lines.push('', `Message ${message.sequence}:`, stripArchivedMarker(message.prompt));

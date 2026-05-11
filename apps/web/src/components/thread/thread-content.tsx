@@ -39,9 +39,18 @@ export function ChatPanel(props: {
           <div className="grid min-w-0 gap-2" key={group.key}>
             {group.messages.length > 1 ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Queued batch · {group.messages.filter((message) => message.status !== 'cancelled').length} active messages</p>
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                  Queued batch · {group.messages.filter((message) => message.status !== 'cancelled').length} active
+                  messages
+                </p>
                 <div className="flex flex-wrap justify-end gap-2">
-                  {failedMessages.length > 0 && !activeRun ? <RetryMessagesButton count={failedMessages.length} disabled={!props.canRetryMessages} onRetry={() => props.onRetryFailedMessages(failedMessages.map((message) => message.id))} /> : null}
+                  {failedMessages.length > 0 && !activeRun ? (
+                    <RetryMessagesButton
+                      count={failedMessages.length}
+                      disabled={!props.canRetryMessages}
+                      onRetry={() => props.onRetryFailedMessages(failedMessages.map((message) => message.id))}
+                    />
+                  ) : null}
                   {activeRun ? <CancelRunButton cancelling={cancellingRun} onCancelRun={props.onCancelRun} /> : null}
                 </div>
               </div>
@@ -67,7 +76,9 @@ export function ChatPanel(props: {
             ))}
             {response ? (
               <Card className="min-w-0 overflow-hidden p-3">
-                <h3 className="mb-1 text-xs font-medium text-muted-foreground">{activeRun ? 'Deputy progress' : 'Deputy response'}</h3>
+                <h3 className="mb-1 text-xs font-medium text-muted-foreground">
+                  {activeRun ? 'Deputy progress' : 'Deputy response'}
+                </h3>
                 <MarkdownText text={formatAssistantDisplayText(response)} />
               </Card>
             ) : null}
@@ -100,25 +111,55 @@ function UserMessageCard(props: {
   return (
     <Card className="border-primary/50 bg-primary/10 p-3" role="article" aria-label={`Message ${message.sequence}`}>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-medium text-muted-foreground">{messageLabel(message)} <Badge className={statusTextClass(message.status)}>{messageStatusLabel(message)}</Badge></h3>
+        <h3 className="text-xs font-medium text-muted-foreground">
+          {messageLabel(message)}{' '}
+          <Badge className={statusTextClass(message.status)}>{messageStatusLabel(message)}</Badge>
+        </h3>
         {message.status === 'pending' && props.editingMessageId !== message.id ? (
           <div className="flex gap-1">
-            <Button className="h-7 px-2" variant="ghost" size="sm" onClick={() => props.onEditMessage(message)}>Edit</Button>
-            <Button className="h-7 px-2" variant="ghost" size="sm" onClick={() => props.onCancelQueuedMessage(message.id)}>Cancel</Button>
+            <Button className="h-7 px-2" variant="ghost" size="sm" onClick={() => props.onEditMessage(message)}>
+              Edit
+            </Button>
+            <Button
+              className="h-7 px-2"
+              variant="ghost"
+              size="sm"
+              onClick={() => props.onCancelQueuedMessage(message.id)}
+            >
+              Cancel
+            </Button>
           </div>
         ) : null}
-        {props.showMessageRetry ? <RetryMessagesButton disabled={!props.canRetryMessages} onRetry={() => props.onRetryFailedMessages([message.id])} /> : null}
-        {props.showRunCancel ? <CancelRunButton cancelling={props.runCancelling} onCancelRun={props.onCancelRun} /> : null}
+        {props.showMessageRetry ? (
+          <RetryMessagesButton
+            disabled={!props.canRetryMessages}
+            onRetry={() => props.onRetryFailedMessages([message.id])}
+          />
+        ) : null}
+        {props.showRunCancel ? (
+          <CancelRunButton cancelling={props.runCancelling} onCancelRun={props.onCancelRun} />
+        ) : null}
       </div>
       {props.editingMessageId === message.id ? (
         <div className="grid gap-2">
-          <Textarea className="min-h-24" value={props.messageDraft} onChange={(event) => props.onMessageDraftChange(event.target.value)} autoFocus />
+          <Textarea
+            className="min-h-24"
+            value={props.messageDraft}
+            onChange={(event) => props.onMessageDraftChange(event.target.value)}
+            autoFocus
+          />
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={props.onCancelEdit}>Cancel</Button>
-            <Button size="sm" onClick={props.onSaveEdit} disabled={!props.messageDraft.trim()}>Save</Button>
+            <Button variant="secondary" size="sm" onClick={props.onCancelEdit}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={props.onSaveEdit} disabled={!props.messageDraft.trim()}>
+              Save
+            </Button>
           </div>
         </div>
-      ) : <PlainText text={message.prompt} />}
+      ) : (
+        <PlainText text={message.prompt} />
+      )}
     </Card>
   );
 }
@@ -145,30 +186,71 @@ function MarkdownText(props: { text: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        a: ({ className, ...props }) => <a className={cn('text-primary underline decoration-primary/60 underline-offset-2 hover:text-primary/80', className)} target="_blank" rel="noreferrer" {...props} />,
-        blockquote: ({ className, ...props }) => <blockquote className={cn('border-l-2 border-border pl-3 text-muted-foreground', className)} {...props} />,
+        a: ({ className, ...props }) => (
+          <a
+            className={cn(
+              'text-primary underline decoration-primary/60 underline-offset-2 hover:text-primary/80',
+              className,
+            )}
+            target="_blank"
+            rel="noreferrer"
+            {...props}
+          />
+        ),
+        blockquote: ({ className, ...props }) => (
+          <blockquote className={cn('border-l-2 border-border pl-3 text-muted-foreground', className)} {...props} />
+        ),
         code: ({ children, className, ...props }) => {
           const code = String(children).replace(/\n$/, '');
           const language = className?.match(/language-(\S+)/)?.[1];
-          if (language || String(children).includes('\n')) return <HighlightedCode code={code} {...(language ? { language } : {})} />;
-          return <code className={cn('rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground shadow-sm break-words', className)} {...props}>{children}</code>;
+          if (language || String(children).includes('\n'))
+            return <HighlightedCode code={code} {...(language ? { language } : {})} />;
+          return (
+            <code
+              className={cn(
+                'rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-foreground shadow-sm break-words',
+                className,
+              )}
+              {...props}
+            >
+              {children}
+            </code>
+          );
         },
-        h1: ({ className, ...props }) => <h1 className={cn('mt-4 text-xl font-semibold text-foreground first:mt-0', className)} {...props} />,
-        h2: ({ className, ...props }) => <h2 className={cn('mt-4 text-lg font-semibold text-foreground first:mt-0', className)} {...props} />,
-        h3: ({ className, ...props }) => <h3 className={cn('mt-3 text-base font-semibold text-foreground first:mt-0', className)} {...props} />,
+        h1: ({ className, ...props }) => (
+          <h1 className={cn('mt-4 text-xl font-semibold text-foreground first:mt-0', className)} {...props} />
+        ),
+        h2: ({ className, ...props }) => (
+          <h2 className={cn('mt-4 text-lg font-semibold text-foreground first:mt-0', className)} {...props} />
+        ),
+        h3: ({ className, ...props }) => (
+          <h3 className={cn('mt-3 text-base font-semibold text-foreground first:mt-0', className)} {...props} />
+        ),
         hr: ({ className, ...props }) => <hr className={cn('border-border', className)} {...props} />,
         li: ({ className, ...props }) => <li className={cn('pl-1', className)} {...props} />,
         ol: ({ className, ...props }) => <ol className={cn('list-decimal space-y-1 pl-5', className)} {...props} />,
-        p: ({ className, ...props }) => <p className={cn('whitespace-pre-wrap text-sm leading-6 text-foreground', className)} {...props} />,
+        p: ({ className, ...props }) => (
+          <p className={cn('whitespace-pre-wrap text-sm leading-6 text-foreground', className)} {...props} />
+        ),
         pre: ({ children }) => <>{children}</>,
         table: ({ className, ...props }) => (
-          <div className="my-3 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x" data-markdown-table-wrapper="true">
+          <div
+            className="my-3 max-w-full overflow-x-auto overscroll-x-contain touch-pan-x"
+            data-markdown-table-wrapper="true"
+          >
             <table className={cn('min-w-full w-max border-collapse text-sm', className)} {...props} />
           </div>
         ),
         tbody: ({ className, ...props }) => <tbody className={cn('divide-y divide-border', className)} {...props} />,
-        td: ({ className, ...props }) => <td className={cn('border border-border px-2 py-1 align-top text-foreground', className)} {...props} />,
-        th: ({ className, ...props }) => <th className={cn('border border-border px-2 py-1 text-left font-medium text-foreground', className)} {...props} />,
+        td: ({ className, ...props }) => (
+          <td className={cn('border border-border px-2 py-1 align-top text-foreground', className)} {...props} />
+        ),
+        th: ({ className, ...props }) => (
+          <th
+            className={cn('border border-border px-2 py-1 text-left font-medium text-foreground', className)}
+            {...props}
+          />
+        ),
         thead: ({ className, ...props }) => <thead className={cn('bg-muted/80', className)} {...props} />,
         ul: ({ className, ...props }) => <ul className={cn('list-disc space-y-1 pl-5', className)} {...props} />,
       }}
@@ -218,7 +300,9 @@ function HighlightedCode(props: { code: string; language?: string; wrap?: boolea
   useEffect(() => {
     let cancelled = false;
     import('shiki')
-      .then(({ codeToHtml }) => codeToHtml(props.code, { lang: props.language ?? 'text', theme: codeHighlightTheme(colorTheme) }))
+      .then(({ codeToHtml }) =>
+        codeToHtml(props.code, { lang: props.language ?? 'text', theme: codeHighlightTheme(colorTheme) }),
+      )
       .then((nextHtml) => {
         if (!cancelled) setHtml(nextHtml);
       })
@@ -245,16 +329,34 @@ function HighlightedCode(props: { code: string; language?: string; wrap?: boolea
       {props.chrome !== false ? (
         <figcaption className="flex items-center justify-between border-b border-border bg-muted/80 px-3 py-1.5 text-[0.7rem] font-medium uppercase tracking-widest text-muted-foreground">
           <span>{props.language ?? 'text'}</span>
-          <button className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[0.65rem] text-muted-foreground transition hover:text-foreground" type="button" onClick={copyCode} aria-label="Copy code">
+          <button
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-[0.65rem] text-muted-foreground transition hover:text-foreground"
+            type="button"
+            onClick={copyCode}
+            aria-label="Copy code"
+          >
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             {copied ? 'Copied' : 'Copy'}
           </button>
         </figcaption>
       ) : null}
       {html ? (
-        <div className={cn('highlighted-code text-sm leading-6', props.wrap ? 'highlighted-code-wrap overflow-hidden' : 'overflow-x-auto overflow-y-hidden')} dangerouslySetInnerHTML={{ __html: html }} />
+        <div
+          className={cn(
+            'highlighted-code text-sm leading-6',
+            props.wrap ? 'highlighted-code-wrap overflow-hidden' : 'overflow-x-auto overflow-y-hidden',
+          )}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
       ) : (
-        <pre className={cn('p-3 text-sm leading-6 text-foreground', props.wrap ? 'overflow-hidden whitespace-pre-wrap break-words' : 'overflow-x-auto overflow-y-hidden')}><code>{props.code}</code></pre>
+        <pre
+          className={cn(
+            'p-3 text-sm leading-6 text-foreground',
+            props.wrap ? 'overflow-hidden whitespace-pre-wrap break-words' : 'overflow-x-auto overflow-y-hidden',
+          )}
+        >
+          <code>{props.code}</code>
+        </pre>
       )}
     </figure>
   );
@@ -283,7 +385,10 @@ type DiagnosticFailureAnalysis = {
 
 function FailureAnalysisNotice(props: { analysis: DiagnosticFailureAnalysis }) {
   return (
-    <div className="rounded-md border border-warning/50 bg-warning/10 p-2 text-sm text-warning-foreground dark:text-warning" role="note">
+    <div
+      className="rounded-md border border-warning/50 bg-warning/10 p-2 text-sm text-warning-foreground dark:text-warning"
+      role="note"
+    >
       <strong className="block text-foreground dark:text-warning">{props.analysis.title}</strong>
       <p className="mt-1">{props.analysis.detail}</p>
     </div>
@@ -292,7 +397,14 @@ function FailureAnalysisNotice(props: { analysis: DiagnosticFailureAnalysis }) {
 
 function CancelRunButton(props: { cancelling: boolean; onCancelRun: () => void }) {
   return (
-    <Button className="h-7 px-2" type="button" variant="secondary" size="sm" onClick={props.onCancelRun} disabled={props.cancelling}>
+    <Button
+      className="h-7 px-2"
+      type="button"
+      variant="secondary"
+      size="sm"
+      onClick={props.onCancelRun}
+      disabled={props.cancelling}
+    >
       <X className="h-3.5 w-3.5" /> {props.cancelling ? 'Cancelling...' : 'Cancel task'}
     </Button>
   );
@@ -300,7 +412,14 @@ function CancelRunButton(props: { cancelling: boolean; onCancelRun: () => void }
 
 function RetryMessagesButton(props: { count?: number; disabled?: boolean; onRetry: () => void }) {
   return (
-    <Button className="h-7 px-2" type="button" variant="secondary" size="sm" onClick={props.onRetry} disabled={props.disabled}>
+    <Button
+      className="h-7 px-2"
+      type="button"
+      variant="secondary"
+      size="sm"
+      onClick={props.onRetry}
+      disabled={props.disabled}
+    >
       <RotateCcw className="h-3.5 w-3.5" /> {props.count && props.count > 1 ? `Retry ${props.count} failed` : 'Retry'}
     </Button>
   );
@@ -313,12 +432,28 @@ function Diagnostics(props: { events: AgentEvent[] }) {
   if (!props.events.length) return null;
 
   return (
-    <details className="min-w-0 rounded-md border border-border bg-muted/30 p-2" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="cursor-pointer text-sm text-muted-foreground">Activity · {props.events.length} events</summary>
+    <details
+      className="min-w-0 rounded-md border border-border bg-muted/30 p-2"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer text-sm text-muted-foreground">
+        Activity · {props.events.length} events
+      </summary>
       <div className="mt-2 grid min-w-0 gap-2">
         {failureAnalysis ? <FailureAnalysisNotice analysis={failureAnalysis} /> : null}
-        {activities.map((activity) => <DiagnosticActivityCard activity={activity} key={activity.key} />)}
-        <Button className="justify-self-start px-2" type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>Collapse activity</Button>
+        {activities.map((activity) => (
+          <DiagnosticActivityCard activity={activity} key={activity.key} />
+        ))}
+        <Button
+          className="justify-self-start px-2"
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => setOpen(false)}
+        >
+          Collapse activity
+        </Button>
       </div>
     </details>
   );
@@ -333,7 +468,9 @@ function DiagnosticActivityCard(props: { activity: DiagnosticActivity }) {
     <article className="min-w-0 rounded-md border border-border bg-card/80 p-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <span className="text-xs text-muted-foreground">{formatDate(activity.createdAt)} · {activity.subtitle}</span>
+          <span className="text-xs text-muted-foreground">
+            {formatDate(activity.createdAt)} · {activity.subtitle}
+          </span>
           <strong className="mt-1 block break-words text-sm font-medium text-foreground">{activity.title}</strong>
         </div>
         <Badge className={diagnosticStatusClass(activity.status)}>{diagnosticStatusLabel(activity.status)}</Badge>
@@ -346,7 +483,9 @@ function DiagnosticActivityCard(props: { activity: DiagnosticActivity }) {
         <div className="mt-2 grid max-h-64 min-w-0 gap-2 overflow-auto text-xs [&_figure]:my-0 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
           {activity.rawEvents.map((event) => (
             <div className="min-w-0 rounded border border-border p-2" key={`${event.sessionId}-${event.sequence}`}>
-              <span className="text-muted-foreground">#{event.sequence} · {event.type}</span>
+              <span className="text-muted-foreground">
+                #{event.sequence} · {event.type}
+              </span>
               <JsonPayload value={event.payload} />
             </div>
           ))}
@@ -364,7 +503,17 @@ function DiagnosticText(props: { text: string; tone?: 'error' }) {
   );
 
   if (!isLong) {
-    return <p className={cn('mt-2', props.tone === 'error' ? 'rounded-md border border-destructive/40 bg-destructive/10 p-2' : '', textClassName)}>{props.text}</p>;
+    return (
+      <p
+        className={cn(
+          'mt-2',
+          props.tone === 'error' ? 'rounded-md border border-destructive/40 bg-destructive/10 p-2' : '',
+          textClassName,
+        )}
+      >
+        {props.text}
+      </p>
+    );
   }
 
   return (
@@ -482,7 +631,14 @@ function toolCommand(start: AgentEvent | undefined, finish: AgentEvent | null): 
   return undefined;
 }
 
-function toolActivityTitle(toolName: string, command: string | undefined, taskPrompt: string | undefined, isError: boolean, finished: boolean, customTool: boolean): string {
+function toolActivityTitle(
+  toolName: string,
+  command: string | undefined,
+  taskPrompt: string | undefined,
+  isError: boolean,
+  finished: boolean,
+  customTool: boolean,
+): string {
   const status = finished ? (isError ? 'failed' : 'completed') : 'started';
   if (command) return `Command ${status}: ${singleLine(command, 80)}`;
   if (taskPrompt) return `Task ${status}: ${singleLine(taskPrompt, 80)}`;
@@ -586,7 +742,12 @@ function humanizeEventName(value: string): string {
   return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function MobileContextPanel(props: { repository: string | null; artifacts: Artifact[]; callbacks: CallbackDelivery[]; onReplayCallback: (callbackId: string) => void }) {
+export function MobileContextPanel(props: {
+  repository: string | null;
+  artifacts: Artifact[];
+  callbacks: CallbackDelivery[];
+  onReplayCallback: (callbackId: string) => void;
+}) {
   return (
     <details className="mb-5 rounded-md border border-border bg-card/90 shadow-sm xl:hidden">
       <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Context</summary>
@@ -595,24 +756,47 @@ export function MobileContextPanel(props: { repository: string | null; artifacts
   );
 }
 
-export function DesktopContextPanel(props: { repository: string | null; artifacts: Artifact[]; callbacks: CallbackDelivery[]; onReplayCallback: (callbackId: string) => void }) {
+export function DesktopContextPanel(props: {
+  repository: string | null;
+  artifacts: Artifact[];
+  callbacks: CallbackDelivery[];
+  onReplayCallback: (callbackId: string) => void;
+}) {
   return (
-    <aside aria-label="Desktop context" className="hidden min-h-0 overflow-auto border-l border-border bg-card/50 p-4 xl:block" data-thread-scroll-exclude="true">
+    <aside
+      aria-label="Desktop context"
+      className="hidden min-h-0 overflow-auto border-l border-border bg-card/50 p-4 xl:block"
+      data-thread-scroll-exclude="true"
+    >
       <h2 className="text-sm font-semibold">Context</h2>
       <ContextPanelContent {...props} />
     </aside>
   );
 }
 
-function ContextPanelContent(props: { repository: string | null; artifacts: Artifact[]; callbacks: CallbackDelivery[]; onReplayCallback: (callbackId: string) => void }) {
+function ContextPanelContent(props: {
+  repository: string | null;
+  artifacts: Artifact[];
+  callbacks: CallbackDelivery[];
+  onReplayCallback: (callbackId: string) => void;
+}) {
   return (
     <div className="p-4 pt-0 xl:p-0 xl:pt-0">
       <div className="mt-3 border-b border-border pb-3 text-sm text-muted-foreground">
         <strong className="block font-medium text-foreground">Repository</strong>
         {props.repository ? (
           <>
-            <a className="mt-1 block break-all text-primary" href={`https://github.com/${props.repository}`} target="_blank" rel="noreferrer">{props.repository}</a>
-            <span className="mt-1 block text-xs">Follow-ups inherit this repo. Enter another repo in the composer to switch.</span>
+            <a
+              className="mt-1 block break-all text-primary"
+              href={`https://github.com/${props.repository}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {props.repository}
+            </a>
+            <span className="mt-1 block text-xs">
+              Follow-ups inherit this repo. Enter another repo in the composer to switch.
+            </span>
           </>
         ) : (
           <span className="mt-1 block">No repository selected.</span>
@@ -625,9 +809,15 @@ function ContextPanelContent(props: { repository: string | null; artifacts: Arti
       <div className="mt-3 grid gap-2">
         {props.artifacts.map((artifact) => (
           <Card className="p-3" key={artifact.id}>
-            <span className="text-xs text-muted-foreground">{artifact.type} · {formatDate(artifact.createdAt)}</span>
+            <span className="text-xs text-muted-foreground">
+              {artifact.type} · {formatDate(artifact.createdAt)}
+            </span>
             <strong className="mt-1 block text-sm font-medium">{artifact.title || artifact.url || artifact.id}</strong>
-            {artifact.url ? <a className="mt-1 block text-sm text-primary" href={artifact.url} target="_blank" rel="noreferrer">Open artifact</a> : null}
+            {artifact.url ? (
+              <a className="mt-1 block text-sm text-primary" href={artifact.url} target="_blank" rel="noreferrer">
+                Open artifact
+              </a>
+            ) : null}
             <div className="max-h-44 min-w-0 overflow-auto text-xs [&_figure]:my-2 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
               <JsonPayload value={artifact.payload} />
             </div>
@@ -641,16 +831,29 @@ function ContextPanelContent(props: { repository: string | null; artifacts: Arti
       </div>
       <div className="mt-3 grid gap-2">
         {props.callbacks.map((callback) => (
-          <details className="group rounded-md border border-border bg-card/70 text-xs text-muted-foreground" key={callback.id}>
-            <summary aria-label={`${callback.targetType} callback ${callback.status}`} className="grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
-              <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-muted-foreground transition-transform group-open:rotate-0" aria-hidden="true" />
-              <span className="min-w-0 truncate text-muted-foreground">{callback.targetType} · {formatDate(callback.updatedAt)}</span>
+          <details
+            className="group rounded-md border border-border bg-card/70 text-xs text-muted-foreground"
+            key={callback.id}
+          >
+            <summary
+              aria-label={`${callback.targetType} callback ${callback.status}`}
+              className="grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden"
+            >
+              <ChevronDown
+                className="h-3.5 w-3.5 -rotate-90 text-muted-foreground transition-transform group-open:rotate-0"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 truncate text-muted-foreground">
+                {callback.targetType} · {formatDate(callback.updatedAt)}
+              </span>
               <Badge className={statusTextClass(callback.status)}>{callback.status}</Badge>
             </summary>
             <div className="border-t border-border px-3 py-2">
               <dl className="grid gap-1">
                 <div>Type: {callbackEventLabel(callback.eventType)}</div>
-                <div>Attempts: {callback.attempts}/{callback.maxAttempts}</div>
+                <div>
+                  Attempts: {callback.attempts}/{callback.maxAttempts}
+                </div>
                 {callback.nextAttemptAt ? <div>Next retry: {formatDate(callback.nextAttemptAt)}</div> : null}
                 {callback.lastAttemptAt ? <div>Last attempt: {formatDate(callback.lastAttemptAt)}</div> : null}
                 {callback.deliveredAt ? <div>Delivered: {formatDate(callback.deliveredAt)}</div> : null}
@@ -658,7 +861,12 @@ function ContextPanelContent(props: { repository: string | null; artifacts: Arti
                 <div className="truncate">ID: {callback.id}</div>
               </dl>
               {callback.status === 'failed' ? (
-                <Button className="mt-2 h-7 px-2" size="sm" variant="secondary" onClick={() => props.onReplayCallback(callback.id)}>
+                <Button
+                  className="mt-2 h-7 px-2"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => props.onReplayCallback(callback.id)}
+                >
                   <RotateCcw className="h-3.5 w-3.5" /> Replay callback
                 </Button>
               ) : null}
@@ -704,9 +912,7 @@ function buildAssistantText(events: AgentEvent[]): Record<string, string> {
 }
 
 function formatAssistantDisplayText(text: string): string {
-  return text
-    .replace(/([.!?])(?=[A-Z])/g, '$1 ')
-    .replace(/:(?=[A-Z][a-z])/g, ': ');
+  return text.replace(/([.!?])(?=[A-Z])/g, '$1 ').replace(/:(?=[A-Z][a-z])/g, ': ');
 }
 
 type MessageGroup = {
@@ -720,7 +926,9 @@ function groupMessagesByRun(messages: Message[], events: AgentEvent[]): MessageG
   const batchBySequence = new Map<number, { runId: string; sequences: number[] }>();
   for (const event of events) {
     if (event.type !== 'message_started' || !event.runId) continue;
-    const sequences = Array.isArray(event.payload.sequences) ? event.payload.sequences.filter((value): value is number => typeof value === 'number') : [];
+    const sequences = Array.isArray(event.payload.sequences)
+      ? event.payload.sequences.filter((value): value is number => typeof value === 'number')
+      : [];
     if (sequences.length <= 1) continue;
     for (const sequence of sequences) batchBySequence.set(sequence, { runId: event.runId, sequences });
   }
@@ -745,7 +953,12 @@ function groupMessagesByRun(messages: Message[], events: AgentEvent[]): MessageG
       return candidate.status === 'cancelled' && candidate.sequence > minSequence && candidate.sequence < maxSequence;
     });
     for (const item of batchMessages) seen.add(item.id);
-    groups.push({ key: batch.runId, messages: batchMessages, responseMessageId: batchMessages[0]?.id ?? message.id, runId: batch.runId });
+    groups.push({
+      key: batch.runId,
+      messages: batchMessages,
+      responseMessageId: batchMessages[0]?.id ?? message.id,
+      runId: batch.runId,
+    });
   }
 
   return groups;
@@ -762,7 +975,8 @@ function isCancellingRunGroup(messages: Message[]): boolean {
 function groupDiagnosticsByRun(events: AgentEvent[]): Record<string, AgentEvent[]> {
   const grouped: Record<string, AgentEvent[]> = {};
   for (const event of events) {
-    if (event.type === 'message_created' || event.type === 'agent_text_delta' || event.type === 'agent_response_final') continue;
+    if (event.type === 'message_created' || event.type === 'agent_text_delta' || event.type === 'agent_response_final')
+      continue;
     for (const key of diagnosticGroupKeys(event)) {
       grouped[key] = [...(grouped[key] ?? []), event];
     }
@@ -805,7 +1019,10 @@ function sandboxProviderFailure(events: AgentEvent[]): SandboxProviderFailure | 
 function isGatewayFailureEvent(event: AgentEvent): boolean {
   if (event.type !== 'run_failed' && event.type !== 'message_failed') return false;
   const error = typeof event.payload.error === 'string' ? event.payload.error : '';
-  return /\b(?:50[0-4]|52[0-4])\b/.test(error) || /\b(?:Bad Gateway|Service Unavailable|Gateway Timeout|upstream)\b/i.test(error);
+  return (
+    /\b(?:50[0-4]|52[0-4])\b/.test(error) ||
+    /\b(?:Bad Gateway|Service Unavailable|Gateway Timeout|upstream)\b/i.test(error)
+  );
 }
 
 function summarizeProviderError(error: unknown): string {
@@ -827,5 +1044,10 @@ function statusTextClass(status: string): string {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value));
 }

@@ -1,4 +1,9 @@
-import type { NormalizedEmptyEventType, NormalizedEvent, NormalizedEventPayload, NormalizedEventType } from './types.js';
+import type {
+  NormalizedEmptyEventType,
+  NormalizedEvent,
+  NormalizedEventPayload,
+  NormalizedEventType,
+} from './types.js';
 import type { EventRecord, EventStore } from '../store/types.js';
 
 const globalEventTypes = new Set<NormalizedEventType>([
@@ -33,9 +38,10 @@ type AppendEventBase<T extends NormalizedEventType> = {
   messageId?: string;
 };
 
-export type AppendEventInput<T extends NormalizedEventType = NormalizedEventType> = AppendEventBase<T> & (
-  [T] extends [NormalizedEmptyEventType] ? { payload?: NormalizedEventPayload<T> } : { payload: NormalizedEventPayload<T> }
-);
+export type AppendEventInput<T extends NormalizedEventType = NormalizedEventType> = AppendEventBase<T> &
+  ([T] extends [NormalizedEmptyEventType]
+    ? { payload?: NormalizedEventPayload<T> }
+    : { payload: NormalizedEventPayload<T> });
 
 export class EventService {
   private readonly subscribers = new Map<string, Set<EventSubscriber>>();

@@ -1,4 +1,8 @@
-import type { CompletionCallback, CompletionCallbackPayload, CompletionCallbackSender } from '../../callbacks/service.js';
+import type {
+  CompletionCallback,
+  CompletionCallbackPayload,
+  CompletionCallbackSender,
+} from '../../callbacks/service.js';
 import type { SlackBlock, SlackReactionClient, SlackReplyClient } from './client.js';
 
 const maxSlackMrkdwnCharacters = 3000;
@@ -26,7 +30,8 @@ export class SlackCompletionCallbackSender implements CompletionCallbackSender {
     const messageTs = callback.target.messageTs;
     if (typeof messageTs === 'string' && messageTs && this.client.addReaction) {
       const reaction = await this.client.addReaction({ channel, timestamp: messageTs, name: 'white_check_mark' });
-      if (!reaction.ok && reaction.error !== 'already_reacted') throw new Error(`Slack completion reaction failed${reaction.error ? `: ${reaction.error}` : ''}`);
+      if (!reaction.ok && reaction.error !== 'already_reacted')
+        throw new Error(`Slack completion reaction failed${reaction.error ? `: ${reaction.error}` : ''}`);
     }
   }
 }

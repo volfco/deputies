@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolDef } from '@flue/sdk';
 import type { GitHubRepositoryAccess } from '../repositories/setup.js';
-import { getPreparedRepository, resolveActiveRepositoryAccess, type RepositoryToolServices } from './repository-tool.js';
+import {
+  getPreparedRepository,
+  resolveActiveRepositoryAccess,
+  type RepositoryToolServices,
+} from './repository-tool.js';
 
 const BLOCKED_COMMANDS = new Set(['alias', 'auth', 'config', 'extension']);
 const MAX_ARGS = 64;
@@ -42,7 +46,8 @@ export function createGitHubCliTool(
           minItems: 1,
           maxItems: MAX_ARGS,
           items: { type: 'string', maxLength: MAX_ARG_LENGTH },
-          description: 'Arguments to pass to gh, for example ["issue", "create", "--title", "Test", "--body", "..."], ["pr", "create", "--title", "Test", "--body", "...", "--head", "branch", "--base", "main"], or ["pr", "edit", "7", "--title", "Updated"]',
+          description:
+            'Arguments to pass to gh, for example ["issue", "create", "--title", "Test", "--body", "..."], ["pr", "create", "--title", "Test", "--body", "...", "--head", "branch", "--base", "main"], or ["pr", "edit", "7", "--title", "Updated"]',
         },
       },
     },
@@ -91,10 +96,14 @@ function validateArgs(value: unknown): string[] {
     throw new Error(`gh ${command} clone is not available through this tool`);
   }
   if (isDirectCommentCommand(args)) {
-    throw new Error('Posting GitHub issue/PR comments directly through gh is not available. Return the final response normally; Deputies posts it back to GitHub through the callback layer.');
+    throw new Error(
+      'Posting GitHub issue/PR comments directly through gh is not available. Return the final response normally; Deputies posts it back to GitHub through the callback layer.',
+    );
   }
   if (command === 'api' && isGitDatabaseApiRoute(args[1])) {
-    throw new Error('GitHub Git Database API routes are not available through gh. Use sandbox git commands and the authenticated git tool for branch/object pushes.');
+    throw new Error(
+      'GitHub Git Database API routes are not available through gh. Use sandbox git commands and the authenticated git tool for branch/object pushes.',
+    );
   }
   return args;
 }
@@ -117,11 +126,19 @@ async function createPullRequest(
   const input = await parsePullRequestCreateInput(repository, access, args, fetchImpl, signal);
   const init = createGitHubApiRequestInit(access, { method: 'POST', body: input, signal });
   const response = await fetchImpl(`${githubApiBaseUrl(access)}/repos/${access.owner}/${access.repo}/pulls`, init);
-  const body = await response.json().catch(() => ({})) as { html_url?: string; number?: number; message?: string };
+  const body = (await response.json().catch(() => ({}))) as { html_url?: string; number?: number; message?: string };
   if (!response.ok) {
-    throw new Error(redactSecrets(`GitHub API POST /repos/${access.owner}/${access.repo}/pulls failed with ${response.status}: ${body.message ?? 'unknown_error'}`, access.auth.token));
+    throw new Error(
+      redactSecrets(
+        `GitHub API POST /repos/${access.owner}/${access.repo}/pulls failed with ${response.status}: ${body.message ?? 'unknown_error'}`,
+        access.auth.token,
+      ),
+    );
   }
-  const url = typeof body.html_url === 'string' ? body.html_url : `https://github.com/${access.owner}/${access.repo}/pull/${body.number ?? ''}`;
+  const url =
+    typeof body.html_url === 'string'
+      ? body.html_url
+      : `https://github.com/${access.owner}/${access.repo}/pull/${body.number ?? ''}`;
   return formatResult({ exitCode: 0, stdout: url, stderr: '' }, access.auth.token);
 }
 
@@ -180,7 +197,9 @@ async function parsePullRequestCreateInput(
         fill = true;
         break;
       default:
-        throw new Error(`gh pr create option ${arg} is not supported by this tool. Supported options: --title, --body, --head, --base, --draft, --fill.`);
+        throw new Error(
+          `gh pr create option ${arg} is not supported by this tool. Supported options: --title, --body, --head, --base, --draft, --fill.`,
+        );
     }
   }
 
@@ -213,21 +232,36 @@ async function readPreparedRepositoryBranch(repository: RepositoryToolServices):
   return result.stdout.trim();
 }
 
-async function readPreparedRepositoryCommit(repository: RepositoryToolServices): Promise<{ title: string; body: string }> {
+async function readPreparedRepositoryCommit(
+  repository: RepositoryToolServices,
+): Promise<{ title: string; body: string }> {
   const prepared = getPreparedRepository(repository);
   const agent = repository.agentRef.current;
   if (!agent?.shell) throw new Error('gh pr create cannot use --fill before the sandbox agent is ready');
-  const result = await agent.shell('git log -1 --pretty=format:%s%n%n%b', { cwd: prepared.workspacePath, timeout: 30_000 });
+  const result = await agent.shell('git log -1 --pretty=format:%s%n%n%b', {
+    cwd: prepared.workspacePath,
+    timeout: 30_000,
+  });
   if (result.exitCode !== 0) throw new Error(`gh pr create --fill failed: ${result.stderr || result.stdout}`);
   const [title = '', ...body] = result.stdout.trim().split('\n');
   return { title: title.trim(), body: body.join('\n').trim() };
 }
 
-async function fetchDefaultBranch(access: GitHubRepositoryAccess, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<string> {
+async function fetchDefaultBranch(
+  access: GitHubRepositoryAccess,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<string> {
   const init = createGitHubApiRequestInit(access, { method: 'GET', signal });
   const response = await fetchImpl(`${githubApiBaseUrl(access)}/repos/${access.owner}/${access.repo}`, init);
-  const body = await response.json().catch(() => ({})) as { default_branch?: string; message?: string };
-  if (!response.ok) throw new Error(redactSecrets(`GitHub API GET /repos/${access.owner}/${access.repo} failed with ${response.status}: ${body.message ?? 'unknown_error'}`, access.auth.token));
+  const body = (await response.json().catch(() => ({}))) as { default_branch?: string; message?: string };
+  if (!response.ok)
+    throw new Error(
+      redactSecrets(
+        `GitHub API GET /repos/${access.owner}/${access.repo} failed with ${response.status}: ${body.message ?? 'unknown_error'}`,
+        access.auth.token,
+      ),
+    );
   return typeof body.default_branch === 'string' ? body.default_branch : '';
 }
 
@@ -240,12 +274,23 @@ async function updatePullRequest(
 ): Promise<string> {
   const parsed = await parsePullRequestUpdateInput(repository, access, args, fetchImpl, signal);
   const init = createGitHubApiRequestInit(access, { method: 'PATCH', body: parsed.input, signal });
-  const response = await fetchImpl(`${githubApiBaseUrl(access)}/repos/${access.owner}/${access.repo}/pulls/${parsed.number}`, init);
-  const body = await response.json().catch(() => ({})) as { html_url?: string; number?: number; message?: string };
+  const response = await fetchImpl(
+    `${githubApiBaseUrl(access)}/repos/${access.owner}/${access.repo}/pulls/${parsed.number}`,
+    init,
+  );
+  const body = (await response.json().catch(() => ({}))) as { html_url?: string; number?: number; message?: string };
   if (!response.ok) {
-    throw new Error(redactSecrets(`GitHub API PATCH /repos/${access.owner}/${access.repo}/pulls/${parsed.number} failed with ${response.status}: ${body.message ?? 'unknown_error'}`, access.auth.token));
+    throw new Error(
+      redactSecrets(
+        `GitHub API PATCH /repos/${access.owner}/${access.repo}/pulls/${parsed.number} failed with ${response.status}: ${body.message ?? 'unknown_error'}`,
+        access.auth.token,
+      ),
+    );
   }
-  const url = typeof body.html_url === 'string' ? body.html_url : `https://github.com/${access.owner}/${access.repo}/pull/${body.number ?? parsed.number}`;
+  const url =
+    typeof body.html_url === 'string'
+      ? body.html_url
+      : `https://github.com/${access.owner}/${access.repo}/pull/${body.number ?? parsed.number}`;
   return formatResult({ exitCode: 0, stdout: url, stderr: '' }, access.auth.token);
 }
 
@@ -301,7 +346,9 @@ async function parsePullRequestUpdateInput(
         break;
       default:
         if (arg.startsWith('-')) {
-          throw new Error(`gh pr ${args[1]} option ${arg} is not supported by this tool. Supported options: --title, --body, --base, --state, --maintainer-edit, --no-maintainer-edit.`);
+          throw new Error(
+            `gh pr ${args[1]} option ${arg} is not supported by this tool. Supported options: --title, --body, --base, --state, --maintainer-edit, --no-maintainer-edit.`,
+          );
         }
         if (selector) throw new Error(`gh pr ${args[1]} accepts at most one PR selector`);
         selector = arg;
@@ -322,8 +369,9 @@ async function resolvePullRequestNumber(
 ): Promise<number> {
   const parsed = parsePullRequestNumber(selector);
   if (parsed) return parsed;
-  const branch = selector || await readPreparedRepositoryBranch(repository);
-  if (!branch) throw new Error('gh pr edit requires a PR number, URL, branch, or a current branch in a prepared repository');
+  const branch = selector || (await readPreparedRepositoryBranch(repository));
+  if (!branch)
+    throw new Error('gh pr edit requires a PR number, URL, branch, or a current branch in a prepared repository');
   return fetchPullRequestNumberForBranch(access, branch, fetchImpl, signal);
 }
 
@@ -334,16 +382,30 @@ function parsePullRequestNumber(selector: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-async function fetchPullRequestNumberForBranch(access: GitHubRepositoryAccess, branch: string, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<number> {
+async function fetchPullRequestNumberForBranch(
+  access: GitHubRepositoryAccess,
+  branch: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<number> {
   const query = new URLSearchParams({ head: `${access.owner}:${branch}`, state: 'all', per_page: '1' });
   const init = createGitHubApiRequestInit(access, { method: 'GET', signal });
-  const response = await fetchImpl(`${githubApiBaseUrl(access)}/repos/${access.owner}/${access.repo}/pulls?${query.toString()}`, init);
-  const body = await response.json().catch(() => ([])) as Array<{ number?: number }> | { message?: string };
+  const response = await fetchImpl(
+    `${githubApiBaseUrl(access)}/repos/${access.owner}/${access.repo}/pulls?${query.toString()}`,
+    init,
+  );
+  const body = (await response.json().catch(() => [])) as Array<{ number?: number }> | { message?: string };
   if (!response.ok) {
-    const message = Array.isArray(body) ? 'unknown_error' : body.message ?? 'unknown_error';
-    throw new Error(redactSecrets(`GitHub API GET /repos/${access.owner}/${access.repo}/pulls failed with ${response.status}: ${message}`, access.auth.token));
+    const message = Array.isArray(body) ? 'unknown_error' : (body.message ?? 'unknown_error');
+    throw new Error(
+      redactSecrets(
+        `GitHub API GET /repos/${access.owner}/${access.repo}/pulls failed with ${response.status}: ${message}`,
+        access.auth.token,
+      ),
+    );
   }
-  if (!Array.isArray(body) || typeof body[0]?.number !== 'number') throw new Error(`No pull request found for branch ${branch}`);
+  if (!Array.isArray(body) || typeof body[0]?.number !== 'number')
+    throw new Error(`No pull request found for branch ${branch}`);
   return body[0].number;
 }
 
@@ -386,9 +448,11 @@ function isDirectCommentCommand(args: string[]): boolean {
 function isCommentApiRoute(route: string | undefined, args: string[]): boolean {
   if (!route || !args.includes('--method') || !args.includes('POST')) return false;
   const normalized = route.replace(/^\/+/, '');
-  return /^repos\/[^/]+\/[^/]+\/issues\/\d+\/comments$/.test(normalized) ||
+  return (
+    /^repos\/[^/]+\/[^/]+\/issues\/\d+\/comments$/.test(normalized) ||
     /^repos\/[^/]+\/[^/]+\/pulls\/comments(?:\/\d+\/replies)?$/.test(normalized) ||
-    /^repos\/[^/]+\/[^/]+\/pulls\/\d+\/reviews$/.test(normalized);
+    /^repos\/[^/]+\/[^/]+\/pulls\/\d+\/reviews$/.test(normalized)
+  );
 }
 
 function isGitDatabaseApiRoute(route: string | undefined): boolean {
@@ -442,8 +506,12 @@ async function runGitHubCli(input: {
     });
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => { stdout = appendOutput(stdout, chunk); });
-    child.stderr.on('data', (chunk: Buffer) => { stderr = appendOutput(stderr, chunk); });
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout = appendOutput(stdout, chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = appendOutput(stderr, chunk);
+    });
     child.on('error', (error) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         reject(new Error('GitHub CLI executable "gh" is not installed in the worker environment'));
@@ -471,7 +539,5 @@ function formatResult(result: GitHubCliResult, token: string): string {
 }
 
 function redactSecrets(value: string, token: string): string {
-  return value
-    .replaceAll(token, '[redacted]')
-    .replace(/gh[ousr]_[A-Za-z0-9_]+/g, '[redacted]');
+  return value.replaceAll(token, '[redacted]').replace(/gh[ousr]_[A-Za-z0-9_]+/g, '[redacted]');
 }

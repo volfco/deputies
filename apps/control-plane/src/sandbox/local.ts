@@ -142,7 +142,10 @@ export class LocalSandboxProvider implements SandboxProvider {
     workspacePath: string;
     metadata: Record<string, unknown>;
   }): Promise<SandboxHandle> {
-    const toolPath = await createAllowedToolPath(input.workspacePath, this.options.allowedCommands ?? [...defaultLocalAllowedCommands]);
+    const toolPath = await createAllowedToolPath(
+      input.workspacePath,
+      this.options.allowedCommands ?? [...defaultLocalAllowedCommands],
+    );
     return {
       provider: this.name,
       providerSandboxId: input.providerSandboxId,
@@ -215,10 +218,12 @@ function execLocalCommand(rootDir: string, toolPath: string, input: SandboxExecI
     let stdout = '';
     let stderr = '';
     let timedOut = false;
-    const timer = input.timeoutMs ? setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-    }, input.timeoutMs) : undefined;
+    const timer = input.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGTERM');
+        }, input.timeoutMs)
+      : undefined;
 
     child.stdout.setEncoding('utf-8');
     child.stderr.setEncoding('utf-8');
@@ -276,7 +281,9 @@ async function createAllowedToolPath(rootDir: string, allowedCommands: string[])
 }
 
 function uniqueSafeCommands(commands: string[]): string[] {
-  return Array.from(new Set(commands.map((command) => command.trim()).filter((command) => /^[a-zA-Z0-9._+-]+$/.test(command))));
+  return Array.from(
+    new Set(commands.map((command) => command.trim()).filter((command) => /^[a-zA-Z0-9._+-]+$/.test(command))),
+  );
 }
 
 function resolveExecutable(command: string): string | null {
@@ -292,7 +299,10 @@ function resolveExecutable(command: string): string | null {
   return null;
 }
 
-function createLocalCommandEnv(toolPath: string, commandEnv: Record<string, string> | undefined): Record<string, string> {
+function createLocalCommandEnv(
+  toolPath: string,
+  commandEnv: Record<string, string> | undefined,
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of inheritedEnvKeys) {
     const value = process.env[key];

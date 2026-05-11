@@ -7,7 +7,9 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl });
 
   try {
-    await pool.query('CREATE TABLE IF NOT EXISTS app_migrations (id text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
+    await pool.query(
+      'CREATE TABLE IF NOT EXISTS app_migrations (id text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
+    );
     const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
     const migrationFiles = (await readdir(migrationsDir)).filter((file) => file.endsWith('.sql')).sort();
 

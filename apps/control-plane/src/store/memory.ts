@@ -155,18 +155,30 @@ export class MemoryStore implements AppStore {
     return [...(this.messages.get(sessionId) ?? [])];
   }
 
-  async updatePendingMessage(input: { sessionId: string; messageId: string; prompt: string }): Promise<MessageRecord | null> {
+  async updatePendingMessage(input: {
+    sessionId: string;
+    messageId: string;
+    prompt: string;
+  }): Promise<MessageRecord | null> {
     const sessionMessages = this.messages.get(input.sessionId) ?? [];
-    const message = sessionMessages.find((candidate) => candidate.id === input.messageId && candidate.status === 'pending');
+    const message = sessionMessages.find(
+      (candidate) => candidate.id === input.messageId && candidate.status === 'pending',
+    );
     if (!message) return null;
     const updated = { ...message, prompt: input.prompt };
     sessionMessages[sessionMessages.indexOf(message)] = updated;
     return updated;
   }
 
-  async cancelPendingMessage(input: { sessionId: string; messageId: string; cancelledAt: Date }): Promise<MessageRecord | null> {
+  async cancelPendingMessage(input: {
+    sessionId: string;
+    messageId: string;
+    cancelledAt: Date;
+  }): Promise<MessageRecord | null> {
     const sessionMessages = this.messages.get(input.sessionId) ?? [];
-    const message = sessionMessages.find((candidate) => candidate.id === input.messageId && candidate.status === 'pending');
+    const message = sessionMessages.find(
+      (candidate) => candidate.id === input.messageId && candidate.status === 'pending',
+    );
     if (!message) return null;
     const updated: MessageRecord = { ...message, status: 'cancelled' };
     sessionMessages[sessionMessages.indexOf(message)] = updated;
@@ -197,7 +209,9 @@ export class MemoryStore implements AppStore {
       if (currentSession?.queuePausedAt || currentSession?.status === 'archived') continue;
       if (this.hasActiveRun(sessionId, input.now)) continue;
 
-      const pendingMessages = sessionMessages.filter((candidate) => candidate.status === 'pending').sort((a, b) => a.sequence - b.sequence);
+      const pendingMessages = sessionMessages
+        .filter((candidate) => candidate.status === 'pending')
+        .sort((a, b) => a.sequence - b.sequence);
       if (!pendingMessages.length) continue;
 
       const processingMessages = pendingMessages.map((message) => ({ ...message, status: 'processing' as const }));
@@ -221,7 +235,10 @@ export class MemoryStore implements AppStore {
         heartbeatAt: input.now,
         attempt: 1,
         startedAt: input.now,
-        metadata: { messageIds: processingMessages.map((message) => message.id), sequences: processingMessages.map((message) => message.sequence) },
+        metadata: {
+          messageIds: processingMessages.map((message) => message.id),
+          sequences: processingMessages.map((message) => message.sequence),
+        },
       };
       this.runs.set(run.id, run);
       return { messages: processingMessages, run };
@@ -246,7 +263,8 @@ export class MemoryStore implements AppStore {
     heartbeatAt: Date;
   }): Promise<RunRecord | null> {
     const run = this.runs.get(input.runId);
-    if (!run || (run.status !== 'running' && run.status !== 'cancelling') || run.leaseOwner !== input.leaseOwner) return null;
+    if (!run || (run.status !== 'running' && run.status !== 'cancelling') || run.leaseOwner !== input.leaseOwner)
+      return null;
 
     const renewed: RunRecord = {
       ...run,
@@ -306,24 +324,44 @@ export class MemoryStore implements AppStore {
     return { ...claimed, run: this.runs.get(input.runId)! };
   }
 
-  async requestRunCancellation(input: { sessionId: string; requestedAt: Date; error: string }): Promise<ClaimedMessageBatch | null> {
-    const run = [...this.runs.values()].find((candidate) => candidate.sessionId === input.sessionId && (candidate.status === 'running' || candidate.status === 'starting' || candidate.status === 'cancelling'));
+  async requestRunCancellation(input: {
+    sessionId: string;
+    requestedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null> {
+    const run = [...this.runs.values()].find(
+      (candidate) =>
+        candidate.sessionId === input.sessionId &&
+        (candidate.status === 'running' || candidate.status === 'starting' || candidate.status === 'cancelling'),
+    );
     if (!run) return null;
 
     const sessionMessages = this.messages.get(run.sessionId) ?? [];
     const messages = getRunMessageIds(run).map((messageId) => {
       const message = sessionMessages.find((candidate) => candidate.id === messageId);
       if (!message) throw new Error(`Message does not exist: ${messageId}`);
-      const cancellingMessage: MessageRecord = { ...message, status: message.status === 'cancelled' ? 'cancelled' : 'cancelling' };
+      const cancellingMessage: MessageRecord = {
+        ...message,
+        status: message.status === 'cancelled' ? 'cancelled' : 'cancelling',
+      };
       sessionMessages[sessionMessages.indexOf(message)] = cancellingMessage;
       return cancellingMessage;
     });
-    const cancellingRun: RunRecord = { ...run, status: 'cancelling', heartbeatAt: input.requestedAt, error: input.error };
+    const cancellingRun: RunRecord = {
+      ...run,
+      status: 'cancelling',
+      heartbeatAt: input.requestedAt,
+      error: input.error,
+    };
     this.runs.set(run.id, cancellingRun);
     return { messages, run: cancellingRun };
   }
 
-  async finalizeRunCancellation(input: { runId: string; cancelledAt: Date; error: string }): Promise<ClaimedMessageBatch> {
+  async finalizeRunCancellation(input: {
+    runId: string;
+    cancelledAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch> {
     const claimed = this.finishRun(input.runId, input.cancelledAt, 'cancelled');
     const cancelledRun: RunRecord = { ...claimed.run, error: input.error };
     this.runs.set(input.runId, cancelledRun);
@@ -357,7 +395,9 @@ export class MemoryStore implements AppStore {
       .filter((sandbox) => !sandbox.destroyedAt && sandbox.status === 'ready')
       .filter((sandbox) => sandbox.updatedAt <= input.idleBefore)
       .filter((sandbox) => !isSessionBusy(this.sessions.get(sandbox.sessionId)?.status))
-      .filter((sandbox) => !(this.messages.get(sandbox.sessionId) ?? []).some((message) => message.status === 'pending'))
+      .filter(
+        (sandbox) => !(this.messages.get(sandbox.sessionId) ?? []).some((message) => message.status === 'pending'),
+      )
       .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
       .slice(0, input.limit);
   }
@@ -385,7 +425,12 @@ export class MemoryStore implements AppStore {
   }
 
   async createCallbackDelivery(record: CreateCallbackDeliveryRecord): Promise<CallbackDeliveryRecord> {
-    const delivery: CallbackDeliveryRecord = { ...record, status: 'pending', attempts: 0, maxAttempts: record.maxAttempts ?? 5 };
+    const delivery: CallbackDeliveryRecord = {
+      ...record,
+      status: 'pending',
+      attempts: 0,
+      maxAttempts: record.maxAttempts ?? 5,
+    };
     this.callbacks.set(delivery.id, delivery);
     return delivery;
   }
@@ -403,7 +448,10 @@ export class MemoryStore implements AppStore {
       .filter((delivery) => delivery.status === 'pending' || isStaleSendingCallback(delivery, staleSendingBefore))
       .filter((delivery) => !delivery.nextAttemptAt || delivery.nextAttemptAt <= input.now)
       .filter((delivery) => delivery.attempts < delivery.maxAttempts)
-      .sort((a, b) => (a.nextAttemptAt?.getTime() ?? a.createdAt.getTime()) - (b.nextAttemptAt?.getTime() ?? b.createdAt.getTime()))
+      .sort(
+        (a, b) =>
+          (a.nextAttemptAt?.getTime() ?? a.createdAt.getTime()) - (b.nextAttemptAt?.getTime() ?? b.createdAt.getTime()),
+      )
       .slice(0, input.limit);
     const claimed = due.map((delivery) => {
       const updated: CallbackDeliveryRecord = {
@@ -432,7 +480,13 @@ export class MemoryStore implements AppStore {
     return updated;
   }
 
-  async markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string; terminal: boolean; nextAttemptAt?: Date }): Promise<CallbackDeliveryRecord> {
+  async markCallbackDeliveryFailed(input: {
+    id: string;
+    failedAt: Date;
+    error: string;
+    terminal: boolean;
+    nextAttemptAt?: Date;
+  }): Promise<CallbackDeliveryRecord> {
     const existing = this.requireCallback(input.id);
     const { nextAttemptAt: _nextAttemptAt, ...withoutNextAttempt } = existing;
     const updated: CallbackDeliveryRecord = {
@@ -446,7 +500,11 @@ export class MemoryStore implements AppStore {
     return updated;
   }
 
-  async requestCallbackReplay(input: { sessionId: string; deliveryId: string; requestedAt: Date }): Promise<CallbackDeliveryRecord | null> {
+  async requestCallbackReplay(input: {
+    sessionId: string;
+    deliveryId: string;
+    requestedAt: Date;
+  }): Promise<CallbackDeliveryRecord | null> {
     const existing = this.callbacks.get(input.deliveryId);
     if (!existing || existing.sessionId !== input.sessionId || existing.status !== 'failed') return null;
     const { deliveredAt: _deliveredAt, nextAttemptAt: _nextAttemptAt, ...withoutTerminalFields } = existing;
@@ -465,9 +523,7 @@ export class MemoryStore implements AppStore {
     return (this.events.get(sessionId)?.length ?? 0) + 1;
   }
 
-  async appendEvent(
-    event: NormalizedEvent & { sequence: number },
-  ): Promise<EventRecord> {
+  async appendEvent(event: NormalizedEvent & { sequence: number }): Promise<EventRecord> {
     const record = { ...event, id: this.nextEventId++ };
     const sessionEvents = this.events.get(event.sessionId) ?? [];
     sessionEvents.push(record);
@@ -479,10 +535,7 @@ export class MemoryStore implements AppStore {
     return this.appendEvent({ ...event, sequence: await this.nextEventSequence(event.sessionId) });
   }
 
-  async getEvents(
-    sessionId: string,
-    afterSequence = 0,
-  ): Promise<EventRecord[]> {
+  async getEvents(sessionId: string, afterSequence = 0): Promise<EventRecord[]> {
     return (this.events.get(sessionId) ?? []).filter((event) => event.sequence > afterSequence);
   }
 
@@ -553,18 +606,32 @@ export class MemoryStore implements AppStore {
     return record;
   }
 
-  async markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void> {
+  async markIntegrationDeliveryProcessed(input: {
+    source: string;
+    dedupeKey: string;
+    processedAt: Date;
+  }): Promise<void> {
     const key = deliveryKey(input.source, input.dedupeKey);
     const existing = this.integrationDeliveries.get(key);
     if (!existing) return;
     this.integrationDeliveries.set(key, { ...existing, status: 'processed', processedAt: input.processedAt });
   }
 
-  async markIntegrationDeliveryFailed(input: { source: string; dedupeKey: string; failedAt: Date; error: string }): Promise<void> {
+  async markIntegrationDeliveryFailed(input: {
+    source: string;
+    dedupeKey: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<void> {
     const key = deliveryKey(input.source, input.dedupeKey);
     const existing = this.integrationDeliveries.get(key);
     if (!existing) return;
-    this.integrationDeliveries.set(key, { ...existing, status: 'failed', processedAt: input.failedAt, error: input.error });
+    this.integrationDeliveries.set(key, {
+      ...existing,
+      status: 'failed',
+      processedAt: input.failedAt,
+      error: input.error,
+    });
   }
 
   private hasActiveRun(sessionId: string, now: Date): boolean {
@@ -577,7 +644,11 @@ export class MemoryStore implements AppStore {
     return false;
   }
 
-  private finishRun(runId: string, finishedAt: Date, status: 'completed' | 'failed' | 'cancelled'): ClaimedMessageBatch {
+  private finishRun(
+    runId: string,
+    finishedAt: Date,
+    status: 'completed' | 'failed' | 'cancelled',
+  ): ClaimedMessageBatch {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`Run does not exist: ${runId}`);
 
@@ -604,7 +675,14 @@ export class MemoryStore implements AppStore {
     const hasPendingMessages = sessionMessages.some((message) => message.status === 'pending');
     this.sessions.set(run.sessionId, {
       ...session,
-      status: session.status === 'archived' ? 'archived' : status === 'failed' ? 'failed' : hasPendingMessages ? 'queued' : 'idle',
+      status:
+        session.status === 'archived'
+          ? 'archived'
+          : status === 'failed'
+            ? 'failed'
+            : hasPendingMessages
+              ? 'queued'
+              : 'idle',
       updatedAt: finishedAt,
     });
 
@@ -635,7 +713,10 @@ function isStaleSendingCallback(delivery: CallbackDeliveryRecord, staleSendingBe
 }
 
 function isActiveSandbox(sandbox: SandboxRecord): boolean {
-  return !sandbox.destroyedAt && (sandbox.status === 'ready' || sandbox.status === 'stopped' || sandbox.status === 'unhealthy');
+  return (
+    !sandbox.destroyedAt &&
+    (sandbox.status === 'ready' || sandbox.status === 'stopped' || sandbox.status === 'unhealthy')
+  );
 }
 
 function isSessionBusy(status: string | undefined): boolean {

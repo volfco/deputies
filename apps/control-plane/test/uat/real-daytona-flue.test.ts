@@ -119,11 +119,7 @@ async function waitForHealth(): Promise<void> {
   });
 }
 
-async function waitForEvents(
-  sessionId: string,
-  terminalTypes: string[],
-  timeoutMs: number,
-): Promise<UatEvent[]> {
+async function waitForEvents(sessionId: string, terminalTypes: string[], timeoutMs: number): Promise<UatEvent[]> {
   let lastEvents: UatEvent[] = [];
   let lastBody: unknown;
   let lastStatus = 0;
@@ -139,9 +135,7 @@ async function waitForEvents(
     }, timeoutMs);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `${message}. Last events response status=${lastStatus} body=${JSON.stringify(lastBody)}`,
-    );
+    throw new Error(`${message}. Last events response status=${lastStatus} body=${JSON.stringify(lastBody)}`);
   }
 
   return lastEvents;

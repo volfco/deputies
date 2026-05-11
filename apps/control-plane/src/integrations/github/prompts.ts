@@ -15,12 +15,7 @@ export type GitHubPromptInput = {
 };
 
 export function buildGitHubPrompt(input: GitHubPromptInput): string {
-  const lines = [
-    `GitHub repository: ${input.repository}`,
-    `Subject: ${input.subject}`,
-    '',
-    input.instruction,
-  ];
+  const lines = [`GitHub repository: ${input.repository}`, `Subject: ${input.subject}`, '', input.instruction];
 
   for (const section of input.sections) {
     if (!section.content.trim()) continue;

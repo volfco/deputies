@@ -38,7 +38,10 @@ function parseBareOwnerRepo(text: string): RepositoryReference | null {
 }
 
 function parseOwnerRepo(value: string): RepositoryReference | null {
-  const normalized = value.trim().replace(/\/+$/, '').replace(/\.git$/i, '');
+  const normalized = value
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/i, '');
   const parts = normalized.split('/');
   if (parts.length !== 2) return null;
 

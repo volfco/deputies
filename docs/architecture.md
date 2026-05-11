@@ -199,22 +199,22 @@ docs/
 
 ## Responsibility Split
 
-| Module | Owns | Does Not Own |
-|---|---|---|
-| `api`/`app` | Hono routes, request validation, auth boundaries, response formatting, middleware | Agent execution, sandbox lifecycle decisions |
-| `app` | Process bootstrap, run mode, graceful shutdown | Business logic |
-| `sessions` | Durable task workspace lifecycle and status | SQL details, Flue calls |
-| `messages` | Prompt/follow-up queue semantics | Running prompts |
-| `worker` | Claiming runnable work and coordinating execution | HTTP concerns |
-| `runner-flue` | Flue initialization and event normalization | Session persistence policy |
-| `sandbox` | Provider interface, lifecycle, health, cleanup | Prompt construction |
-| `integrations` | External webhook/auth normalization, source-specific prompt rendering, and callbacks | Direct agent execution |
-| `events` | Append-only event log, replay, subscriber fanout | Business decisions |
-| `artifacts` | PRs, branches, screenshots, object links, reports | Raw runner protocol |
-| `store` | Postgres queries, migrations, transactions | Domain decisions |
-| `config` | Env parsing, validation, feature flags | Business logic |
-| `auth` | App/user/service auth helpers | Route-specific request handling |
-| `prompts` | Prompt templates and source-specific context rendering | External API calls |
+| Module         | Owns                                                                                 | Does Not Own                                 |
+| -------------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
+| `api`/`app`    | Hono routes, request validation, auth boundaries, response formatting, middleware    | Agent execution, sandbox lifecycle decisions |
+| `app`          | Process bootstrap, run mode, graceful shutdown                                       | Business logic                               |
+| `sessions`     | Durable task workspace lifecycle and status                                          | SQL details, Flue calls                      |
+| `messages`     | Prompt/follow-up queue semantics                                                     | Running prompts                              |
+| `worker`       | Claiming runnable work and coordinating execution                                    | HTTP concerns                                |
+| `runner-flue`  | Flue initialization and event normalization                                          | Session persistence policy                   |
+| `sandbox`      | Provider interface, lifecycle, health, cleanup                                       | Prompt construction                          |
+| `integrations` | External webhook/auth normalization, source-specific prompt rendering, and callbacks | Direct agent execution                       |
+| `events`       | Append-only event log, replay, subscriber fanout                                     | Business decisions                           |
+| `artifacts`    | PRs, branches, screenshots, object links, reports                                    | Raw runner protocol                          |
+| `store`        | Postgres queries, migrations, transactions                                           | Domain decisions                             |
+| `config`       | Env parsing, validation, feature flags                                               | Business logic                               |
+| `auth`         | App/user/service auth helpers                                                        | Route-specific request handling              |
+| `prompts`      | Prompt templates and source-specific context rendering                               | External API calls                           |
 
 ## Dependency Rules
 

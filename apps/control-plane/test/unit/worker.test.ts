@@ -99,9 +99,12 @@ describe('WorkerService', () => {
       { sequence: 2, status: 'completed' },
       { sequence: 3, status: 'completed' },
     ]);
-    const sandboxReadyEvents = (await services.events.list(session.id)).filter((event) => event.type === 'sandbox_ready');
+    const sandboxReadyEvents = (await services.events.list(session.id)).filter(
+      (event) => event.type === 'sandbox_ready',
+    );
     expect(sandboxReadyEvents).toHaveLength(1);
-    const text = (await services.events.list(session.id)).find((event) => event.type === 'agent_text_delta')?.payload.text;
+    const text = (await services.events.list(session.id)).find((event) => event.type === 'agent_text_delta')?.payload
+      .text;
     expect(text).toContain('Message 2:');
     expect(text).toContain('third');
   });
@@ -172,7 +175,9 @@ describe('WorkerService', () => {
       sessionId: session.id,
       prompt: 'from slack',
       source: 'slack',
-      context: { callback: { type: 'slack', channel: 'C123', threadTs: '1710000000.000100', messageTs: '1710000001.000100' } },
+      context: {
+        callback: { type: 'slack', channel: 'C123', threadTs: '1710000000.000100', messageTs: '1710000001.000100' },
+      },
     });
 
     const worker = new WorkerService({
@@ -182,22 +187,26 @@ describe('WorkerService', () => {
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
       leaseOwner: 'test-worker',
-      callbackSenders: [{
-        type: 'slack',
-        async deliver(callback, payload) {
-          replies.push({
-            channel: String(callback.target.channel),
-            threadTs: String(callback.target.threadTs),
-            text: payload.text,
-          });
+      callbackSenders: [
+        {
+          type: 'slack',
+          async deliver(callback, payload) {
+            replies.push({
+              channel: String(callback.target.channel),
+              threadTs: String(callback.target.threadTs),
+              text: payload.text,
+            });
+          },
         },
-      }],
-      progressNotifiers: [{
-        async onRunStarted({ message }) {
-          const callback = message.context?.callback as { channel: string; messageTs: string };
-          progress.push({ channel: callback.channel, timestamp: callback.messageTs, name: 'hourglass_flowing_sand' });
+      ],
+      progressNotifiers: [
+        {
+          async onRunStarted({ message }) {
+            const callback = message.context?.callback as { channel: string; messageTs: string };
+            progress.push({ channel: callback.channel, timestamp: callback.messageTs, name: 'hourglass_flowing_sand' });
+          },
         },
-      }],
+      ],
     });
 
     await expect(worker.processNext()).resolves.toBe(true);
@@ -236,12 +245,19 @@ describe('WorkerService', () => {
     });
 
     let currentTime = now;
-    const dispatcher = new CallbackDispatcher(store, services.events, [{
-      type: 'http',
-      async deliver() {
-        throw new Error('temporary outage');
-      },
-    }], { now: () => currentTime, baseDelayMs: 1_000, jitterRatio: 0 });
+    const dispatcher = new CallbackDispatcher(
+      store,
+      services.events,
+      [
+        {
+          type: 'http',
+          async deliver() {
+            throw new Error('temporary outage');
+          },
+        },
+      ],
+      { now: () => currentTime, baseDelayMs: 1_000, jitterRatio: 0 },
+    );
 
     await expect(dispatcher.dispatchDue()).resolves.toBe(1);
     await expect(dispatcher.dispatchDue()).resolves.toBe(0);
@@ -270,10 +286,14 @@ describe('WorkerService', () => {
     });
 
     await expect(worker.processNext()).resolves.toBe(false);
-    await expect(services.messages.updatePending({ sessionId: session.id, messageId: message.id, prompt: 'edited' })).resolves.toMatchObject({ prompt: 'edited' });
+    await expect(
+      services.messages.updatePending({ sessionId: session.id, messageId: message.id, prompt: 'edited' }),
+    ).resolves.toMatchObject({ prompt: 'edited' });
     await services.sessions.resumeQueue(session.id);
     await expect(worker.processNext()).resolves.toBe(true);
-    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ prompt: 'edited', status: 'completed' }]);
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([
+      { prompt: 'edited', status: 'completed' },
+    ]);
   });
 
   it('does not complete a run that was cancelled while the runner was active', async () => {
@@ -297,7 +317,10 @@ describe('WorkerService', () => {
 
     const processing = worker.processNext();
     await runner.waitForStart();
-    await expect(services.messages.cancelActiveRun({ sessionId: session.id })).resolves.toMatchObject([{ status: 'cancelling' }, { status: 'cancelling' }]);
+    await expect(services.messages.cancelActiveRun({ sessionId: session.id })).resolves.toMatchObject([
+      { status: 'cancelling' },
+      { status: 'cancelling' },
+    ]);
     await runner.waitForAbort();
 
     await expect(processing).resolves.toBe(true);
@@ -549,9 +572,30 @@ class TextRunner implements Runner {
   constructor(private readonly text: string) {}
 
   async run(input: RunnerInput): Promise<RunnerResult> {
-    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'run_started', payload: { runner: 'test' }, createdAt: new Date() });
-    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'agent_text_delta', payload: { text: this.text }, createdAt: new Date() });
-    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'run_completed', payload: { runner: 'test' }, createdAt: new Date() });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_started',
+      payload: { runner: 'test' },
+      createdAt: new Date(),
+    });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'agent_text_delta',
+      payload: { text: this.text },
+      createdAt: new Date(),
+    });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_completed',
+      payload: { runner: 'test' },
+      createdAt: new Date(),
+    });
     return { text: this.text };
   }
 }
@@ -561,8 +605,22 @@ class CaptureRunner implements Runner {
 
   async run(input: RunnerInput): Promise<RunnerResult> {
     this.inputs.push(input);
-    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'run_started', payload: { runner: 'test' }, createdAt: new Date() });
-    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'run_completed', payload: { runner: 'test' }, createdAt: new Date() });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_started',
+      payload: { runner: 'test' },
+      createdAt: new Date(),
+    });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_completed',
+      payload: { runner: 'test' },
+      createdAt: new Date(),
+    });
     return { text: 'captured' };
   }
 }
@@ -584,11 +642,22 @@ class BlockingRunner implements Runner {
 
   async run(input: RunnerInput): Promise<RunnerResult> {
     this.started = true;
-    await input.emit({ sessionId: input.sessionId, runId: input.runId, messageId: input.messageId, type: 'run_started', payload: { runner: 'test' }, createdAt: new Date() });
-    input.signal?.addEventListener('abort', () => {
-      this.aborted = true;
-      this.abortRun();
-    }, { once: true });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_started',
+      payload: { runner: 'test' },
+      createdAt: new Date(),
+    });
+    input.signal?.addEventListener(
+      'abort',
+      () => {
+        this.aborted = true;
+        this.abortRun();
+      },
+      { once: true },
+    );
     if (input.signal?.aborted) {
       this.aborted = true;
       this.abortRun();

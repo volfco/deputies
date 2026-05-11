@@ -37,7 +37,10 @@ test('shows context as a sidebar on wide screens', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Context' })).toBeVisible();
-  await page.locator('aside').getByText(/http ·/).click();
+  await page
+    .locator('aside')
+    .getByText(/http ·/)
+    .click();
   await expect(page.locator('aside').getByText('Type: Completion reply')).toBeVisible();
   await expect(page.locator('details').filter({ has: page.getByText('Context', { exact: true }) })).not.toBeVisible();
 });
@@ -97,34 +100,40 @@ const session = {
   context: { repository: { provider: 'github', owner: 'example', repo: 'repo' } },
 };
 
-const messages = [{
-  id: '00000000-0000-4000-8000-000000000101',
-  sessionId,
-  sequence: 1,
-  status: 'completed',
-  prompt: 'Check the responsive context panel behavior.',
-  createdAt: '2026-05-05T12:01:00.000Z',
-}];
+const messages = [
+  {
+    id: '00000000-0000-4000-8000-000000000101',
+    sessionId,
+    sequence: 1,
+    status: 'completed',
+    prompt: 'Check the responsive context panel behavior.',
+    createdAt: '2026-05-05T12:01:00.000Z',
+  },
+];
 
-const events = [{
-  sessionId,
-  sequence: 1,
-  type: 'agent_response_final',
-  messageId: '00000000-0000-4000-8000-000000000101',
-  payload: { text: 'Responsive context check complete.' },
-  createdAt: '2026-05-05T12:02:00.000Z',
-}];
+const events = [
+  {
+    sessionId,
+    sequence: 1,
+    type: 'agent_response_final',
+    messageId: '00000000-0000-4000-8000-000000000101',
+    payload: { text: 'Responsive context check complete.' },
+    createdAt: '2026-05-05T12:02:00.000Z',
+  },
+];
 
-const callbacks = [{
-  id: '00000000-0000-4000-8000-000000000301',
-  sessionId,
-  targetType: 'http',
-  target: { url: 'https://example.com/callback' },
-  status: 'delivered',
-  eventType: 'message_completed',
-  payload: { text: 'done' },
-  attempts: 1,
-  maxAttempts: 5,
-  createdAt: '2026-05-05T12:03:00.000Z',
-  updatedAt: '2026-05-05T12:03:00.000Z',
-}];
+const callbacks = [
+  {
+    id: '00000000-0000-4000-8000-000000000301',
+    sessionId,
+    targetType: 'http',
+    target: { url: 'https://example.com/callback' },
+    status: 'delivered',
+    eventType: 'message_completed',
+    payload: { text: 'done' },
+    attempts: 1,
+    maxAttempts: 5,
+    createdAt: '2026-05-05T12:03:00.000Z',
+    updatedAt: '2026-05-05T12:03:00.000Z',
+  },
+];

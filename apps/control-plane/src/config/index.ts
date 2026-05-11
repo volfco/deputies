@@ -79,10 +79,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const config: AppConfig = {
     port: parsePort(env.PORT),
     maxJsonBodyBytes: parsePositiveInteger(env.MAX_JSON_BODY_BYTES, 1_048_576, 'MAX_JSON_BODY_BYTES'),
-    runCancellationPollIntervalMs: parsePositiveInteger(env.RUN_CANCELLATION_POLL_INTERVAL_MS, 1_000, 'RUN_CANCELLATION_POLL_INTERVAL_MS'),
+    runCancellationPollIntervalMs: parsePositiveInteger(
+      env.RUN_CANCELLATION_POLL_INTERVAL_MS,
+      1_000,
+      'RUN_CANCELLATION_POLL_INTERVAL_MS',
+    ),
     workerConcurrency: parsePositiveInteger(env.WORKER_CONCURRENCY, 4, 'WORKER_CONCURRENCY'),
-    sandboxIdleTimeoutMs: parsePositiveInteger(env.SANDBOX_IDLE_TIMEOUT_SECONDS, 900, 'SANDBOX_IDLE_TIMEOUT_SECONDS') * 1000,
-    sandboxStopDelayMs: parseNonNegativeInteger(env.SANDBOX_STOP_DELAY_SECONDS, 60, 'SANDBOX_STOP_DELAY_SECONDS') * 1000,
+    sandboxIdleTimeoutMs:
+      parsePositiveInteger(env.SANDBOX_IDLE_TIMEOUT_SECONDS, 900, 'SANDBOX_IDLE_TIMEOUT_SECONDS') * 1000,
+    sandboxStopDelayMs:
+      parseNonNegativeInteger(env.SANDBOX_STOP_DELAY_SECONDS, 60, 'SANDBOX_STOP_DELAY_SECONDS') * 1000,
     sandboxRetentionMs: parsePositiveInteger(env.SANDBOX_RETENTION_SECONDS, 3600, 'SANDBOX_RETENTION_SECONDS') * 1000,
     runMode: parseEnum(env.RUN_MODE, ['all', 'api', 'worker'], 'all'),
     runner: parseEnum(env.RUNNER, ['fake', 'flue'], 'fake'),
@@ -110,7 +116,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     slackAllowedTeamIds: parseStringList(env.SLACK_ALLOWED_TEAM_IDS),
     slackAllowedChannelIds: parseStringList(env.SLACK_ALLOWED_CHANNEL_IDS),
     slackAllowedUserIds: parseStringList(env.SLACK_ALLOWED_USER_IDS),
-    unsafeAllowAllGithubUsersAndOrgs: parseBoolean(env.UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS, false, 'UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS'),
+    unsafeAllowAllGithubUsersAndOrgs: parseBoolean(
+      env.UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS,
+      false,
+      'UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS',
+    ),
     githubApiBaseUrl: env.GITHUB_API_BASE_URL ?? 'https://api.github.com',
     githubCloneBaseUrl: env.GITHUB_CLONE_BASE_URL ?? 'https://github.com',
     githubAllowedRepositories: parseStringList(env.GITHUB_ALLOWED_REPOSITORIES),
@@ -152,13 +162,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   validateProductAuthConfig(config);
 
   if (config.slackSigningSecret && !config.unsafeAllowAllSlackIds && !hasAnySlackAllowlist(config)) {
-    throw new Error('Slack allowlists are required when SLACK_SIGNING_SECRET is set. Configure SLACK_ALLOWED_TEAM_IDS, SLACK_ALLOWED_CHANNEL_IDS, or SLACK_ALLOWED_USER_IDS, or set UNSAFE_ALLOW_ALL_SLACK_IDS=true for unrestricted Slack access.');
+    throw new Error(
+      'Slack allowlists are required when SLACK_SIGNING_SECRET is set. Configure SLACK_ALLOWED_TEAM_IDS, SLACK_ALLOWED_CHANNEL_IDS, or SLACK_ALLOWED_USER_IDS, or set UNSAFE_ALLOW_ALL_SLACK_IDS=true for unrestricted Slack access.',
+    );
   }
   if (config.githubWebhookSecret && !config.unsafeAllowAllGithubUsersAndOrgs && !hasAnyGitHubWebhookAllowlist(config)) {
-    throw new Error('GitHub webhook allowlists are required when GITHUB_WEBHOOK_SECRET is set. Configure GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_ORGANIZATIONS, or set UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true for unrestricted GitHub webhook access.');
+    throw new Error(
+      'GitHub webhook allowlists are required when GITHUB_WEBHOOK_SECRET is set. Configure GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_ORGANIZATIONS, or set UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true for unrestricted GitHub webhook access.',
+    );
   }
   if (config.githubWebhookSecret && !config.githubTriggerPhrases.length) {
-    throw new Error('GITHUB_TRIGGER_PHRASES is required when GITHUB_WEBHOOK_SECRET is set so GitHub webhooks only process explicitly triggered requests.');
+    throw new Error(
+      'GITHUB_TRIGGER_PHRASES is required when GITHUB_WEBHOOK_SECRET is set so GitHub webhooks only process explicitly triggered requests.',
+    );
   }
 
   return config;
@@ -181,11 +197,17 @@ function validateProductAuthConfig(config: AppConfig): void {
   requireGitHubOAuthCredentials(config);
 }
 
-function hasAnySlackAllowlist(config: Pick<AppConfig, 'slackAllowedTeamIds' | 'slackAllowedChannelIds' | 'slackAllowedUserIds'>): boolean {
-  return Boolean(config.slackAllowedTeamIds.length || config.slackAllowedChannelIds.length || config.slackAllowedUserIds.length);
+function hasAnySlackAllowlist(
+  config: Pick<AppConfig, 'slackAllowedTeamIds' | 'slackAllowedChannelIds' | 'slackAllowedUserIds'>,
+): boolean {
+  return Boolean(
+    config.slackAllowedTeamIds.length || config.slackAllowedChannelIds.length || config.slackAllowedUserIds.length,
+  );
 }
 
-function hasAnyGitHubWebhookAllowlist(config: Pick<AppConfig, 'githubAllowedUsers' | 'githubAllowedOrganizations'>): boolean {
+function hasAnyGitHubWebhookAllowlist(
+  config: Pick<AppConfig, 'githubAllowedUsers' | 'githubAllowedOrganizations'>,
+): boolean {
   return Boolean(config.githubAllowedUsers.length || config.githubAllowedOrganizations.length);
 }
 
@@ -311,7 +333,10 @@ function parseBoolean(value: string | undefined, fallback: boolean, name: string
 
 function parseStringList(value: string | undefined): string[] {
   if (!value) return [];
-  return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function normalizePrivateKey(value: string): string {

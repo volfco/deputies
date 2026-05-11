@@ -71,7 +71,14 @@ describe('FlueRunner', () => {
                   session: 'flue-session',
                 });
                 input.onEvent?.({ type: 'operation_start', operationId: 'op-1', operationKind: 'shell' });
-                input.onEvent?.({ type: 'operation', operationId: 'op-1', operationKind: 'shell', durationMs: 1, isError: false, result: { command: 'gh', exitCode: 0 } });
+                input.onEvent?.({
+                  type: 'operation',
+                  operationId: 'op-1',
+                  operationKind: 'shell',
+                  durationMs: 1,
+                  isError: false,
+                  result: { command: 'gh', exitCode: 0 },
+                });
                 input.onEvent?.({ type: 'task_start', taskId: 'task-1', prompt: 'research', cwd: '/workspace' });
                 input.onEvent?.({ type: 'task', taskId: 'task-1', isError: false, result: 'done', durationMs: 1 });
                 return { text: 'hello' };
@@ -143,14 +150,18 @@ describe('FlueRunner', () => {
     const sandbox = await new FakeSandboxProvider().create({ sessionId: 'session-1' });
     const events: NormalizedEvent[] = [];
 
-    await new FlueRunner(factory, { repositoryAccess: { github: new StaticGitHubAccessProvider('ghs_secret_token') } }).run({
+    await new FlueRunner(factory, {
+      repositoryAccess: { github: new StaticGitHubAccessProvider('ghs_secret_token') },
+    }).run({
       sessionId: 'session-1',
       runId: 'run-1',
       messageId: 'message-1',
       prompt: 'work on repo',
       context: { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } },
       sandbox,
-      emit: async (event) => { events.push(event); },
+      emit: async (event) => {
+        events.push(event);
+      },
     });
 
     expect(calls[0]).toMatchObject({ cwd: '/workspace/manaflow' });
@@ -165,7 +176,12 @@ describe('FlueRunner', () => {
     });
 
     const eventsJson = JSON.stringify(events);
-    expect(events.map((event) => event.type)).toEqual(['run_started', 'repository_ready', 'agent_text_delta', 'run_completed']);
+    expect(events.map((event) => event.type)).toEqual([
+      'run_started',
+      'repository_ready',
+      'agent_text_delta',
+      'run_completed',
+    ]);
     expect(eventsJson).toContain('/workspace/manaflow');
     expect(eventsJson).not.toContain('ghs_secret_token');
   });
@@ -179,7 +195,11 @@ describe('FlueRunner', () => {
           id: 'entry-1',
           parentId: null,
           timestamp: '2026-05-06T00:00:00.000Z',
-          message: { role: 'user' as const, content: [{ type: 'text' as const, text: 'previous completed work' }], timestamp: 1 },
+          message: {
+            role: 'user' as const,
+            content: [{ type: 'text' as const, text: 'previous completed work' }],
+            timestamp: 1,
+          },
           source: 'prompt' as const,
         },
       ],
@@ -281,7 +301,14 @@ describe('FlueRunner', () => {
 
   it('maps product session IDs to Flue storage keys for snapshots', async () => {
     const keys: string[] = [];
-    const data = { version: 3, entries: [], leafId: null, metadata: {}, createdAt: 'now', updatedAt: 'now' } satisfies SessionData;
+    const data = {
+      version: 3,
+      entries: [],
+      leafId: null,
+      metadata: {},
+      createdAt: 'now',
+      updatedAt: 'now',
+    } satisfies SessionData;
     const store: SessionStore = {
       async load(id) {
         keys.push(`load:${id}`);
@@ -309,7 +336,6 @@ describe('FlueRunner', () => {
       'delete:agent-session:["session-1","session-1"]',
     ]);
   });
-
 });
 
 class StaticGitHubAccessProvider implements RepositoryAccessProvider {

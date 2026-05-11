@@ -34,7 +34,9 @@ const eventTypes = new Set([
   'callback_replay_requested',
 ]);
 
-export function expectSessionResponse(value: unknown): asserts value is { session: { id: string; status: string; title?: string } } {
+export function expectSessionResponse(
+  value: unknown,
+): asserts value is { session: { id: string; status: string; title?: string } } {
   expect(isRecord(value)).toBe(true);
   const session = isRecord(value) ? value.session : undefined;
   expect(isRecord(session)).toBe(true);
@@ -46,7 +48,9 @@ export function expectSessionResponse(value: unknown): asserts value is { sessio
   if (session.title !== undefined) expect(typeof session.title).toBe('string');
 }
 
-export function expectSessionsResponse(value: unknown): asserts value is { sessions: Array<{ id: string; status: string; title?: string }> } {
+export function expectSessionsResponse(
+  value: unknown,
+): asserts value is { sessions: Array<{ id: string; status: string; title?: string }> } {
   expect(isRecord(value)).toBe(true);
   const sessions = isRecord(value) ? value.sessions : undefined;
   expect(Array.isArray(sessions)).toBe(true);
@@ -54,7 +58,9 @@ export function expectSessionsResponse(value: unknown): asserts value is { sessi
   for (const session of sessions) expectSessionRecord(session);
 }
 
-export function expectMessageResponse(value: unknown): asserts value is { message: { id: string; sessionId: string; sequence: number; status: string; prompt: string } } {
+export function expectMessageResponse(
+  value: unknown,
+): asserts value is { message: { id: string; sessionId: string; sequence: number; status: string; prompt: string } } {
   expect(isRecord(value)).toBe(true);
   const message = isRecord(value) ? value.message : undefined;
   expect(isRecord(message)).toBe(true);
@@ -67,7 +73,9 @@ export function expectMessageResponse(value: unknown): asserts value is { messag
   expect(typeof message.createdAt).toBe('string');
 }
 
-export function expectMessagesResponse(value: unknown): asserts value is { messages: Array<{ id: string; sessionId: string; sequence: number; status: string; prompt: string }> } {
+export function expectMessagesResponse(value: unknown): asserts value is {
+  messages: Array<{ id: string; sessionId: string; sequence: number; status: string; prompt: string }>;
+} {
   expect(isRecord(value)).toBe(true);
   const messages = isRecord(value) ? value.messages : undefined;
   expect(Array.isArray(messages)).toBe(true);
@@ -75,7 +83,9 @@ export function expectMessagesResponse(value: unknown): asserts value is { messa
   for (const message of messages) expectMessageRecord(message);
 }
 
-export function expectEventsResponse(value: unknown): asserts value is { events: Array<{ type: string; sequence: number }> } {
+export function expectEventsResponse(
+  value: unknown,
+): asserts value is { events: Array<{ type: string; sequence: number }> } {
   expect(isRecord(value)).toBe(true);
   const events = isRecord(value) ? value.events : undefined;
   expect(Array.isArray(events)).toBe(true);
@@ -83,7 +93,9 @@ export function expectEventsResponse(value: unknown): asserts value is { events:
   for (const event of events) expectNormalizedEvent(event);
 }
 
-export function expectArtifactsResponse(value: unknown): asserts value is { artifacts: Array<{ id: string; type: string; payload: Record<string, unknown> }> } {
+export function expectArtifactsResponse(
+  value: unknown,
+): asserts value is { artifacts: Array<{ id: string; type: string; payload: Record<string, unknown> }> } {
   expect(isRecord(value)).toBe(true);
   const artifacts = isRecord(value) ? value.artifacts : undefined;
   expect(Array.isArray(artifacts)).toBe(true);
@@ -100,9 +112,12 @@ export function expectArtifactsResponse(value: unknown): asserts value is { arti
   }
 }
 
-export function expectGenericWebhookResponse(
-  value: unknown,
-): asserts value is { accepted: boolean; duplicate: boolean; session?: { id: string }; message?: { id: string; prompt: string } } {
+export function expectGenericWebhookResponse(value: unknown): asserts value is {
+  accepted: boolean;
+  duplicate: boolean;
+  session?: { id: string };
+  message?: { id: string; prompt: string };
+} {
   expect(isRecord(value)).toBe(true);
   if (!isRecord(value)) return;
   expect(typeof value.accepted).toBe('boolean');
@@ -127,7 +142,9 @@ export function expectErrorResponse(value: unknown): asserts value is { error: s
   expect(typeof value.message).toBe('string');
 }
 
-export function expectCallbacksResponse(value: unknown): asserts value is { callbacks: Array<{ id: string; sessionId: string; targetType: string; status: string; attempts: number }> } {
+export function expectCallbacksResponse(value: unknown): asserts value is {
+  callbacks: Array<{ id: string; sessionId: string; targetType: string; status: string; attempts: number }>;
+} {
   expect(isRecord(value)).toBe(true);
   const callbacks = isRecord(value) ? value.callbacks : undefined;
   expect(Array.isArray(callbacks)).toBe(true);
@@ -135,7 +152,9 @@ export function expectCallbacksResponse(value: unknown): asserts value is { call
   for (const callback of callbacks) expectCallbackRecord(callback);
 }
 
-export function expectCallbackResponse(value: unknown): asserts value is { callback: { id: string; sessionId: string; targetType: string; status: string; attempts: number } } {
+export function expectCallbackResponse(value: unknown): asserts value is {
+  callback: { id: string; sessionId: string; targetType: string; status: string; attempts: number };
+} {
   expect(isRecord(value)).toBe(true);
   const callback = isRecord(value) ? value.callback : undefined;
   expectCallbackRecord(callback);

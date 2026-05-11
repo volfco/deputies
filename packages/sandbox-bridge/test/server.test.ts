@@ -23,7 +23,9 @@ describe('sandbox bridge server', () => {
 
   afterEach(async () => {
     await new Promise<void>((resolve, reject) => {
-      server.close((error) => { error ? reject(error) : resolve(); });
+      server.close((error) => {
+        error ? reject(error) : resolve();
+      });
     });
     await rm(workspacePath, { recursive: true, force: true });
   });
@@ -41,8 +43,12 @@ describe('sandbox bridge server', () => {
   });
 
   it('round trips filesystem operations and rejects path escapes', async () => {
-    await expect(bridgeFetch('/fs/mkdir', { method: 'POST', body: JSON.stringify({ path: 'nested', recursive: true }) })).resolves.toMatchObject({ status: 200 });
-    await expect(bridgeFetch('/fs/write?path=nested/file.txt', { method: 'PUT', body: 'hello' })).resolves.toMatchObject({ status: 200 });
+    await expect(
+      bridgeFetch('/fs/mkdir', { method: 'POST', body: JSON.stringify({ path: 'nested', recursive: true }) }),
+    ).resolves.toMatchObject({ status: 200 });
+    await expect(
+      bridgeFetch('/fs/write?path=nested/file.txt', { method: 'PUT', body: 'hello' }),
+    ).resolves.toMatchObject({ status: 200 });
 
     const read = await bridgeFetch('/fs/read?path=nested/file.txt');
     await expect(read.text()).resolves.toBe('hello');
@@ -52,7 +58,9 @@ describe('sandbox bridge server', () => {
     const escaped = await bridgeFetch('/fs/read?path=/tmp/outside.txt');
     expect(escaped.status).toBe(400);
 
-    await expect(bridgeFetch('/fs/rm', { method: 'POST', body: JSON.stringify({ path: 'nested', recursive: true, force: true }) })).resolves.toMatchObject({ status: 200 });
+    await expect(
+      bridgeFetch('/fs/rm', { method: 'POST', body: JSON.stringify({ path: 'nested', recursive: true, force: true }) }),
+    ).resolves.toMatchObject({ status: 200 });
     await expect((await bridgeFetch('/fs/exists?path=nested/file.txt')).json()).resolves.toEqual({ exists: false });
   });
 

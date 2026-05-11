@@ -18,7 +18,8 @@ describe('architecture boundaries', () => {
       const text = await readFile(file, 'utf8');
 
       for (const rule of rules) {
-        if (!importSpecifiers(text).some((specifier) => specifier === rule.sdk || specifier.startsWith(`${rule.sdk}/`))) continue;
+        if (!importSpecifiers(text).some((specifier) => specifier === rule.sdk || specifier.startsWith(`${rule.sdk}/`)))
+          continue;
         if (!rule.allowed(relative(srcRoot, file))) offenders.push(relative(root, file));
       }
     }
@@ -46,7 +47,8 @@ describe('architecture boundaries', () => {
 
     for (const file of files) {
       const text = await readFile(file, 'utf8');
-      if (internalImports(file, text).some((path) => path.startsWith('runner-flue/'))) offenders.push(relative(root, file));
+      if (internalImports(file, text).some((path) => path.startsWith('runner-flue/')))
+        offenders.push(relative(root, file));
     }
 
     expect(offenders).toEqual([]);
@@ -71,7 +73,8 @@ describe('architecture boundaries', () => {
 
     for (const file of files) {
       const text = await readFile(file, 'utf8');
-      if (internalImports(file, text).some((path) => path.startsWith('integrations/'))) offenders.push(relative(root, file));
+      if (internalImports(file, text).some((path) => path.startsWith('integrations/')))
+        offenders.push(relative(root, file));
     }
 
     expect(offenders).toEqual([]);
@@ -83,7 +86,8 @@ describe('architecture boundaries', () => {
 
     for (const file of files) {
       const text = await readFile(file, 'utf8');
-      if (internalImports(file, text).some((path) => path.startsWith('app/') || path.startsWith('integrations/'))) offenders.push(relative(root, file));
+      if (internalImports(file, text).some((path) => path.startsWith('app/') || path.startsWith('integrations/')))
+        offenders.push(relative(root, file));
     }
 
     expect(offenders).toEqual([]);
@@ -95,7 +99,8 @@ describe('architecture boundaries', () => {
 
     for (const file of files) {
       const text = await readFile(file, 'utf8');
-      if (internalImports(file, text).some((path) => path.endsWith('/service') || path.includes('/service/'))) offenders.push(relative(root, file));
+      if (internalImports(file, text).some((path) => path.endsWith('/service') || path.includes('/service/')))
+        offenders.push(relative(root, file));
     }
 
     expect(offenders).toEqual([]);
@@ -107,7 +112,8 @@ describe('architecture boundaries', () => {
 
     for (const file of files) {
       const text = await readFile(file, 'utf8');
-      if (internalImports(file, text).some((path) => path.startsWith('integrations/'))) offenders.push(relative(root, file));
+      if (internalImports(file, text).some((path) => path.startsWith('integrations/')))
+        offenders.push(relative(root, file));
     }
 
     expect(offenders).toEqual([]);
@@ -127,8 +133,12 @@ async function sourceFiles(dir = srcRoot): Promise<string[]> {
 }
 
 function importSpecifiers(text: string): string[] {
-  const imports = text.matchAll(/\bimport(?:\s+type)?(?:[\s\S]*?\sfrom\s*)?['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g);
-  return [...imports].map((match) => match[1] ?? match[2]).filter((specifier): specifier is string => Boolean(specifier));
+  const imports = text.matchAll(
+    /\bimport(?:\s+type)?(?:[\s\S]*?\sfrom\s*)?['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
+  );
+  return [...imports]
+    .map((match) => match[1] ?? match[2])
+    .filter((specifier): specifier is string => Boolean(specifier));
 }
 
 function internalImports(file: string, text: string): string[] {

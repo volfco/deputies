@@ -184,15 +184,21 @@ describe('loadConfig', () => {
   });
 
   it('requires Slack allowlists unless unsafe allow-all is explicit', () => {
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret' })).toThrow('Slack allowlists are required');
-    expect(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' })).toMatchObject({
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret' })).toThrow(
+      'Slack allowlists are required',
+    );
+    expect(
+      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }),
+    ).toMatchObject({
       slackSigningSecret: 'slack-secret',
       unsafeAllowAllSlackIds: true,
       slackAllowedTeamIds: [],
       slackAllowedChannelIds: [],
       slackAllowedUserIds: [],
     });
-    expect(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', SLACK_ALLOWED_TEAM_IDS: 'T123' })).toMatchObject({
+    expect(
+      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', SLACK_ALLOWED_TEAM_IDS: 'T123' }),
+    ).toMatchObject({
       slackSigningSecret: 'slack-secret',
       unsafeAllowAllSlackIds: false,
       slackAllowedTeamIds: ['T123'],
@@ -200,22 +206,47 @@ describe('loadConfig', () => {
   });
 
   it('requires GitHub webhook allowlists unless unsafe allow-all is explicit', () => {
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret' })).toThrow('GitHub webhook allowlists are required');
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat' })).toThrow('GITHUB_TRIGGER_PHRASES is required');
-    expect(loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'true', GITHUB_TRIGGER_PHRASES: 'deputies:' })).toMatchObject({
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret' })).toThrow(
+      'GitHub webhook allowlists are required',
+    );
+    expect(() =>
+      loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat' }),
+    ).toThrow('GITHUB_TRIGGER_PHRASES is required');
+    expect(
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        GITHUB_WEBHOOK_SECRET: 'github-secret',
+        UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'true',
+        GITHUB_TRIGGER_PHRASES: 'deputies:',
+      }),
+    ).toMatchObject({
       githubWebhookSecret: 'github-secret',
       unsafeAllowAllGithubUsersAndOrgs: true,
       githubAllowedUsers: [],
       githubAllowedOrganizations: [],
       githubTriggerPhrases: ['deputies:'],
     });
-    expect(loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat', GITHUB_TRIGGER_PHRASES: '/deputies' })).toMatchObject({
+    expect(
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        GITHUB_WEBHOOK_SECRET: 'github-secret',
+        GITHUB_ALLOWED_USERS: 'octocat',
+        GITHUB_TRIGGER_PHRASES: '/deputies',
+      }),
+    ).toMatchObject({
       githubWebhookSecret: 'github-secret',
       unsafeAllowAllGithubUsersAndOrgs: false,
       githubAllowedUsers: ['octocat'],
       githubTriggerPhrases: ['/deputies'],
     });
-    expect(loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_ORGANIZATIONS: 'acme', GITHUB_TRIGGER_PHRASES: '@acme/deputies' })).toMatchObject({
+    expect(
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        GITHUB_WEBHOOK_SECRET: 'github-secret',
+        GITHUB_ALLOWED_ORGANIZATIONS: 'acme',
+        GITHUB_TRIGGER_PHRASES: '@acme/deputies',
+      }),
+    ).toMatchObject({
       githubWebhookSecret: 'github-secret',
       unsafeAllowAllGithubUsersAndOrgs: false,
       githubAllowedOrganizations: ['acme'],
@@ -233,14 +264,18 @@ describe('loadConfig', () => {
 
   it('requires static session auth credentials at startup', () => {
     expect(() => loadConfig({ API_AUTH_MODE: 'session' })).toThrow('AUTH_SESSION_SECRET is required');
-    expect(() => loadConfig({ API_AUTH_MODE: 'session', AUTH_SESSION_SECRET: 'secret' })).toThrow('AUTH_STATIC_USERNAME and AUTH_STATIC_PASSWORD are required');
-    expect(loadConfig({
-      API_AUTH_MODE: 'session',
-      AUTH_PROVIDER: 'static',
-      AUTH_SESSION_SECRET: 'secret',
-      AUTH_STATIC_USERNAME: 'dev',
-      AUTH_STATIC_PASSWORD: 'password',
-    })).toMatchObject({
+    expect(() => loadConfig({ API_AUTH_MODE: 'session', AUTH_SESSION_SECRET: 'secret' })).toThrow(
+      'AUTH_STATIC_USERNAME and AUTH_STATIC_PASSWORD are required',
+    );
+    expect(
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_PROVIDER: 'static',
+        AUTH_SESSION_SECRET: 'secret',
+        AUTH_STATIC_USERNAME: 'dev',
+        AUTH_STATIC_PASSWORD: 'password',
+      }),
+    ).toMatchObject({
       apiAuthMode: 'session',
       authProvider: 'static',
       authSessionSecret: 'secret',
@@ -250,18 +285,22 @@ describe('loadConfig', () => {
   });
 
   it('requires GitHub App session auth credentials at startup', () => {
-    expect(() => loadConfig({
-      API_AUTH_MODE: 'session',
-      AUTH_PROVIDER: 'github',
-      AUTH_SESSION_SECRET: 'secret',
-    })).toThrow('GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET are required');
-    expect(loadConfig({
-      API_AUTH_MODE: 'session',
-      AUTH_PROVIDER: 'github',
-      AUTH_SESSION_SECRET: 'secret',
-      GITHUB_APP_CLIENT_ID: 'client-id',
-      GITHUB_APP_CLIENT_SECRET: 'client-secret',
-    })).toMatchObject({
+    expect(() =>
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_PROVIDER: 'github',
+        AUTH_SESSION_SECRET: 'secret',
+      }),
+    ).toThrow('GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET are required');
+    expect(
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_PROVIDER: 'github',
+        AUTH_SESSION_SECRET: 'secret',
+        GITHUB_APP_CLIENT_ID: 'client-id',
+        GITHUB_APP_CLIENT_SECRET: 'client-secret',
+      }),
+    ).toMatchObject({
       apiAuthMode: 'session',
       authProvider: 'github',
       authSessionSecret: 'secret',
@@ -279,29 +318,45 @@ describe('loadConfig', () => {
   });
 
   it('rejects invalid run cancellation poll intervals', () => {
-    expect(() => loadConfig({ RUN_CANCELLATION_POLL_INTERVAL_MS: '0' })).toThrow('RUN_CANCELLATION_POLL_INTERVAL_MS must be a positive integer');
+    expect(() => loadConfig({ RUN_CANCELLATION_POLL_INTERVAL_MS: '0' })).toThrow(
+      'RUN_CANCELLATION_POLL_INTERVAL_MS must be a positive integer',
+    );
   });
 
   it('rejects invalid sandbox idle timeout', () => {
-    expect(() => loadConfig({ SANDBOX_IDLE_TIMEOUT_SECONDS: '0' })).toThrow('SANDBOX_IDLE_TIMEOUT_SECONDS must be a positive integer');
+    expect(() => loadConfig({ SANDBOX_IDLE_TIMEOUT_SECONDS: '0' })).toThrow(
+      'SANDBOX_IDLE_TIMEOUT_SECONDS must be a positive integer',
+    );
   });
 
   it('rejects invalid sandbox retention', () => {
-    expect(() => loadConfig({ SANDBOX_RETENTION_SECONDS: '0' })).toThrow('SANDBOX_RETENTION_SECONDS must be a positive integer');
+    expect(() => loadConfig({ SANDBOX_RETENTION_SECONDS: '0' })).toThrow(
+      'SANDBOX_RETENTION_SECONDS must be a positive integer',
+    );
   });
 
   it('rejects invalid sandbox stop delay', () => {
-    expect(() => loadConfig({ SANDBOX_STOP_DELAY_SECONDS: '-1' })).toThrow('SANDBOX_STOP_DELAY_SECONDS must be a non-negative integer');
+    expect(() => loadConfig({ SANDBOX_STOP_DELAY_SECONDS: '-1' })).toThrow(
+      'SANDBOX_STOP_DELAY_SECONDS must be a non-negative integer',
+    );
   });
 
   it('rejects invalid enum values', () => {
     expect(() => loadConfig({ RUN_MODE: 'cloudflare' })).toThrow('Expected one of all, api, worker');
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SAME_SITE: 'strict' })).toThrow('Expected one of lax, none');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SAME_SITE: 'strict' })).toThrow(
+      'Expected one of lax, none',
+    );
   });
 
   it('rejects invalid boolean values', () => {
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SECURE: 'yes' })).toThrow('AUTH_COOKIE_SECURE must be true or false');
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_SLACK_IDS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_SLACK_IDS must be true or false');
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'yes' })).toThrow('UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS must be true or false');
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SECURE: 'yes' })).toThrow(
+      'AUTH_COOKIE_SECURE must be true or false',
+    );
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_SLACK_IDS: 'yes' })).toThrow(
+      'UNSAFE_ALLOW_ALL_SLACK_IDS must be true or false',
+    );
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'yes' })).toThrow(
+      'UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS must be true or false',
+    );
   });
 });

@@ -10,7 +10,12 @@ export type SlackPromptOptions = {
   includeChannelContext?: boolean;
 };
 
-export function renderSlackPrompt(event: SlackAcceptedEvent, threadContext: SlackThreadContext = { messages: [] }, metadata: SlackPromptMetadata = {}, options: SlackPromptOptions = {}): string {
+export function renderSlackPrompt(
+  event: SlackAcceptedEvent,
+  threadContext: SlackThreadContext = { messages: [] },
+  metadata: SlackPromptMetadata = {},
+  options: SlackPromptOptions = {},
+): string {
   const parts: string[] = [];
   if (options.includeChannelContext && metadata.channelName) {
     parts.push('Slack channel context:', '---');
@@ -22,7 +27,9 @@ export function renderSlackPrompt(event: SlackAcceptedEvent, threadContext: Slac
 
   if (threadContext.messages.length) {
     parts.push('Prior unprocessed messages from the Slack thread:', '---');
-    parts.push(...threadContext.messages.map((message) => `[${message.username ?? 'user'}]: ${boundPromptText(message.text)}`));
+    parts.push(
+      ...threadContext.messages.map((message) => `[${message.username ?? 'user'}]: ${boundPromptText(message.text)}`),
+    );
     parts.push('---', '');
   } else if (threadContext.unavailableReason) {
     parts.push('Prior unprocessed messages from the Slack thread:', '---');

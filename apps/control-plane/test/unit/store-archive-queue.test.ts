@@ -39,12 +39,14 @@ describe('store archive queue behavior', () => {
     await services.messages.enqueue({ sessionId: session.id, prompt: 'do not run' });
     await services.sessions.archive(session.id);
 
-    await expect(store.claimNextPendingMessageBatch({
-      runId: '00000000-0000-4000-8000-000000001001',
-      runnerType: 'fake',
-      leaseOwner: 'worker-1',
-      leaseExpiresAt: new Date(Date.now() + 60_000),
-      now: new Date(),
-    })).resolves.toBeNull();
+    await expect(
+      store.claimNextPendingMessageBatch({
+        runId: '00000000-0000-4000-8000-000000001001',
+        runnerType: 'fake',
+        leaseOwner: 'worker-1',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        now: new Date(),
+      }),
+    ).resolves.toBeNull();
   });
 });

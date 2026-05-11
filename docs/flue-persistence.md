@@ -20,7 +20,7 @@ The generated store is equivalent to:
 ```ts
 function createDOStore(sql) {
   sql.exec(
-    'CREATE TABLE IF NOT EXISTS flue_sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)'
+    'CREATE TABLE IF NOT EXISTS flue_sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)',
   );
   return {
     async save(id, data) {
@@ -63,10 +63,10 @@ export interface SessionStore {
 
 Do not collapse product state and Flue runtime state into one concept.
 
-| State | Owner | Purpose |
-|---|---|---|
-| Product session state | Our `sessions`, `messages`, `runs`, `events`, `artifacts`, `sandboxes` tables | User-visible background-agent lifecycle |
-| Flue session state | Custom Flue `SessionStore` table | Flue conversation/tool/task history used by the runner |
+| State                 | Owner                                                                         | Purpose                                                |
+| --------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Product session state | Our `sessions`, `messages`, `runs`, `events`, `artifacts`, `sandboxes` tables | User-visible background-agent lifecycle                |
+| Flue session state    | Custom Flue `SessionStore` table                                              | Flue conversation/tool/task history used by the runner |
 
 Product state is the source of truth for the app. Flue state is the source of truth for Flue's internal conversation continuity. Both are required.
 

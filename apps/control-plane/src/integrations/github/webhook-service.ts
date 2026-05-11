@@ -12,7 +12,12 @@ import {
   unprocessedArchivedTranscriptMessages,
 } from '../archive.js';
 import { boundPriorContext, boundPromptText } from '../prompt-bounds.js';
-import { getOrCreateExternalThreadSession, markIntegrationDeliveryFailed, markIntegrationDeliveryProcessed, receiveIntegrationDelivery } from '../shared-utils.js';
+import {
+  getOrCreateExternalThreadSession,
+  markIntegrationDeliveryFailed,
+  markIntegrationDeliveryProcessed,
+  receiveIntegrationDelivery,
+} from '../shared-utils.js';
 import type { GitHubArchivedSessionNotifier } from './archived-session-notifier.js';
 import { githubCallbackTarget } from './callback-target.js';
 import type { GitHubIssueContextFetcher, GitHubIssueThreadComment } from './issue-context-fetcher.js';
@@ -132,26 +137,43 @@ export class GitHubWebhookService {
     private readonly options: GitHubWebhookServiceOptions = {},
   ) {}
 
-  async handle(input: { headers: GitHubWebhookHeaders; payload: Record<string, unknown> }): Promise<GitHubWebhookResult> {
+  async handle(input: {
+    headers: GitHubWebhookHeaders;
+    payload: Record<string, unknown>;
+  }): Promise<GitHubWebhookResult> {
     const accepted = parseAcceptedEvent(input.headers, input.payload as GitHubWebhookPayload);
     if (!accepted) return { ok: true, type: 'ignored', reason: 'unsupported_event' };
 
     const received = await receiveIntegrationDelivery(this.store, {
       source: 'github',
       dedupeKey: accepted.deliveryId,
-      metadata: { event: accepted.event, action: accepted.action, owner: accepted.owner, repo: accepted.repo, number: accepted.number },
+      metadata: {
+        event: accepted.event,
+        action: accepted.action,
+        owner: accepted.owner,
+        repo: accepted.repo,
+        number: accepted.number,
+      },
     });
     if (!received) return { ok: true, type: 'duplicate' };
 
     const authorizationFailure = this.authorizationFailure(accepted);
     if (authorizationFailure) {
-      await markIntegrationDeliveryFailed(this.store, { source: 'github', dedupeKey: accepted.deliveryId, error: authorizationFailure });
+      await markIntegrationDeliveryFailed(this.store, {
+        source: 'github',
+        dedupeKey: accepted.deliveryId,
+        error: authorizationFailure,
+      });
       return { ok: true, type: 'ignored', reason: authorizationFailure };
     }
 
     const triggerFailure = this.triggerFailure(accepted);
     if (triggerFailure) {
-      await markIntegrationDeliveryFailed(this.store, { source: 'github', dedupeKey: accepted.deliveryId, error: triggerFailure });
+      await markIntegrationDeliveryFailed(this.store, {
+        source: 'github',
+        dedupeKey: accepted.deliveryId,
+        error: triggerFailure,
+      });
       return { ok: true, type: 'ignored', reason: triggerFailure };
     }
 
@@ -162,7 +184,10 @@ export class GitHubWebhookService {
     if (session.status === 'archived') {
       if (includesArchivedSessionRecoveryPhrase(githubEventText(accepted))) {
         session = await this.sessions.unarchive(session.id);
-        const archivedMessages = unprocessedArchivedTranscriptMessages(await this.store.getMessages(session.id), 'github');
+        const archivedMessages = unprocessedArchivedTranscriptMessages(
+          await this.store.getMessages(session.id),
+          'github',
+        );
         if (archivedMessages.length) {
           const message = await this.enqueueArchivedRecoveryWork(session, accepted, archivedMessages);
           await markIntegrationDeliveryProcessed(this.store, { source: 'github', dedupeKey: accepted.deliveryId });
@@ -187,7 +212,9 @@ export class GitHubWebhookService {
 
     const message = await this.messages.enqueue({
       sessionId: session.id,
-      prompt: renderGitHubPrompt(accepted, promptThreadContext, { includeFullThreadContext: existingMessageCount === 0 }),
+      prompt: renderGitHubPrompt(accepted, promptThreadContext, {
+        includeFullThreadContext: existingMessageCount === 0,
+      }),
       source: 'github',
       context: {
         source: 'github',
@@ -229,7 +256,8 @@ export class GitHubWebhookService {
 
   private authorizationFailure(event: AcceptedGitHubEvent): string | null {
     if (!isAllowed(event.owner, this.options.allowedOrganizations)) return 'unauthorized_repository_owner';
-    if (!isRepositoryAllowed({ owner: event.owner, repo: event.repo }, this.options.allowedRepositories)) return 'unauthorized_repository';
+    if (!isRepositoryAllowed({ owner: event.owner, repo: event.repo }, this.options.allowedRepositories))
+      return 'unauthorized_repository';
     if (!event.actor || !isAllowed(event.actor, this.options.allowedUsers)) return 'unauthorized_user';
     return null;
   }
@@ -254,7 +282,11 @@ export class GitHubWebhookService {
   private async postArchivedSessionNotice(event: AcceptedGitHubEvent): Promise<void> {
     if (!this.options.archivedSessionNotifier) return;
     try {
-      await this.options.archivedSessionNotifier.postNotice({ owner: event.owner, repo: event.repo, issueNumber: event.number });
+      await this.options.archivedSessionNotifier.postNotice({
+        owner: event.owner,
+        repo: event.repo,
+        issueNumber: event.number,
+      });
     } catch (error) {
       console.warn(error instanceof Error ? error.message : error);
     }
@@ -263,7 +295,11 @@ export class GitHubWebhookService {
   private async postRecoveryAcknowledgement(event: AcceptedGitHubEvent): Promise<void> {
     if (!this.options.archivedSessionNotifier) return;
     try {
-      await this.options.archivedSessionNotifier.postRecoveryAcknowledgement({ owner: event.owner, repo: event.repo, issueNumber: event.number });
+      await this.options.archivedSessionNotifier.postRecoveryAcknowledgement({
+        owner: event.owner,
+        repo: event.repo,
+        issueNumber: event.number,
+      });
     } catch (error) {
       console.warn(error instanceof Error ? error.message : error);
     }
@@ -312,7 +348,16 @@ export class GitHubWebhookService {
         source: 'github',
         transcriptOnly: true,
         repository: { provider: 'github', owner: event.owner, repo: event.repo },
-        github: { event: event.event, action: event.action, deliveryId: event.deliveryId, owner: event.owner, repo: event.repo, number: event.number, itemType: event.itemType, ...(event.commentId ? { commentId: event.commentId } : {}) },
+        github: {
+          event: event.event,
+          action: event.action,
+          deliveryId: event.deliveryId,
+          owner: event.owner,
+          repo: event.repo,
+          number: event.number,
+          itemType: event.itemType,
+          ...(event.commentId ? { commentId: event.commentId } : {}),
+        },
       },
     });
     await this.messages.recordTranscriptEntry({
@@ -328,10 +373,18 @@ export class GitHubWebhookService {
     });
   }
 
-  private async enqueueArchivedRecoveryWork(session: SessionRecord, event: AcceptedGitHubEvent, archivedMessages: MessageRecord[]): Promise<MessageRecord> {
+  private async enqueueArchivedRecoveryWork(
+    session: SessionRecord,
+    event: AcceptedGitHubEvent,
+    archivedMessages: MessageRecord[],
+  ): Promise<MessageRecord> {
     return this.messages.enqueue({
       sessionId: session.id,
-      prompt: archivedRecoveryWorkPrompt({ sourceLabel: 'GitHub', archivedMessages, recoveryText: currentGitHubMessageText(event) }),
+      prompt: archivedRecoveryWorkPrompt({
+        sourceLabel: 'GitHub',
+        archivedMessages,
+        recoveryText: currentGitHubMessageText(event),
+      }),
       source: 'github',
       context: {
         source: 'github',
@@ -348,17 +401,28 @@ export class GitHubWebhookService {
           ...(event.commentId ? { commentId: event.commentId } : {}),
           includedCommentIds: [],
         },
-        callback: githubCallbackTarget({ owner: event.owner, repo: event.repo, issueNumber: event.number, ...githubReplyHint(this.options.triggerPhrases), ...callbackSessionUrl(session.id, this.options.webBaseUrl) }),
+        callback: githubCallbackTarget({
+          owner: event.owner,
+          repo: event.repo,
+          issueNumber: event.number,
+          ...githubReplyHint(this.options.triggerPhrases),
+          ...callbackSessionUrl(session.id, this.options.webBaseUrl),
+        }),
       },
     });
   }
 
   private async fetchThreadContext(session: SessionRecord, event: AcceptedGitHubEvent): Promise<GitHubThreadContext> {
-    if (!this.options.issueContextFetcher) return { comments: [], unavailableReason: 'GitHub issue comment context fetcher is not configured' };
+    if (!this.options.issueContextFetcher)
+      return { comments: [], unavailableReason: 'GitHub issue comment context fetcher is not configured' };
     try {
       const seenCommentIds = await this.processedCommentIds(session.id);
       if (event.commentId) seenCommentIds.add(event.commentId);
-      const comments = await this.options.issueContextFetcher.listIssueComments({ owner: event.owner, repo: event.repo, issueNumber: event.number });
+      const comments = await this.options.issueContextFetcher.listIssueComments({
+        owner: event.owner,
+        repo: event.repo,
+        issueNumber: event.number,
+      });
       return { comments: comments.filter((comment) => !seenCommentIds.has(comment.id) && !isBotComment(comment)) };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown_error';
@@ -383,14 +447,24 @@ function parseAcceptedEvent(headers: GitHubWebhookHeaders, payload: GitHubWebhoo
   if (payload.sender?.type === 'Bot') return null;
 
   if (headers.event === 'issues') return parseIssueEvent(headers.deliveryId, action, repository, payload, actor);
-  if (headers.event === 'issue_comment') return parseIssueCommentEvent(headers.deliveryId, action, repository, payload, actor);
-  if (headers.event === 'pull_request') return parsePullRequestEvent(headers.deliveryId, action, repository, payload, actor);
-  if (headers.event === 'pull_request_review_comment') return parsePullRequestReviewCommentEvent(headers.deliveryId, action, repository, payload, actor);
-  if (headers.event === 'pull_request_review') return parsePullRequestReviewEvent(headers.deliveryId, action, repository, payload, actor);
+  if (headers.event === 'issue_comment')
+    return parseIssueCommentEvent(headers.deliveryId, action, repository, payload, actor);
+  if (headers.event === 'pull_request')
+    return parsePullRequestEvent(headers.deliveryId, action, repository, payload, actor);
+  if (headers.event === 'pull_request_review_comment')
+    return parsePullRequestReviewCommentEvent(headers.deliveryId, action, repository, payload, actor);
+  if (headers.event === 'pull_request_review')
+    return parsePullRequestReviewEvent(headers.deliveryId, action, repository, payload, actor);
   return null;
 }
 
-function parseIssueEvent(deliveryId: string, action: string, repository: { owner: string; repo: string }, payload: GitHubWebhookPayload, actor: string | undefined): AcceptedGitHubEvent | null {
+function parseIssueEvent(
+  deliveryId: string,
+  action: string,
+  repository: { owner: string; repo: string },
+  payload: GitHubWebhookPayload,
+  actor: string | undefined,
+): AcceptedGitHubEvent | null {
   if (!['opened', 'reopened', 'edited'].includes(action)) return null;
   if (action === 'edited' && !payload.changes?.title && !payload.changes?.body) return null;
   const issue = payload.issue;
@@ -409,7 +483,13 @@ function parseIssueEvent(deliveryId: string, action: string, repository: { owner
   };
 }
 
-function parseIssueCommentEvent(deliveryId: string, action: string, repository: { owner: string; repo: string }, payload: GitHubWebhookPayload, actor: string | undefined): AcceptedGitHubEvent | null {
+function parseIssueCommentEvent(
+  deliveryId: string,
+  action: string,
+  repository: { owner: string; repo: string },
+  payload: GitHubWebhookPayload,
+  actor: string | undefined,
+): AcceptedGitHubEvent | null {
   if (action !== 'created') return null;
   const issue = payload.issue;
   const comment = payload.comment;
@@ -431,7 +511,13 @@ function parseIssueCommentEvent(deliveryId: string, action: string, repository: 
   };
 }
 
-function parsePullRequestEvent(deliveryId: string, action: string, repository: { owner: string; repo: string }, payload: GitHubWebhookPayload, actor: string | undefined): AcceptedGitHubEvent | null {
+function parsePullRequestEvent(
+  deliveryId: string,
+  action: string,
+  repository: { owner: string; repo: string },
+  payload: GitHubWebhookPayload,
+  actor: string | undefined,
+): AcceptedGitHubEvent | null {
   if (!['opened', 'reopened', 'synchronize', 'edited'].includes(action)) return null;
   if (action === 'edited' && !payload.changes?.title && !payload.changes?.body && !payload.changes?.base) return null;
   const pr = payload.pull_request;
@@ -456,7 +542,13 @@ function parsePullRequestEvent(deliveryId: string, action: string, repository: {
   };
 }
 
-function parsePullRequestReviewCommentEvent(deliveryId: string, action: string, repository: { owner: string; repo: string }, payload: GitHubWebhookPayload, actor: string | undefined): AcceptedGitHubEvent | null {
+function parsePullRequestReviewCommentEvent(
+  deliveryId: string,
+  action: string,
+  repository: { owner: string; repo: string },
+  payload: GitHubWebhookPayload,
+  actor: string | undefined,
+): AcceptedGitHubEvent | null {
   if (action !== 'created') return null;
   const pr = payload.pull_request;
   const comment = payload.comment;
@@ -479,7 +571,13 @@ function parsePullRequestReviewCommentEvent(deliveryId: string, action: string, 
   };
 }
 
-function parsePullRequestReviewEvent(deliveryId: string, action: string, repository: { owner: string; repo: string }, payload: GitHubWebhookPayload, actor: string | undefined): AcceptedGitHubEvent | null {
+function parsePullRequestReviewEvent(
+  deliveryId: string,
+  action: string,
+  repository: { owner: string; repo: string },
+  payload: GitHubWebhookPayload,
+  actor: string | undefined,
+): AcceptedGitHubEvent | null {
   if (action !== 'submitted') return null;
   const pr = payload.pull_request;
   const review = payload.review;
@@ -504,7 +602,11 @@ function parsePullRequestReviewEvent(deliveryId: string, action: string, reposit
   };
 }
 
-function renderGitHubPrompt(event: AcceptedGitHubEvent, threadContext: GitHubThreadContext, options: GitHubPromptOptions): string {
+function renderGitHubPrompt(
+  event: AcceptedGitHubEvent,
+  threadContext: GitHubThreadContext,
+  options: GitHubPromptOptions,
+): string {
   const eventType = `${event.event}.${event.action}`;
   const lines = ['GitHub webhook context:', '---'];
   if (options.includeFullThreadContext) {
@@ -519,7 +621,8 @@ function renderGitHubPrompt(event: AcceptedGitHubEvent, threadContext: GitHubThr
   }
   if (options.includeFullThreadContext) {
     if (event.url) lines.push(`URL: ${event.url}`);
-    if (event.headRef || event.baseRef) lines.push(`Branch: ${event.headRef ?? 'unknown'} -> ${event.baseRef ?? 'unknown'}`);
+    if (event.headRef || event.baseRef)
+      lines.push(`Branch: ${event.headRef ?? 'unknown'} -> ${event.baseRef ?? 'unknown'}`);
     if (event.headSha) lines.push(`Head SHA: ${event.headSha}`);
     if (event.labels.length) lines.push(`Labels: ${event.labels.join(', ')}`);
     if (event.body) lines.push('', 'Description:', boundPromptText(event.body));
@@ -529,7 +632,11 @@ function renderGitHubPrompt(event: AcceptedGitHubEvent, threadContext: GitHubThr
   if (threadContext.comments.length) {
     lines.push('Prior unprocessed GitHub comments:', '---');
     for (const comment of threadContext.comments) {
-      lines.push('', `[${comment.author ?? 'github-user'}${comment.createdAt ? ` at ${comment.createdAt}` : ''}]:`, comment.body ? boundPromptText(comment.body) : '(empty comment)');
+      lines.push(
+        '',
+        `[${comment.author ?? 'github-user'}${comment.createdAt ? ` at ${comment.createdAt}` : ''}]:`,
+        comment.body ? boundPromptText(comment.body) : '(empty comment)',
+      );
     }
     lines.push('---', '');
   } else if (threadContext.unavailableReason) {
@@ -609,7 +716,9 @@ function reviewCommentFields(comment: GitHubCommentPayload): { path?: string; di
 
 function labels(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.map((label) => typeof label === 'object' && label ? stringValue((label as { name?: unknown }).name) : null).filter((label): label is string => Boolean(label));
+  return value
+    .map((label) => (typeof label === 'object' && label ? stringValue((label as { name?: unknown }).name) : null))
+    .filter((label): label is string => Boolean(label));
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -634,9 +743,16 @@ function eventMatchesTrigger(event: AcceptedGitHubEvent, phrases: string[]): boo
 function triggerPhraseMatches(text: string, phrase: string): boolean {
   const normalized = phrase.trim().toLowerCase();
   if (!normalized) return false;
-  if (normalized.startsWith('@') || normalized.startsWith('/') || normalized.endsWith(':')) return phraseBoundaryMatches(text, normalized);
-  if (normalized.includes('/')) return phraseBoundaryMatches(text, `@${normalized}`) || phraseBoundaryMatches(text, normalized);
-  return text.includes(`@${normalized}`) || text.includes(`/${normalized}`) || text.includes(`${normalized}:`) || phraseBoundaryMatches(text, normalized);
+  if (normalized.startsWith('@') || normalized.startsWith('/') || normalized.endsWith(':'))
+    return phraseBoundaryMatches(text, normalized);
+  if (normalized.includes('/'))
+    return phraseBoundaryMatches(text, `@${normalized}`) || phraseBoundaryMatches(text, normalized);
+  return (
+    text.includes(`@${normalized}`) ||
+    text.includes(`/${normalized}`) ||
+    text.includes(`${normalized}:`) ||
+    phraseBoundaryMatches(text, normalized)
+  );
 }
 
 function phraseBoundaryMatches(text: string, phrase: string): boolean {
@@ -648,11 +764,14 @@ function escapeRegExp(value: string): string {
 }
 
 function githubEventText(event: AcceptedGitHubEvent): string {
-  return [event.title, event.body, event.commentBody, event.reviewBody].filter((value): value is string => Boolean(value)).join('\n');
+  return [event.title, event.body, event.commentBody, event.reviewBody]
+    .filter((value): value is string => Boolean(value))
+    .join('\n');
 }
 
 function triggerSearchText(event: AcceptedGitHubEvent): string {
-  if (event.commentBody || event.reviewBody) return [event.commentBody, event.reviewBody].filter((value): value is string => Boolean(value)).join('\n');
+  if (event.commentBody || event.reviewBody)
+    return [event.commentBody, event.reviewBody].filter((value): value is string => Boolean(value)).join('\n');
   return [event.title, event.body].filter((value): value is string => Boolean(value)).join('\n');
 }
 
@@ -687,7 +806,13 @@ function reactionTarget(event: AcceptedGitHubEvent): GitHubReactionTarget | null
     return { type: 'pull_request_review_comment', owner: event.owner, repo: event.repo, commentId: event.commentId };
   }
   if (event.event === 'pull_request_review' && event.reviewId) {
-    return { type: 'pull_request_review', owner: event.owner, repo: event.repo, pullNumber: event.number, reviewId: event.reviewId };
+    return {
+      type: 'pull_request_review',
+      owner: event.owner,
+      repo: event.repo,
+      pullNumber: event.number,
+      reviewId: event.reviewId,
+    };
   }
   if (event.event === 'issues' || event.event === 'pull_request') {
     return { type: 'issue', owner: event.owner, repo: event.repo, issueNumber: event.number };

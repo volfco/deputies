@@ -61,12 +61,14 @@ describe('core API', () => {
 
   it('supports static login with session cookies', async () => {
     await closeServer(server);
-    server = createServer(loadConfig({
-      API_AUTH_MODE: 'session',
-      AUTH_STATIC_USERNAME: 'dev',
-      AUTH_STATIC_PASSWORD: 'password',
-      AUTH_SESSION_SECRET: 'test-secret',
-    }));
+    server = createServer(
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_STATIC_USERNAME: 'dev',
+        AUTH_STATIC_PASSWORD: 'password',
+        AUTH_SESSION_SECRET: 'test-secret',
+      }),
+    );
     baseUrl = await listen(server);
 
     const unauthenticated = await fetch(`${baseUrl}/sessions`);
@@ -100,30 +102,38 @@ describe('core API', () => {
   it('supports GitHub OAuth login with allowed users', async () => {
     await closeServer(server);
     store = new MemoryStore();
-    server = createServer(loadConfig({
-      API_AUTH_MODE: 'session',
-      AUTH_PROVIDER: 'github',
-      AUTH_SESSION_SECRET: 'test-secret',
-      GITHUB_APP_CLIENT_ID: 'client-id',
-      GITHUB_APP_CLIENT_SECRET: 'client-secret',
-      GITHUB_OAUTH_BASE_URL: 'https://github.example',
-      AUTH_GITHUB_ALLOWED_USERS: 'octocat',
-    }), {
-      ...createServices(store),
-      githubOAuthClient: {
-        async exchangeCode(input) {
-          expect(input.code).toBe('oauth-code');
-          return 'github-access-token';
-        },
-        async getUser(accessToken) {
-          expect(accessToken).toBe('github-access-token');
-          return { id: 583231, login: 'octocat', name: 'The Octocat', avatar_url: 'https://avatars.example/octocat.png' };
-        },
-        async listOrganizations() {
-          return [];
+    server = createServer(
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_PROVIDER: 'github',
+        AUTH_SESSION_SECRET: 'test-secret',
+        GITHUB_APP_CLIENT_ID: 'client-id',
+        GITHUB_APP_CLIENT_SECRET: 'client-secret',
+        GITHUB_OAUTH_BASE_URL: 'https://github.example',
+        AUTH_GITHUB_ALLOWED_USERS: 'octocat',
+      }),
+      {
+        ...createServices(store),
+        githubOAuthClient: {
+          async exchangeCode(input) {
+            expect(input.code).toBe('oauth-code');
+            return 'github-access-token';
+          },
+          async getUser(accessToken) {
+            expect(accessToken).toBe('github-access-token');
+            return {
+              id: 583231,
+              login: 'octocat',
+              name: 'The Octocat',
+              avatar_url: 'https://avatars.example/octocat.png',
+            };
+          },
+          async listOrganizations() {
+            return [];
+          },
         },
       },
-    });
+    );
     baseUrl = await listen(server);
 
     const start = await fetch(`${baseUrl}/auth/oauth/github/start`, { redirect: 'manual' });
@@ -133,7 +143,10 @@ describe('core API', () => {
     const state = new URL(location!).searchParams.get('state');
     expect(state).toBeTruthy();
 
-    const callback = await fetch(`${baseUrl}/auth/oauth/github/callback?code=oauth-code&state=${encodeURIComponent(state!)}`, { redirect: 'manual' });
+    const callback = await fetch(
+      `${baseUrl}/auth/oauth/github/callback?code=oauth-code&state=${encodeURIComponent(state!)}`,
+      { redirect: 'manual' },
+    );
     expect(callback.status).toBe(302);
     const cookie = callback.headers.get('set-cookie');
     expect(cookie).toContain('dev_deputies_session=');
@@ -323,13 +336,20 @@ describe('core API', () => {
       maxAttempts: 1,
     });
     await store.claimDueCallbackDeliveries({ now, limit: 1 });
-    await store.markCallbackDeliveryFailed({ id: delivery.id, failedAt: now, error: 'HTTP callback returned 500', terminal: true });
+    await store.markCallbackDeliveryFailed({
+      id: delivery.id,
+      failedAt: now,
+      error: 'HTTP callback returned 500',
+      terminal: true,
+    });
 
     const list = await fetch(`${baseUrl}/sessions/${session.id}/callbacks`);
     expect(list.status).toBe(200);
     const listBody = await list.json();
     expectCallbacksResponse(listBody);
-    expect(listBody.callbacks).toMatchObject([{ id: delivery.id, status: 'failed', lastError: 'HTTP callback returned 500' }]);
+    expect(listBody.callbacks).toMatchObject([
+      { id: delivery.id, status: 'failed', lastError: 'HTTP callback returned 500' },
+    ]);
 
     const replay = await postJson(`${baseUrl}/sessions/${session.id}/callbacks/${delivery.id}/replay`, {});
     expect(replay.status).toBe(200);
@@ -368,7 +388,9 @@ describe('core API', () => {
 
     const pause = await postJson(`${baseUrl}/sessions/${session.id}/queue/pause`, {});
     expect(pause.status).toBe(200);
-    expect((await pause.json()) as { session: { queuePausedAt?: string } }).toMatchObject({ session: { queuePausedAt: expect.any(String) } });
+    expect((await pause.json()) as { session: { queuePausedAt?: string } }).toMatchObject({
+      session: { queuePausedAt: expect.any(String) },
+    });
 
     const update = await patchJson(`${baseUrl}/sessions/${session.id}/messages/${message.id}`, { prompt: 'final' });
     expect(update.status).toBe(200);
@@ -376,7 +398,9 @@ describe('core API', () => {
 
     const cancel = await postJson(`${baseUrl}/sessions/${session.id}/messages/${message.id}/cancel`, {});
     expect(cancel.status).toBe(200);
-    expect((await cancel.json()) as { message: { status: string } }).toMatchObject({ message: { status: 'cancelled' } });
+    expect((await cancel.json()) as { message: { status: string } }).toMatchObject({
+      message: { status: 'cancelled' },
+    });
 
     const resume = await postJson(`${baseUrl}/sessions/${session.id}/queue/resume`, {});
     expect(resume.status).toBe(200);
@@ -386,7 +410,10 @@ describe('core API', () => {
   it('retries a failed message by enqueueing a new copy', async () => {
     const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Retry failed message' });
     const { session } = (await createSession.json()) as { session: { id: string } };
-    const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, { prompt: 'try again', repository: 'acme/widgets' });
+    const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
+      prompt: 'try again',
+      repository: 'acme/widgets',
+    });
     const { message } = (await createMessage.json()) as { message: { id: string } };
     const claimed = await store.claimNextPendingMessageBatch({
       runId: '00000000-0000-4000-8000-000000000303',
@@ -401,7 +428,9 @@ describe('core API', () => {
     const retry = await postJson(`${baseUrl}/sessions/${session.id}/messages/${message.id}/retry`, {});
 
     expect(retry.status).toBe(202);
-    const retryBody = (await retry.json()) as { message: { id: string; prompt: string; sequence: number; status: string; context?: unknown } };
+    const retryBody = (await retry.json()) as {
+      message: { id: string; prompt: string; sequence: number; status: string; context?: unknown };
+    };
     expect(retryBody.message).toMatchObject({ prompt: 'try again', sequence: 2, status: 'pending' });
     expect(retryBody.message.id).not.toBe(message.id);
     expect(retryBody.message.context).toMatchObject({ repository: { owner: 'acme', repo: 'widgets' } });
@@ -413,7 +442,13 @@ describe('core API', () => {
     const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
     const eventsBody = await eventsResponse.json();
     expectEventsResponse(eventsBody);
-    expect(eventsBody.events.map((event) => event.type)).toEqual(['session_created', 'session_updated', 'message_created', 'session_updated', 'message_created']);
+    expect(eventsBody.events.map((event) => event.type)).toEqual([
+      'session_created',
+      'session_updated',
+      'message_created',
+      'session_updated',
+      'message_created',
+    ]);
   });
 
   it('rejects retrying a message that has not failed', async () => {
@@ -425,7 +460,10 @@ describe('core API', () => {
     const retry = await postJson(`${baseUrl}/sessions/${session.id}/messages/${message.id}/retry`, {});
 
     expect(retry.status).toBe(409);
-    await expect(retry.json()).resolves.toMatchObject({ error: 'conflict', message: 'Only failed messages can be retried' });
+    await expect(retry.json()).resolves.toMatchObject({
+      error: 'conflict',
+      message: 'Only failed messages can be retried',
+    });
   });
 
   it('cancels the active run for a session', async () => {
@@ -449,7 +487,11 @@ describe('core API', () => {
     const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
     const eventsBody = await eventsResponse.json();
     expectEventsResponse(eventsBody);
-    expect(eventsBody.events.map((event) => event.type)).toEqual(['session_created', 'message_created', 'run_cancel_requested']);
+    expect(eventsBody.events.map((event) => event.type)).toEqual([
+      'session_created',
+      'message_created',
+      'run_cancel_requested',
+    ]);
   });
 
   it('archives a session', async () => {
@@ -482,7 +524,10 @@ describe('core API', () => {
     const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, { prompt: 'do not enqueue' });
 
     expect(createMessage.status).toBe(409);
-    await expect(createMessage.json()).resolves.toMatchObject({ error: 'conflict', message: 'Cannot enqueue messages to an archived session' });
+    await expect(createMessage.json()).resolves.toMatchObject({
+      error: 'conflict',
+      message: 'Cannot enqueue messages to an archived session',
+    });
   });
 
   it('destroys active session sandboxes when archiving', async () => {
@@ -514,7 +559,11 @@ describe('core API', () => {
 
     const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
     const eventsBody = (await eventsResponse.json()) as { events: Array<{ type: string }> };
-    expect(eventsBody.events.map((event: { type: string }) => event.type)).toEqual(['session_created', 'session_archived', 'sandbox_destroyed']);
+    expect(eventsBody.events.map((event: { type: string }) => event.type)).toEqual([
+      'session_created',
+      'session_archived',
+      'sandbox_destroyed',
+    ]);
   });
 
   it('unarchives a session', async () => {
@@ -532,7 +581,11 @@ describe('core API', () => {
     const eventsResponse = await fetch(`${baseUrl}/sessions/${session.id}/events`);
     const eventsBody = await eventsResponse.json();
     expectEventsResponse(eventsBody);
-    expect(eventsBody.events.map((event) => event.type)).toEqual(['session_created', 'session_archived', 'session_unarchived']);
+    expect(eventsBody.events.map((event) => event.type)).toEqual([
+      'session_created',
+      'session_archived',
+      'session_unarchived',
+    ]);
   });
 
   it('streams replayed and live events with SSE', async () => {
@@ -572,7 +625,9 @@ describe('core API', () => {
     expect(streamResponse.headers.get('content-type')).toContain('text/event-stream');
 
     const nextEvent = readNextSseEvent(streamResponse, abort);
-    const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, { prompt: 'global stream this' });
+    const createMessage = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
+      prompt: 'global stream this',
+    });
     expect(createMessage.status).toBe(202);
 
     await expect(nextEvent).resolves.toMatchObject({ type: 'message_created', sessionId: session.id, id: 2 });
@@ -725,7 +780,10 @@ async function waitForZero(readValue: () => number, timeoutMs = 1_000): Promise<
   }
 }
 
-async function readNextSseEvent(response: Response, abort: AbortController): Promise<{ id: number; type: string; sequence: number }> {
+async function readNextSseEvent(
+  response: Response,
+  abort: AbortController,
+): Promise<{ id: number; type: string; sequence: number }> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Expected response body');
 

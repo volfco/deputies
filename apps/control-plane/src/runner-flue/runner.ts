@@ -1,6 +1,10 @@
 import type { FlueEvent } from '@flue/sdk';
 import type { NormalizedEvent } from '../events/types.js';
-import { prepareRepositoryShellSetup, type RepositoryAccessProvider, type RepositoryShellSetup } from '../repositories/setup.js';
+import {
+  prepareRepositoryShellSetup,
+  type RepositoryAccessProvider,
+  type RepositoryShellSetup,
+} from '../repositories/setup.js';
 import type { Runner, RunnerInput, RunnerResult } from '../runner/types.js';
 import { createGitTool, type AgentRef } from './git-tool.js';
 import { createGitHubCliTool } from './github-cli-tool.js';
@@ -37,25 +41,29 @@ export class FlueRunner implements Runner {
         workspacePath: repositorySetup.workspacePath,
       };
     }
-    const repositoryServices = this.options.repositoryAccess?.github ? {
-      github: this.options.repositoryAccess.github,
-      sandbox: input.sandbox,
-      agentRef,
-      state: repositoryState,
-      emit: input.emit,
-      eventBase: { sessionId: input.sessionId, runId: input.runId, messageId: input.messageId },
-      ...(input.updateSessionContext ? { updateSessionContext: input.updateSessionContext } : {}),
-    } satisfies RepositoryToolServices : null;
+    const repositoryServices = this.options.repositoryAccess?.github
+      ? ({
+          github: this.options.repositoryAccess.github,
+          sandbox: input.sandbox,
+          agentRef,
+          state: repositoryState,
+          emit: input.emit,
+          eventBase: { sessionId: input.sessionId, runId: input.runId, messageId: input.messageId },
+          ...(input.updateSessionContext ? { updateSessionContext: input.updateSessionContext } : {}),
+        } satisfies RepositoryToolServices)
+      : null;
     const agent = await this.agentFactory.create({
       agentId: input.sessionId,
       sessionId: input.sessionId,
       sandbox: input.sandbox,
       cwd: repositorySetup?.workspacePath ?? input.sandbox.workspacePath,
-      tools: repositoryServices ? [
-        createRepositoryTool(repositoryServices),
-        createGitHubCliTool(repositoryServices),
-        createGitTool({ agentRef, repository: repositoryServices }),
-      ] : [],
+      tools: repositoryServices
+        ? [
+            createRepositoryTool(repositoryServices),
+            createGitHubCliTool(repositoryServices),
+            createGitTool({ agentRef, repository: repositoryServices }),
+          ]
+        : [],
       onEvent: (event) => {
         if (input.signal?.aborted) return;
         const normalized = normalizeFlueEvent(event, input);
@@ -155,7 +163,10 @@ export class FlueRunner implements Runner {
     return data ? structuredClone(data) : null;
   }
 
-  private async restoreSessionSnapshot(sessionId: string, snapshot: Awaited<ReturnType<FlueRunner['loadSessionSnapshot']>>): Promise<void> {
+  private async restoreSessionSnapshot(
+    sessionId: string,
+    snapshot: Awaited<ReturnType<FlueRunner['loadSessionSnapshot']>>,
+  ): Promise<void> {
     if (snapshot) {
       await this.agentFactory.saveSession?.(sessionId, snapshot);
     } else {

@@ -17,7 +17,9 @@ describe('Slack integration', () => {
     const signature = createSlackSignature({ body, timestamp, signingSecret });
 
     expect(verifySlackSignature({ signature, timestamp, body, signingSecret, nowSeconds: 1800000000 })).toBe(true);
-    expect(verifySlackSignature({ signature: `${signature}0`, timestamp, body, signingSecret, nowSeconds: 1800000000 })).toBe(false);
+    expect(
+      verifySlackSignature({ signature: `${signature}0`, timestamp, body, signingSecret, nowSeconds: 1800000000 }),
+    ).toBe(false);
     expect(verifySlackSignature({ signature, timestamp, body, signingSecret, nowSeconds: 1800001000 })).toBe(false);
   });
 
@@ -44,12 +46,25 @@ describe('Slack integration', () => {
       completionPayload('Done.'),
     );
 
-    expect(replies).toEqual([{ channel: 'C123', threadTs: '1710000000.000100', text: 'Done.\n\nLink to session: https://deputies.example?session=session-1\n---\n\nTag @deputies in replies to continue here.', blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: 'Done.' } },
-      { type: 'divider' },
-      { type: 'section', text: { type: 'mrkdwn', text: 'Link to session: https://deputies.example?session=session-1' } },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: ':information_source: Tag @deputies in replies to continue here.' }] },
-    ] }]);
+    expect(replies).toEqual([
+      {
+        channel: 'C123',
+        threadTs: '1710000000.000100',
+        text: 'Done.\n\nLink to session: https://deputies.example?session=session-1\n---\n\nTag @deputies in replies to continue here.',
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: 'Done.' } },
+          { type: 'divider' },
+          {
+            type: 'section',
+            text: { type: 'mrkdwn', text: 'Link to session: https://deputies.example?session=session-1' },
+          },
+          {
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: ':information_source: Tag @deputies in replies to continue here.' }],
+          },
+        ],
+      },
+    ]);
   });
 
   it('keeps Slack callback footer rendering out of band from payload text', async () => {
@@ -75,12 +90,20 @@ describe('Slack integration', () => {
       completionPayload('No work was performed.'),
     );
 
-    expect(replies[0]?.text).toBe('No work was performed.\n\nLink to session: https://deputies.example?session=session-1\n---\n\nTag @deputies in replies to continue here.');
+    expect(replies[0]?.text).toBe(
+      'No work was performed.\n\nLink to session: https://deputies.example?session=session-1\n---\n\nTag @deputies in replies to continue here.',
+    );
     expect(replies[0]?.blocks).toEqual([
       { type: 'section', text: { type: 'mrkdwn', text: 'No work was performed.' } },
       { type: 'divider' },
-      { type: 'section', text: { type: 'mrkdwn', text: 'Link to session: https://deputies.example?session=session-1' } },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: ':information_source: Tag @deputies in replies to continue here.' }] },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: 'Link to session: https://deputies.example?session=session-1' },
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: ':information_source: Tag @deputies in replies to continue here.' }],
+      },
     ]);
   });
 
@@ -97,19 +120,23 @@ describe('Slack integration', () => {
       },
     });
 
-    const first = await slack.handle(slackEvent({
-      eventId: 'Ev1',
-      type: 'app_mention',
-      text: `<@${botUserId}> please investigate repo:acme/widget`,
-      ts: '1710000000.000100',
-    }));
-    const followUp = await slack.handle(slackEvent({
-      eventId: 'Ev2',
-      type: 'message',
-      text: 'also check the failing test',
-      ts: '1710000001.000100',
-      threadTs: '1710000000.000100',
-    }));
+    const first = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> please investigate repo:acme/widget`,
+        ts: '1710000000.000100',
+      }),
+    );
+    const followUp = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'message',
+        text: 'also check the failing test',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(first.type).toBe('accepted');
     expect(followUp.type).toBe('accepted');
@@ -122,9 +149,17 @@ describe('Slack integration', () => {
     expect(messages[0]!.prompt).toContain('please investigate repo:acme/widget');
     expect(messages[0]!.prompt).not.toContain(`<@${botUserId}>`);
     expect(messages[0]!.prompt).toContain('Prior unprocessed messages from the Slack thread:');
-    expect(messages[0]!.prompt).toContain('Prior Slack thread messages were unavailable: Slack thread history client is not configured.');
+    expect(messages[0]!.prompt).toContain(
+      'Prior Slack thread messages were unavailable: Slack thread history client is not configured.',
+    );
     expect(messages[0]!.prompt).toContain('Current tagged Slack message:');
-    expect(messages[0]!.context?.callback).toMatchObject({ type: 'slack', channel: 'C123', threadTs: '1710000000.000100', messageTs: '1710000000.000100', replyHint: 'Tag @deputies in replies to continue here.' });
+    expect(messages[0]!.context?.callback).toMatchObject({
+      type: 'slack',
+      channel: 'C123',
+      threadTs: '1710000000.000100',
+      messageTs: '1710000000.000100',
+      replyHint: 'Tag @deputies in replies to continue here.',
+    });
     expect(reactions).toEqual([
       { channel: 'C123', timestamp: '1710000000.000100', name: 'eyes' },
       { channel: 'C123', timestamp: '1710000001.000100', name: 'eyes' },
@@ -136,13 +171,15 @@ describe('Slack integration', () => {
     const services = createServices(store);
     const slack = new SlackIntegrationService(store, services.sessions, services.messages);
 
-    const ignored = await slack.handle(slackEvent({
-      eventId: 'Ev1',
-      type: 'message',
-      text: 'ordinary thread reply without bot mention',
-      ts: '1710000001.000100',
-      threadTs: '1710000000.000100',
-    }));
+    const ignored = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'message',
+        text: 'ordinary thread reply without bot mention',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(ignored).toEqual({ ok: true, type: 'ignored', reason: 'unmapped_thread' });
     expect(await store.listSessions()).toHaveLength(0);
@@ -159,7 +196,9 @@ describe('Slack integration', () => {
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }),
+    );
 
     expect(accepted.type).toBe('accepted');
   });
@@ -169,7 +208,14 @@ describe('Slack integration', () => {
     const services = createServices(store);
     const slack = new SlackIntegrationService(store, services.sessions, services.messages);
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> is a &gt; b &amp; c &lt; d?`, ts: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> is a &gt; b &amp; c &lt; d?`,
+        ts: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -195,7 +241,15 @@ describe('Slack integration', () => {
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> please investigate`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> please investigate`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -213,12 +267,23 @@ describe('Slack integration', () => {
     const slack = new SlackIntegrationService(store, services.sessions, services.messages, {
       threadClient: {
         async getThreadReplies() {
-          return { ok: true, messages: [{ user: 'U123', text: `<@${botUserId}> please investigate`, ts: '1710000002.000100' }] };
+          return {
+            ok: true,
+            messages: [{ user: 'U123', text: `<@${botUserId}> please investigate`, ts: '1710000002.000100' }],
+          };
         },
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> please investigate`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> please investigate`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -261,7 +326,15 @@ describe('Slack integration', () => {
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> please investigate`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> please investigate`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -289,8 +362,18 @@ describe('Slack integration', () => {
       },
     });
 
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> first task`, ts: '1710000000.000100' }));
-    const second = await slack.handle(slackEvent({ eventId: 'Ev2', type: 'message', text: 'follow up', ts: '1710000001.000100', threadTs: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> first task`, ts: '1710000000.000100' }),
+    );
+    const second = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'message',
+        text: 'follow up',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(first.type).toBe('accepted');
     expect(second.type).toBe('accepted');
@@ -320,7 +403,15 @@ describe('Slack integration', () => {
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> please investigate`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> please investigate`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -342,7 +433,15 @@ describe('Slack integration', () => {
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> can you summarize this thread?`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> can you summarize this thread?`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -355,7 +454,15 @@ describe('Slack integration', () => {
     const services = createServices(store);
     const slack = new SlackIntegrationService(store, services.sessions, services.messages);
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> can you summarize this thread?`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> can you summarize this thread?`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -381,9 +488,24 @@ describe('Slack integration', () => {
       },
     });
 
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> first request`, ts: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> first request`,
+        ts: '1710000000.000100',
+      }),
+    );
     if (first.type !== 'accepted') throw new Error('Expected accepted Slack event');
-    const second = await slack.handle(slackEvent({ eventId: 'Ev2', type: 'app_mention', text: `<@${botUserId}> second request`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const second = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'app_mention',
+        text: `<@${botUserId}> second request`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(second.type).toBe('accepted');
     if (second.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -413,9 +535,25 @@ describe('Slack integration', () => {
       },
     });
 
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> summarize this thread`, ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> summarize this thread`,
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
     if (first.type !== 'accepted') throw new Error('Expected accepted Slack event');
-    const second = await slack.handle(slackEvent({ eventId: 'Ev2', type: 'app_mention', text: `<@${botUserId}> what do you see now?`, ts: '1710000003.000100', threadTs: '1710000000.000100' }));
+    const second = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'app_mention',
+        text: `<@${botUserId}> what do you see now?`,
+        ts: '1710000003.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
     if (second.type !== 'accepted') throw new Error('Expected accepted Slack event');
 
     const messages = await services.messages.list(second.session.id);
@@ -434,18 +572,39 @@ describe('Slack integration', () => {
     const longPriorTail = 'prior tail should be omitted';
     const priorMessages = Array.from({ length: maxPriorContextItems + 2 }, (_, index) => ({
       user: 'U123',
-      text: index === maxPriorContextItems + 1 ? `${'p'.repeat(maxPromptTextCharacters + 20)}${longPriorTail}` : `prior-${index + 1}`,
+      text:
+        index === maxPriorContextItems + 1
+          ? `${'p'.repeat(maxPromptTextCharacters + 20)}${longPriorTail}`
+          : `prior-${index + 1}`,
       ts: `${1710000000 + index}.000100`,
     }));
     const slack = new SlackIntegrationService(store, services.sessions, services.messages, {
       threadClient: {
         async getThreadReplies() {
-          return { ok: true, messages: [...priorMessages, { user: 'U123', text: `<@${botUserId}> ${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}`, ts: '1710000030.000100' }] };
+          return {
+            ok: true,
+            messages: [
+              ...priorMessages,
+              {
+                user: 'U123',
+                text: `<@${botUserId}> ${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}`,
+                ts: '1710000030.000100',
+              },
+            ],
+          };
         },
       },
     });
 
-    const accepted = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> ${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}`, ts: '1710000030.000100', threadTs: '1710000000.000100' }));
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'Ev1',
+        type: 'app_mention',
+        text: `<@${botUserId}> ${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}`,
+        ts: '1710000030.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(accepted.type).toBe('accepted');
     if (accepted.type !== 'accepted') throw new Error('Expected accepted Slack event');
@@ -456,18 +615,27 @@ describe('Slack integration', () => {
     expect(messages[0]!.prompt).toContain('[truncated]');
     expect(messages[0]!.prompt).not.toContain(longPriorTail);
     expect(messages[0]!.prompt).not.toContain(longCurrentTail);
-    expect(messages[0]!.context?.slack).toMatchObject({ includedThreadTs: priorMessages.slice(-maxPriorContextItems).map((message) => message.ts) });
+    expect(messages[0]!.context?.slack).toMatchObject({
+      includedThreadTs: priorMessages.slice(-maxPriorContextItems).map((message) => message.ts),
+    });
   });
 
   it('deduplicates Slack event deliveries and ignores bot messages', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
     const slack = new SlackIntegrationService(store, services.sessions, services.messages);
-    const payload = slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' });
+    const payload = slackEvent({
+      eventId: 'Ev1',
+      type: 'app_mention',
+      text: `<@${botUserId}> do work`,
+      ts: '1710000000.000100',
+    });
 
     const first = await slack.handle(payload);
     const duplicate = await slack.handle(payload);
-    const bot = await slack.handle(slackEvent({ eventId: 'Ev3', type: 'app_mention', text: 'bot loop', ts: '1710000002.000100', botId: 'B123' }));
+    const bot = await slack.handle(
+      slackEvent({ eventId: 'Ev3', type: 'app_mention', text: 'bot loop', ts: '1710000002.000100', botId: 'B123' }),
+    );
 
     expect(first.type).toBe('accepted');
     expect(duplicate.type).toBe('duplicate');
@@ -483,10 +651,50 @@ describe('Slack integration', () => {
       allowedUserIds: ['UALLOWED'],
     });
 
-    const deniedTeam = await slack.handle(slackEvent({ eventId: 'EvTeam', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100', teamId: 'TDENIED', channel: 'CALLOWED', user: 'UALLOWED' }));
-    const deniedChannel = await slack.handle(slackEvent({ eventId: 'EvChannel', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000001.000100', teamId: 'TALLOWED', channel: 'CDENIED', user: 'UALLOWED' }));
-    const deniedUser = await slack.handle(slackEvent({ eventId: 'EvUser', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000002.000100', teamId: 'TALLOWED', channel: 'CALLOWED', user: 'UDENIED' }));
-    const accepted = await slack.handle(slackEvent({ eventId: 'EvAllowed', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000003.000100', teamId: 'TALLOWED', channel: 'CALLOWED', user: 'UALLOWED' }));
+    const deniedTeam = await slack.handle(
+      slackEvent({
+        eventId: 'EvTeam',
+        type: 'app_mention',
+        text: `<@${botUserId}> do work`,
+        ts: '1710000000.000100',
+        teamId: 'TDENIED',
+        channel: 'CALLOWED',
+        user: 'UALLOWED',
+      }),
+    );
+    const deniedChannel = await slack.handle(
+      slackEvent({
+        eventId: 'EvChannel',
+        type: 'app_mention',
+        text: `<@${botUserId}> do work`,
+        ts: '1710000001.000100',
+        teamId: 'TALLOWED',
+        channel: 'CDENIED',
+        user: 'UALLOWED',
+      }),
+    );
+    const deniedUser = await slack.handle(
+      slackEvent({
+        eventId: 'EvUser',
+        type: 'app_mention',
+        text: `<@${botUserId}> do work`,
+        ts: '1710000002.000100',
+        teamId: 'TALLOWED',
+        channel: 'CALLOWED',
+        user: 'UDENIED',
+      }),
+    );
+    const accepted = await slack.handle(
+      slackEvent({
+        eventId: 'EvAllowed',
+        type: 'app_mention',
+        text: `<@${botUserId}> do work`,
+        ts: '1710000003.000100',
+        teamId: 'TALLOWED',
+        channel: 'CALLOWED',
+        user: 'UALLOWED',
+      }),
+    );
 
     expect(deniedTeam).toMatchObject({ type: 'ignored', reason: 'unauthorized_team' });
     expect(deniedChannel).toMatchObject({ type: 'ignored', reason: 'unauthorized_channel' });
@@ -514,19 +722,39 @@ describe('Slack integration', () => {
         },
       },
     });
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }),
+    );
     if (first.type !== 'accepted') throw new Error('Expected accepted Slack event');
     await services.sessions.archive(first.session.id);
 
-    const reply = await slack.handle(slackEvent({ eventId: 'Ev2', type: 'message', text: 'follow up', ts: '1710000001.000100', threadTs: '1710000000.000100' }));
+    const reply = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'message',
+        text: 'follow up',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(reply).toMatchObject({ type: 'ignored', reason: 'session_archived' });
     const messages = await services.messages.list(first.session.id);
     expect(messages).toHaveLength(3);
-    expect(messages[1]).toMatchObject({ source: 'slack', status: 'cancelled', prompt: expect.stringContaining('Not queued') });
-    expect(messages[2]).toMatchObject({ source: 'slack_notice', status: 'cancelled', prompt: expect.stringContaining('unarchive and proceed') });
+    expect(messages[1]).toMatchObject({
+      source: 'slack',
+      status: 'cancelled',
+      prompt: expect.stringContaining('Not queued'),
+    });
+    expect(messages[2]).toMatchObject({
+      source: 'slack_notice',
+      status: 'cancelled',
+      prompt: expect.stringContaining('unarchive and proceed'),
+    });
     expect(reactions).toEqual([{ channel: 'C123', timestamp: '1710000000.000100', name: 'eyes' }]);
-    expect(replies).toEqual([{ channel: 'C123', threadTs: '1710000000.000100', text: expect.stringContaining('unarchive and proceed') }]);
+    expect(replies).toEqual([
+      { channel: 'C123', threadTs: '1710000000.000100', text: expect.stringContaining('unarchive and proceed') },
+    ]);
   });
 
   it('unarchives Slack thread sessions without starting a run for phrase-only recovery', async () => {
@@ -541,30 +769,60 @@ describe('Slack integration', () => {
         },
       },
     });
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }),
+    );
     if (first.type !== 'accepted') throw new Error('Expected accepted Slack event');
     await services.sessions.archive(first.session.id);
 
-    const restored = await slack.handle(slackEvent({ eventId: 'Ev2', type: 'message', text: 'unarchive and proceed', ts: '1710000001.000100', threadTs: '1710000000.000100' }));
+    const restored = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'message',
+        text: 'unarchive and proceed',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(restored.type).toBe('recovered');
     await expect(services.sessions.get(first.session.id)).resolves.toMatchObject({ status: 'idle' });
     const messages = await services.messages.list(first.session.id);
     expect(messages).toHaveLength(3);
-    expect(messages[1]).toMatchObject({ source: 'slack', status: 'cancelled', prompt: expect.stringContaining('No agent run was started') });
-    expect(messages[2]).toMatchObject({ source: 'slack_notice', status: 'cancelled', prompt: expect.stringContaining('Unarchived and ready') });
-    expect(replies).toEqual([{ channel: 'C123', threadTs: '1710000000.000100', text: expect.stringContaining('Unarchived and ready') }]);
+    expect(messages[1]).toMatchObject({
+      source: 'slack',
+      status: 'cancelled',
+      prompt: expect.stringContaining('No agent run was started'),
+    });
+    expect(messages[2]).toMatchObject({
+      source: 'slack_notice',
+      status: 'cancelled',
+      prompt: expect.stringContaining('Unarchived and ready'),
+    });
+    expect(replies).toEqual([
+      { channel: 'C123', threadTs: '1710000000.000100', text: expect.stringContaining('Unarchived and ready') },
+    ]);
   });
 
   it('queues Slack recovery messages that include additional instructions', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
     const slack = new SlackIntegrationService(store, services.sessions, services.messages);
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }),
+    );
     if (first.type !== 'accepted') throw new Error('Expected accepted Slack event');
     await services.sessions.archive(first.session.id);
 
-    const restored = await slack.handle(slackEvent({ eventId: 'Ev2', type: 'message', text: 'unarchive and proceed then summarize the thread', ts: '1710000001.000100', threadTs: '1710000000.000100' }));
+    const restored = await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'message',
+        text: 'unarchive and proceed then summarize the thread',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(restored.type).toBe('accepted');
     const messages = await services.messages.list(first.session.id);
@@ -576,12 +834,30 @@ describe('Slack integration', () => {
     const store = new MemoryStore();
     const services = createServices(store);
     const slack = new SlackIntegrationService(store, services.sessions, services.messages);
-    const first = await slack.handle(slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }));
+    const first = await slack.handle(
+      slackEvent({ eventId: 'Ev1', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100' }),
+    );
     if (first.type !== 'accepted') throw new Error('Expected accepted Slack event');
     await services.sessions.archive(first.session.id);
 
-    await slack.handle(slackEvent({ eventId: 'Ev2', type: 'message', text: 'please summarize the thread', ts: '1710000001.000100', threadTs: '1710000000.000100' }));
-    const recovered = await slack.handle(slackEvent({ eventId: 'Ev3', type: 'message', text: 'unarchive and proceed', ts: '1710000002.000100', threadTs: '1710000000.000100' }));
+    await slack.handle(
+      slackEvent({
+        eventId: 'Ev2',
+        type: 'message',
+        text: 'please summarize the thread',
+        ts: '1710000001.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
+    const recovered = await slack.handle(
+      slackEvent({
+        eventId: 'Ev3',
+        type: 'message',
+        text: 'unarchive and proceed',
+        ts: '1710000002.000100',
+        threadTs: '1710000000.000100',
+      }),
+    );
 
     expect(recovered.type).toBe('accepted');
     const messages = await services.messages.list(first.session.id);
@@ -593,7 +869,10 @@ describe('Slack integration', () => {
   });
 
   it('handles signed Slack webhook challenges through the API route', async () => {
-    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
+    const server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }),
+      createServices(new MemoryStore()),
+    );
     const baseUrl = await listen(server);
     try {
       const body = JSON.stringify({ type: 'url_verification', challenge: 'challenge-token' });
@@ -606,7 +885,10 @@ describe('Slack integration', () => {
   });
 
   it('rejects unsigned Slack webhook requests', async () => {
-    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }), createServices(new MemoryStore()));
+    const server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }),
+      createServices(new MemoryStore()),
+    );
     const baseUrl = await listen(server);
     try {
       const response = await fetch(`${baseUrl}/webhooks/slack/events`, { method: 'POST', body: '{}' });
@@ -617,10 +899,21 @@ describe('Slack integration', () => {
   });
 
   it('returns ignored for signed Slack events outside API allowlists', async () => {
-    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, SLACK_ALLOWED_CHANNEL_IDS: 'CALLOWED' }), createServices(new MemoryStore()));
+    const server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, SLACK_ALLOWED_CHANNEL_IDS: 'CALLOWED' }),
+      createServices(new MemoryStore()),
+    );
     const baseUrl = await listen(server);
     try {
-      const body = JSON.stringify(slackEvent({ eventId: 'EvDenied', type: 'app_mention', text: `<@${botUserId}> do work`, ts: '1710000000.000100', channel: 'CDENIED' }));
+      const body = JSON.stringify(
+        slackEvent({
+          eventId: 'EvDenied',
+          type: 'app_mention',
+          text: `<@${botUserId}> do work`,
+          ts: '1710000000.000100',
+          channel: 'CDENIED',
+        }),
+      );
       const response = await postSignedSlack(`${baseUrl}/webhooks/slack/events`, body);
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ ok: true, type: 'ignored' });
@@ -630,7 +923,17 @@ describe('Slack integration', () => {
   });
 });
 
-function slackEvent(input: { eventId: string; type: 'app_mention' | 'message'; text: string; ts: string; threadTs?: string; botId?: string; teamId?: string; channel?: string; user?: string }) {
+function slackEvent(input: {
+  eventId: string;
+  type: 'app_mention' | 'message';
+  text: string;
+  ts: string;
+  threadTs?: string;
+  botId?: string;
+  teamId?: string;
+  channel?: string;
+  user?: string;
+}) {
   return {
     type: 'event_callback',
     team_id: input.teamId ?? 'T123',

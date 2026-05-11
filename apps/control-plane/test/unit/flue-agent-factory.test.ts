@@ -33,9 +33,7 @@ describe('RealFlueAgentFactory', () => {
 
   it('migrates long Flue affinity keys from the previous adapter', async () => {
     const legacyData = { version: 3, entries: [], leafId: null, metadata: {}, createdAt: 'then', updatedAt: 'then' };
-    const saved = new Map<string, unknown>([
-      ['agent-session:["agent-1","agent-1","thread-1"]', legacyData],
-    ]);
+    const saved = new Map<string, unknown>([['agent-session:["agent-1","agent-1","thread-1"]', legacyData]]);
     const agent = await new RealFlueAgentFactory({
       model: false,
       sessionStore: {

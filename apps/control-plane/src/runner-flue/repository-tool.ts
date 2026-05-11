@@ -1,5 +1,10 @@
 import type { ToolDef } from '@flue/sdk';
-import { repositorySetupCommand, type GitHubRepository, type GitHubRepositoryAccess, type RepositoryAccessProvider } from '../repositories/setup.js';
+import {
+  repositorySetupCommand,
+  type GitHubRepository,
+  type GitHubRepositoryAccess,
+  type RepositoryAccessProvider,
+} from '../repositories/setup.js';
 import type { SandboxHandle } from '../sandbox/types.js';
 import type { RunnerInput } from '../runner/types.js';
 import type { AgentRef } from './git-tool.js';
@@ -65,22 +70,33 @@ export function getActiveRepository(state: RepositoryToolState): (GitHubReposito
 
 export async function resolveActiveRepositoryAccess(services: RepositoryToolServices): Promise<GitHubRepositoryAccess> {
   const repository = getActiveRepository(services.state);
-  if (!repository) throw new Error('No active repository is set. Use repository({ action: "set", owner, repo }) first, or repository({ action: "list" }) if unsure.');
+  if (!repository)
+    throw new Error(
+      'No active repository is set. Use repository({ action: "set", owner, repo }) first, or repository({ action: "list" }) if unsure.',
+    );
   return services.github.getRepositoryAccess(repository);
 }
 
 export function getPreparedRepository(services: RepositoryToolServices): PreparedRepository {
   const repository = getActiveRepository(services.state);
-  if (!repository) throw new Error('No active repository is set. Use repository({ action: "set", owner, repo }) first.');
-  if (!services.state.prepared || services.state.prepared.repository.owner !== repository.owner || services.state.prepared.repository.repo !== repository.repo) {
-    throw new Error('The active repository has not been prepared in the sandbox. Use repository({ action: "prepare" }) first.');
+  if (!repository)
+    throw new Error('No active repository is set. Use repository({ action: "set", owner, repo }) first.');
+  if (
+    !services.state.prepared ||
+    services.state.prepared.repository.owner !== repository.owner ||
+    services.state.prepared.repository.repo !== repository.repo
+  ) {
+    throw new Error(
+      'The active repository has not been prepared in the sandbox. Use repository({ action: "prepare" }) first.',
+    );
   }
   return services.state.prepared;
 }
 
 export async function prepareActiveRepository(services: RepositoryToolServices): Promise<string> {
   const repository = getActiveRepository(services.state);
-  if (!repository) throw new Error('No active repository is set. Use repository({ action: "set", owner, repo }) first.');
+  if (!repository)
+    throw new Error('No active repository is set. Use repository({ action: "set", owner, repo }) first.');
   const agent = services.agentRef.current;
   if (!agent?.shell) throw new Error('Repository preparation is unavailable before the sandbox agent is ready');
   const access = await services.github.getRepositoryAccess(repository);
@@ -90,7 +106,10 @@ export async function prepareActiveRepository(services: RepositoryToolServices):
     env: { GITHUB_AUTH_HEADER: gitAuthHeader(access.auth.token) },
     timeout: 120_000,
   });
-  if (result.exitCode !== 0) throw new Error(`Repository preparation failed with exit code ${result.exitCode}: ${result.stderr || result.stdout}`);
+  if (result.exitCode !== 0)
+    throw new Error(
+      `Repository preparation failed with exit code ${result.exitCode}: ${result.stderr || result.stdout}`,
+    );
 
   services.state.prepared = { repository, access, workspacePath };
   await services.emit({
@@ -134,24 +153,38 @@ function repositoryStatus(services: RepositoryToolServices): string {
 
 function repositoryList(services: RepositoryToolServices): string {
   const allowed = services.github.listAllowedRepositories?.() ?? [];
-  if (!allowed.length) return 'No explicit repository allowlist is configured. Ask the user for a GitHub repo in owner/repo form.';
+  if (!allowed.length)
+    return 'No explicit repository allowlist is configured. Ask the user for a GitHub repo in owner/repo form.';
   const concrete = allowed.filter((item) => !item.endsWith('/*'));
   const patterns = allowed.filter((item) => item.endsWith('/*'));
   const lines: string[] = [];
   if (concrete.length) lines.push('Allowed repositories:', ...concrete.map((repo) => `- ${repo}`));
-  if (patterns.length) lines.push('Allowed repository patterns:', ...patterns.map((repo) => `- ${repo}`), 'For a pattern, ask the user for the specific repo name.');
+  if (patterns.length)
+    lines.push(
+      'Allowed repository patterns:',
+      ...patterns.map((repo) => `- ${repo}`),
+      'For a pattern, ask the user for the specific repo name.',
+    );
   return lines.join('\n');
 }
 
-async function setRepositoryContext(services: RepositoryToolServices, params: Record<string, unknown>): Promise<string> {
+async function setRepositoryContext(
+  services: RepositoryToolServices,
+  params: Record<string, unknown>,
+): Promise<string> {
   const owner = typeof params.owner === 'string' ? params.owner.trim() : '';
   const repo = typeof params.repo === 'string' ? params.repo.trim() : '';
   if (!owner || !repo) throw new Error('repository set requires owner and repo');
   const repository = { provider: 'github' as const, owner, repo };
   await services.github.getRepositoryAccess(repository);
   const nextContext = { ...services.state.context, repository };
-  services.state.context = services.updateSessionContext ? await services.updateSessionContext(nextContext) : nextContext;
-  if (services.state.prepared && (services.state.prepared.repository.owner !== owner || services.state.prepared.repository.repo !== repo)) {
+  services.state.context = services.updateSessionContext
+    ? await services.updateSessionContext(nextContext)
+    : nextContext;
+  if (
+    services.state.prepared &&
+    (services.state.prepared.repository.owner !== owner || services.state.prepared.repository.repo !== repo)
+  ) {
     delete services.state.prepared;
   }
   const reason = typeof params.reason === 'string' && params.reason.trim() ? `\nReason: ${params.reason.trim()}` : '';

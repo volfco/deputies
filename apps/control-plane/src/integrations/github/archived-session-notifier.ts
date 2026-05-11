@@ -20,7 +20,10 @@ export class GitHubArchivedSessionNotifier {
     await this.postIssueComment(input, archivedSessionRecoveredNotice());
   }
 
-  private async postIssueComment(input: { owner: string; repo: string; issueNumber: number }, body: string): Promise<void> {
+  private async postIssueComment(
+    input: { owner: string; repo: string; issueNumber: number },
+    body: string,
+  ): Promise<void> {
     const repositoryAccess = await this.access.getRepositoryAccess({ owner: input.owner, repo: input.repo });
     await this.client.createIssueComment({
       owner: input.owner,

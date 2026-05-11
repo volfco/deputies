@@ -121,8 +121,12 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       metadata: { target: 'test' },
     });
     await expect(store.listActiveSandboxes(session.id, 'fake')).resolves.toMatchObject([{ id: created.id }]);
-    await expect(store.listIdleSandboxes({ provider: 'fake', idleBefore: new Date(now.getTime() + 1_000), limit: 10 })).resolves.toMatchObject([{ id: created.id }]);
-    await expect(store.listStoppableSandboxes({ provider: 'fake', idleBefore: new Date(now.getTime() + 1_000), limit: 10 })).resolves.toMatchObject([{ id: created.id }]);
+    await expect(
+      store.listIdleSandboxes({ provider: 'fake', idleBefore: new Date(now.getTime() + 1_000), limit: 10 }),
+    ).resolves.toMatchObject([{ id: created.id }]);
+    await expect(
+      store.listStoppableSandboxes({ provider: 'fake', idleBefore: new Date(now.getTime() + 1_000), limit: 10 }),
+    ).resolves.toMatchObject([{ id: created.id }]);
 
     const checkedAt = new Date(now.getTime() + 1_000);
     await store.updateSandbox({
@@ -153,7 +157,9 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       updatedAt: checkedAt,
     });
     await expect(store.getActiveSandbox(session.id, 'fake')).resolves.toBeNull();
-    await expect(store.listIdleSandboxes({ provider: 'fake', idleBefore: new Date(now.getTime() + 3_000), limit: 10 })).resolves.toEqual([]);
+    await expect(
+      store.listIdleSandboxes({ provider: 'fake', idleBefore: new Date(now.getTime() + 3_000), limit: 10 }),
+    ).resolves.toEqual([]);
   });
 
   it('claims pending messages as a queue batch and respects queue pause', async () => {
@@ -163,15 +169,19 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     const second = await services.messages.enqueue({ sessionId: session.id, prompt: 'second' });
 
     await services.sessions.pauseQueue(session.id);
-    await expect(store.claimNextPendingMessageBatch({
-      runId: '00000000-0000-4000-8000-000000000901',
-      runnerType: 'fake',
-      leaseOwner: 'worker-1',
-      leaseExpiresAt: new Date(Date.now() + 60_000),
-      now: new Date(),
-    })).resolves.toBeNull();
+    await expect(
+      store.claimNextPendingMessageBatch({
+        runId: '00000000-0000-4000-8000-000000000901',
+        runnerType: 'fake',
+        leaseOwner: 'worker-1',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        now: new Date(),
+      }),
+    ).resolves.toBeNull();
 
-    await expect(services.messages.updatePending({ sessionId: session.id, messageId: second.id, prompt: 'edited second' })).resolves.toMatchObject({ prompt: 'edited second' });
+    await expect(
+      services.messages.updatePending({ sessionId: session.id, messageId: second.id, prompt: 'edited second' }),
+    ).resolves.toMatchObject({ prompt: 'edited second' });
     await services.sessions.resumeQueue(session.id);
 
     const claimed = await store.claimNextPendingMessageBatch({
@@ -196,13 +206,15 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     await services.messages.enqueue({ sessionId: session.id, prompt: 'do not run' });
     await services.sessions.archive(session.id);
 
-    await expect(store.claimNextPendingMessageBatch({
-      runId: '00000000-0000-4000-8000-0000000009a1',
-      runnerType: 'fake',
-      leaseOwner: 'worker-1',
-      leaseExpiresAt: new Date(Date.now() + 60_000),
-      now: new Date(),
-    })).resolves.toBeNull();
+    await expect(
+      store.claimNextPendingMessageBatch({
+        runId: '00000000-0000-4000-8000-0000000009a1',
+        runnerType: 'fake',
+        leaseOwner: 'worker-1',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        now: new Date(),
+      }),
+    ).resolves.toBeNull();
   });
 
   it('keeps cancelling postgres run batches active until finalized', async () => {
@@ -221,22 +233,35 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     expect(claimed?.messages).toHaveLength(2);
     if (!claimed) throw new Error('Expected batch to be claimed');
 
-    const cancelling = await store.requestRunCancellation({ sessionId: session.id, requestedAt: new Date(), error: 'cancelled by test' });
+    const cancelling = await store.requestRunCancellation({
+      sessionId: session.id,
+      requestedAt: new Date(),
+      error: 'cancelled by test',
+    });
 
     expect(cancelling?.run.status).toBe('cancelling');
     expect(cancelling?.messages.map((message) => message.status)).toEqual(['cancelling', 'cancelling']);
     await services.messages.enqueue({ sessionId: session.id, prompt: 'third' });
-    await expect(store.claimNextPendingMessageBatch({
-      runId: '00000000-0000-4000-8000-000000000904',
-      runnerType: 'fake',
-      leaseOwner: 'worker-2',
-      leaseExpiresAt: new Date(Date.now() + 60_000),
-      now: new Date(),
-    })).resolves.toBeNull();
+    await expect(
+      store.claimNextPendingMessageBatch({
+        runId: '00000000-0000-4000-8000-000000000904',
+        runnerType: 'fake',
+        leaseOwner: 'worker-2',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        now: new Date(),
+      }),
+    ).resolves.toBeNull();
 
-    const cancelled = await store.finalizeRunCancellation({ runId: claimed.run.id, cancelledAt: new Date(), error: 'cancelled by test' });
+    const cancelled = await store.finalizeRunCancellation({
+      runId: claimed.run.id,
+      cancelledAt: new Date(),
+      error: 'cancelled by test',
+    });
     expect(cancelled.messages.map((message) => message.status)).toEqual(['cancelled', 'cancelled']);
-    await expect(store.getRun(claimed.run.id)).resolves.toMatchObject({ status: 'cancelled', error: 'cancelled by test' });
+    await expect(store.getRun(claimed.run.id)).resolves.toMatchObject({
+      status: 'cancelled',
+      error: 'cancelled by test',
+    });
     await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'queued' });
   });
 
@@ -269,7 +294,9 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       payload: { ok: true },
       createdAt: now,
     });
-    await expect(store.getArtifacts(session.id)).resolves.toMatchObject([{ id: artifact.id, url: 'https://example.com/result' }]);
+    await expect(store.getArtifacts(session.id)).resolves.toMatchObject([
+      { id: artifact.id, url: 'https://example.com/result' },
+    ]);
 
     const delivery = await store.createCallbackDelivery({
       id: '00000000-0000-4000-8000-000000000802',
@@ -286,10 +313,15 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     expect(delivery.status).toBe('pending');
 
     await store.claimDueCallbackDeliveries({ now, limit: 1 });
-    const sent = await store.markCallbackDeliverySent({ id: delivery.id, deliveredAt: new Date(now.getTime() + 1_000) });
+    const sent = await store.markCallbackDeliverySent({
+      id: delivery.id,
+      deliveredAt: new Date(now.getTime() + 1_000),
+    });
     expect(sent).toMatchObject({ status: 'sent', attempts: 1 });
 
-    await expect(store.listCallbackDeliveries({ sessionId: session.id })).resolves.toMatchObject([{ id: delivery.id, status: 'sent' }]);
+    await expect(store.listCallbackDeliveries({ sessionId: session.id })).resolves.toMatchObject([
+      { id: delivery.id, status: 'sent' },
+    ]);
   });
 
   it('requeues failed callback deliveries for replay', async () => {
@@ -311,10 +343,16 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     await store.claimDueCallbackDeliveries({ now, limit: 1 });
     await store.markCallbackDeliveryFailed({ id: delivery.id, failedAt: now, error: 'down', terminal: true });
 
-    const replay = await store.requestCallbackReplay({ sessionId: session.id, deliveryId: delivery.id, requestedAt: new Date(now.getTime() + 1_000) });
+    const replay = await store.requestCallbackReplay({
+      sessionId: session.id,
+      deliveryId: delivery.id,
+      requestedAt: new Date(now.getTime() + 1_000),
+    });
 
     expect(replay).toMatchObject({ id: delivery.id, status: 'pending', attempts: 1 });
-    await expect(store.claimDueCallbackDeliveries({ now: new Date(now.getTime() + 1_000), limit: 1 })).resolves.toMatchObject([{ id: delivery.id, status: 'sending' }]);
+    await expect(
+      store.claimDueCallbackDeliveries({ now: new Date(now.getTime() + 1_000), limit: 1 }),
+    ).resolves.toMatchObject([{ id: delivery.id, status: 'sending' }]);
   });
 
   it('claims each pending message once under concurrent workers', async () => {
@@ -344,13 +382,15 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
 
     expect(claims.every(Boolean)).toBe(true);
     expect(new Set(claims.map((claim) => claim!.message.id)).size).toBe(2);
-    await expect(store.claimNextPendingMessage({
-      runId: '00000000-0000-4000-8000-000000000003',
-      runnerType: 'fake',
-      leaseOwner: 'worker-3',
-      leaseExpiresAt: new Date(now.getTime() + 60_000),
-      now,
-    })).resolves.toBeNull();
+    await expect(
+      store.claimNextPendingMessage({
+        runId: '00000000-0000-4000-8000-000000000003',
+        runnerType: 'fake',
+        leaseOwner: 'worker-3',
+        leaseExpiresAt: new Date(now.getTime() + 60_000),
+        now,
+      }),
+    ).resolves.toBeNull();
   });
 
   it('recovers stale processing messages for retry', async () => {
@@ -405,12 +445,17 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     });
     expect(renewed?.leaseOwner).toBe('worker-1');
 
-    await expect(store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 2_000), limit: 10 })).resolves.toEqual([]);
+    await expect(store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 2_000), limit: 10 })).resolves.toEqual(
+      [],
+    );
   });
 
   it('processes an HTTP-created message through the worker using Postgres', async () => {
     const services = createServices(store);
-    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
+    const server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      services,
+    );
     const baseUrl = await listen(server);
 
     try {
@@ -452,8 +497,14 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
   it('accepts concurrent writes through multiple API replicas sharing Postgres', async () => {
     const replicaStoreA = new PostgresStore(testDatabaseUrl!);
     const replicaStoreB = new PostgresStore(testDatabaseUrl!);
-    const serverA = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), createServices(replicaStoreA));
-    const serverB = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), createServices(replicaStoreB));
+    const serverA = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      createServices(replicaStoreA),
+    );
+    const serverB = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      createServices(replicaStoreB),
+    );
     const [baseUrlA, baseUrlB] = await Promise.all([listen(serverA), listen(serverB)]);
 
     try {
@@ -462,10 +513,11 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       const { session } = (await createSession.json()) as { session: { id: string } };
 
       const responses = await Promise.all(
-        Array.from({ length: 20 }, (_, index) => postJson(
-          `${index % 2 === 0 ? baseUrlA : baseUrlB}/sessions/${session.id}/messages`,
-          { prompt: `message ${index + 1}` },
-        )),
+        Array.from({ length: 20 }, (_, index) =>
+          postJson(`${index % 2 === 0 ? baseUrlA : baseUrlB}/sessions/${session.id}/messages`, {
+            prompt: `message ${index + 1}`,
+          }),
+        ),
       );
 
       expect(responses.map((response) => response.status)).toEqual(new Array(20).fill(202));
@@ -495,7 +547,10 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       updatedAt: now,
     });
 
-    const server = createServer(loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }), services);
+    const server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      services,
+    );
     const baseUrl = await listen(server);
 
     try {
@@ -530,11 +585,13 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       expectGenericWebhookResponse(followUpBody);
       expect(followUpBody.session?.id).toBe(firstBody.session?.id);
 
-      await expect(postJsonWithAuth(`${baseUrl}/webhooks/generic/foo`, 'wrong', {
-        threadId: 'thread-2',
-        dedupeKey: 'delivery-3',
-        prompt: 'nope',
-      })).resolves.toMatchObject({ status: 401 });
+      await expect(
+        postJsonWithAuth(`${baseUrl}/webhooks/generic/foo`, 'wrong', {
+          threadId: 'thread-2',
+          dedupeKey: 'delivery-3',
+          prompt: 'nope',
+        }),
+      ).resolves.toMatchObject({ status: 401 });
     } finally {
       await close(server);
     }

@@ -25,7 +25,10 @@ export async function markIntegrationDeliveryProcessed(store: AppStore, input: I
   await store.markIntegrationDeliveryProcessed({ ...input, processedAt: new Date() });
 }
 
-export async function markIntegrationDeliveryFailed(store: AppStore, input: IntegrationDeliveryRef & { error: string }): Promise<void> {
+export async function markIntegrationDeliveryFailed(
+  store: AppStore,
+  input: IntegrationDeliveryRef & { error: string },
+): Promise<void> {
   await store.markIntegrationDeliveryFailed({ ...input, failedAt: new Date() });
 }
 
@@ -40,7 +43,9 @@ export async function getOrCreateExternalThreadSession(
   },
 ): Promise<SessionRecord> {
   if (store.withExternalThreadLock) {
-    return store.withExternalThreadLock(input.source, input.externalId, () => getOrCreateExternalThreadSessionUnlocked(store, sessions, input));
+    return store.withExternalThreadLock(input.source, input.externalId, () =>
+      getOrCreateExternalThreadSessionUnlocked(store, sessions, input),
+    );
   }
 
   return getOrCreateExternalThreadSessionUnlocked(store, sessions, input);

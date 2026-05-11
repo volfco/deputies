@@ -20,11 +20,7 @@ describe('FakeRunner', () => {
     });
 
     expect(result.text).toBe('Fake response for: hello');
-    expect(events.map((event) => event.type)).toEqual([
-      'run_started',
-      'agent_text_delta',
-      'run_completed',
-    ]);
+    expect(events.map((event) => event.type)).toEqual(['run_started', 'agent_text_delta', 'run_completed']);
   });
 
   it('can return scripted fake artifacts from context', async () => {

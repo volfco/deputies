@@ -1,14 +1,16 @@
 type EmptyEventPayload = Record<string, never>;
 
-export type NormalizedEvent<T extends NormalizedEventType = NormalizedEventType> = T extends NormalizedEventType ? {
-  sessionId: string;
-  runId?: string;
-  messageId?: string;
-  sequence?: number;
-  type: T;
-  payload: NormalizedEventPayload<T>;
-  createdAt: Date;
-} : never;
+export type NormalizedEvent<T extends NormalizedEventType = NormalizedEventType> = T extends NormalizedEventType
+  ? {
+      sessionId: string;
+      runId?: string;
+      messageId?: string;
+      sequence?: number;
+      type: T;
+      payload: NormalizedEventPayload<T>;
+      createdAt: Date;
+    }
+  : never;
 
 export type NormalizedEventPayload<T extends NormalizedEventType = NormalizedEventType> = NormalizedEventPayloadMap[T];
 

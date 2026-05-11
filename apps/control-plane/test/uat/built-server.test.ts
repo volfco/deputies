@@ -165,7 +165,9 @@ describe.skipIf(!testDatabaseUrl)('built server UAT', () => {
 
     const list = await fetch(`http://127.0.0.1:${uatPort}/sessions`);
     expect(list.status).toBe(200);
-    await expect(list.json()).resolves.toMatchObject({ sessions: [{ id: session.id, title: 'Updated title', status: 'idle' }] });
+    await expect(list.json()).resolves.toMatchObject({
+      sessions: [{ id: session.id, title: 'Updated title', status: 'idle' }],
+    });
 
     const events = await waitForEvents(session.id, ['session_unarchived']);
     expect(events.map((event) => event.type)).toEqual([
@@ -246,9 +248,7 @@ describe.skipIf(!testDatabaseUrl)('built server UAT', () => {
       const artifactsResponse = await fetch(`http://127.0.0.1:${uatPort}/sessions/${session.id}/artifacts`);
       expect(artifactsResponse.status).toBe(200);
       const artifactsBody = (await artifactsResponse.json()) as { artifacts: Array<{ type: string; url?: string }> };
-      expect(artifactsBody.artifacts).toMatchObject([
-        { type: 'external_link', url: 'https://example.com/result' },
-      ]);
+      expect(artifactsBody.artifacts).toMatchObject([{ type: 'external_link', url: 'https://example.com/result' }]);
       await waitFor(() => Promise.resolve(callbacks.length === 1));
       expect(callbacks[0]).toMatchObject({ event: 'message_completed', sessionId: session.id });
       expect((callbacks[0] as { artifacts: unknown[] }).artifacts).toHaveLength(1);

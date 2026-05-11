@@ -16,7 +16,11 @@ export function verifySlackSignature(input: {
   const now = input.nowSeconds ?? Math.floor(Date.now() / 1000);
   if (Math.abs(now - timestamp) > maxTimestampSkewSeconds) return false;
 
-  const expected = createSlackSignature({ body: input.body, timestamp: input.timestamp, signingSecret: input.signingSecret });
+  const expected = createSlackSignature({
+    body: input.body,
+    timestamp: input.timestamp,
+    signingSecret: input.signingSecret,
+  });
   return safeEqual(input.signature, expected);
 }
 

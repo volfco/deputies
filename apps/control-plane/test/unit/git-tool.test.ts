@@ -7,7 +7,9 @@ describe('authenticated git Flue tool', () => {
     const shells: Array<{ command: string; cwd?: string; env?: Record<string, string> }> = [];
     const agentRef: AgentRef = {
       current: {
-        async session() { throw new Error('not used'); },
+        async session() {
+          throw new Error('not used');
+        },
         async shell(command, options) {
           const shell: { command: string; cwd?: string; env?: Record<string, string> } = { command };
           if (options?.cwd) shell.cwd = options.cwd;
@@ -22,9 +24,15 @@ describe('authenticated git Flue tool', () => {
     const result = await tool.execute({ args: ['push', 'origin', 'sp/test'] });
 
     expect(result).toBe('exitCode: 0\nstdout:\npushed');
-    expect(shells).toEqual([{ command: "git -c http.extraHeader=\"$GITHUB_AUTH_HEADER\" 'push' 'origin' 'sp/test'", cwd: '/workspace/manaflow', env: {
-      GITHUB_AUTH_HEADER: `Authorization: Basic ${Buffer.from('x-access-token:ghs_secret_token').toString('base64')}`,
-    } }]);
+    expect(shells).toEqual([
+      {
+        command: "git -c http.extraHeader=\"$GITHUB_AUTH_HEADER\" 'push' 'origin' 'sp/test'",
+        cwd: '/workspace/manaflow',
+        env: {
+          GITHUB_AUTH_HEADER: `Authorization: Basic ${Buffer.from('x-access-token:ghs_secret_token').toString('base64')}`,
+        },
+      },
+    ]);
   });
 
   it('rejects executable names and top-level flags', async () => {
@@ -62,12 +70,20 @@ const access: GitHubRepositoryAccess = {
 
 function repositoryServices(agentRef: AgentRef): RepositoryToolServices {
   return {
-    github: { async getRepositoryAccess() { return access; } },
+    github: {
+      async getRepositoryAccess() {
+        return access;
+      },
+    },
     sandbox: { workspacePath: '/workspace' } as never,
     agentRef,
     state: {
       context: { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } },
-      prepared: { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' }, access, workspacePath: '/workspace/manaflow' },
+      prepared: {
+        repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' },
+        access,
+        workspacePath: '/workspace/manaflow',
+      },
     },
     emit: async () => {},
     eventBase: { sessionId: 'session-1', runId: 'run-1', messageId: 'message-1' },

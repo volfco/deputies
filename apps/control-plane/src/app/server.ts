@@ -6,9 +6,23 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { FetchGitHubOAuthClient, type GitHubOAuthClient } from '../auth/github.js';
 import { apiAuthMiddleware } from '../auth/middleware.js';
-import { clearSessionCookie, createSessionCookie, createSessionId, readSessionId, sessionMaxAgeSeconds, signOAuthState, verifyOAuthState } from '../auth/session.js';
+import {
+  clearSessionCookie,
+  createSessionCookie,
+  createSessionId,
+  readSessionId,
+  sessionMaxAgeSeconds,
+  signOAuthState,
+  verifyOAuthState,
+} from '../auth/session.js';
 import { CallbackService, CallbackServiceError } from '../callbacks/service.js';
-import { requireAuthSessionSecret, requireGitHubOAuthCredentials, requireSlackSigningSecret, requireStaticCredentials, type AppConfig } from '../config/index.js';
+import {
+  requireAuthSessionSecret,
+  requireGitHubOAuthCredentials,
+  requireSlackSigningSecret,
+  requireStaticCredentials,
+  type AppConfig,
+} from '../config/index.js';
 import { EventService } from '../events/service.js';
 import { GenericWebhookError, GenericWebhookService } from '../integrations/generic-webhook/service.js';
 import { type GitHubArchivedSessionNotifier } from '../integrations/github/archived-session-notifier.js';
@@ -46,7 +60,10 @@ export type AppServices = {
   githubOAuthClient?: GitHubOAuthClient;
 };
 
-export function createServices(store: AppStore = new MemoryStore(), options: { sandboxProvider?: SandboxProvider } = {}): AppServices {
+export function createServices(
+  store: AppStore = new MemoryStore(),
+  options: { sandboxProvider?: SandboxProvider } = {},
+): AppServices {
   const events = new EventService(store);
   const sessions = new SessionService(store, events);
   const messages = new MessageService(store, events);
@@ -58,7 +75,8 @@ export function createServices(store: AppStore = new MemoryStore(), options: { s
     genericWebhooks: new GenericWebhookService(store, sessions, messages),
     callbacks: new CallbackService(store, events),
   };
-  if (options.sandboxProvider) services.sandboxCleanup = new SandboxCleanupService(store, events, options.sandboxProvider);
+  if (options.sandboxProvider)
+    services.sandboxCleanup = new SandboxCleanupService(store, events, options.sandboxProvider);
   return services;
 }
 
@@ -66,7 +84,15 @@ export function createApp(config: AppConfig, services = createServices()) {
   const app = new Hono<{ Variables: AppVariables }>();
 
   app.use('*', requestIdMiddleware());
-  app.use('*', cors({ origin: allowedCorsOrigin(config), credentials: true, allowHeaders: ['authorization', 'content-type', 'x-request-id'], allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'] }));
+  app.use(
+    '*',
+    cors({
+      origin: allowedCorsOrigin(config),
+      credentials: true,
+      allowHeaders: ['authorization', 'content-type', 'x-request-id'],
+      allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    }),
+  );
 
   app.onError((error, c) => {
     if (error instanceof HttpRequestError) {
@@ -77,18 +103,22 @@ export function createApp(config: AppConfig, services = createServices()) {
 
   app.notFound((c) => c.json({ error: 'not_found', message: 'Route not found' }, 404));
 
-  app.get('/health', (c) => c.json({
-    status: 'ok',
-    runMode: config.runMode,
-    apiAuthMode: config.apiAuthMode,
-    authProvider: config.apiAuthMode === 'session' ? config.authProvider : undefined,
-    sandboxProvider: config.sandboxProvider,
-  }));
+  app.get('/health', (c) =>
+    c.json({
+      status: 'ok',
+      runMode: config.runMode,
+      apiAuthMode: config.apiAuthMode,
+      authProvider: config.apiAuthMode === 'session' ? config.authProvider : undefined,
+      sandboxProvider: config.sandboxProvider,
+    }),
+  );
 
-  app.get('/auth/config', (c) => c.json({
-    apiAuthMode: config.apiAuthMode,
-    provider: config.apiAuthMode === 'session' ? config.authProvider : undefined,
-  }));
+  app.get('/auth/config', (c) =>
+    c.json({
+      apiAuthMode: config.apiAuthMode,
+      provider: config.apiAuthMode === 'session' ? config.authProvider : undefined,
+    }),
+  );
 
   app.post('/auth/login', async (c) => {
     if (config.apiAuthMode !== 'session') return writeError(c, 404, 'not_found', 'Route not found');
@@ -117,10 +147,14 @@ export function createApp(config: AppConfig, services = createServices()) {
   });
 
   app.get('/auth/oauth/github/start', (c) => {
-    if (config.apiAuthMode !== 'session' || config.authProvider !== 'github') return writeError(c, 404, 'not_found', 'Route not found');
+    if (config.apiAuthMode !== 'session' || config.authProvider !== 'github')
+      return writeError(c, 404, 'not_found', 'Route not found');
     const { clientId } = requireGitHubOAuthCredentials(config);
     const redirectUri = githubOAuthCallbackUrl(c, config);
-    const state = signOAuthState({ provider: 'github', exp: Math.floor(Date.now() / 1000) + 10 * 60 }, requireAuthSessionSecret(config));
+    const state = signOAuthState(
+      { provider: 'github', exp: Math.floor(Date.now() / 1000) + 10 * 60 },
+      requireAuthSessionSecret(config),
+    );
     const authorizeUrl = new URL('/login/oauth/authorize', config.githubOAuthBaseUrl);
     authorizeUrl.searchParams.set('client_id', clientId);
     authorizeUrl.searchParams.set('redirect_uri', redirectUri);
@@ -130,7 +164,8 @@ export function createApp(config: AppConfig, services = createServices()) {
   });
 
   app.get('/auth/oauth/github/callback', async (c) => {
-    if (config.apiAuthMode !== 'session' || config.authProvider !== 'github') return writeError(c, 404, 'not_found', 'Route not found');
+    if (config.apiAuthMode !== 'session' || config.authProvider !== 'github')
+      return writeError(c, 404, 'not_found', 'Route not found');
     const state = c.req.query('state');
     const code = c.req.query('code');
     if (!state || !verifyOAuthState(state, requireAuthSessionSecret(config)) || !code) {
@@ -138,15 +173,19 @@ export function createApp(config: AppConfig, services = createServices()) {
     }
 
     const credentials = requireGitHubOAuthCredentials(config);
-    const client = services.githubOAuthClient ?? new FetchGitHubOAuthClient({
-      clientId: credentials.clientId,
-      clientSecret: credentials.clientSecret,
-      oauthBaseUrl: config.githubOAuthBaseUrl,
-      apiBaseUrl: config.githubApiBaseUrl,
-    });
+    const client =
+      services.githubOAuthClient ??
+      new FetchGitHubOAuthClient({
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        oauthBaseUrl: config.githubOAuthBaseUrl,
+        apiBaseUrl: config.githubApiBaseUrl,
+      });
     const accessToken = await client.exchangeCode({ code, redirectUri: githubOAuthCallbackUrl(c, config) });
     const githubUser = await client.getUser(accessToken);
-    const organizations = config.authGithubAllowedOrganizations.length ? await client.listOrganizations(accessToken) : [];
+    const organizations = config.authGithubAllowedOrganizations.length
+      ? await client.listOrganizations(accessToken)
+      : [];
     if (!isAllowedGitHubLogin(githubUser.login, organizations, config)) {
       return writeError(c, 403, 'forbidden', 'GitHub user is not allowed');
     }
@@ -252,7 +291,9 @@ export function createApp(config: AppConfig, services = createServices()) {
     }
 
     try {
-      const slackClient = config.slackBotToken ? new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }) : null;
+      const slackClient = config.slackBotToken
+        ? new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken })
+        : null;
       const slackOptions = config.slackBotToken
         ? {
             reactionClient: slackClient!,
@@ -270,7 +311,12 @@ export function createApp(config: AppConfig, services = createServices()) {
             allowedUserIds: config.slackAllowedUserIds,
             ...(config.webBaseUrl ? { webBaseUrl: config.webBaseUrl } : {}),
           };
-      const result = await new SlackIntegrationService(services.store, services.sessions, services.messages, slackOptions).handle(payload);
+      const result = await new SlackIntegrationService(
+        services.store,
+        services.sessions,
+        services.messages,
+        slackOptions,
+      ).handle(payload);
       if (result.type === 'challenge') return c.json({ challenge: result.challenge });
       return c.json({ ok: true, type: result.type });
     } catch (error) {
@@ -281,7 +327,8 @@ export function createApp(config: AppConfig, services = createServices()) {
 
   app.post('/webhooks/github/events', async (c) => {
     const body = await readRawBody(c, config.maxJsonBodyBytes, 'GitHub body');
-    if (!config.githubWebhookSecret) return writeError(c, 500, 'configuration_error', 'GITHUB_WEBHOOK_SECRET is required for GitHub webhooks');
+    if (!config.githubWebhookSecret)
+      return writeError(c, 500, 'configuration_error', 'GITHUB_WEBHOOK_SECRET is required for GitHub webhooks');
     const signatureValid = verifyGitHubWebhookSignature({
       signature: c.req.header('x-hub-signature-256'),
       body,
@@ -309,10 +356,15 @@ export function createApp(config: AppConfig, services = createServices()) {
       triggerPhrases: config.githubTriggerPhrases,
       ...(services.githubReactionSender ? { reactionSender: services.githubReactionSender } : {}),
       ...(services.githubIssueContextFetcher ? { issueContextFetcher: services.githubIssueContextFetcher } : {}),
-      ...(services.githubArchivedSessionNotifier ? { archivedSessionNotifier: services.githubArchivedSessionNotifier } : {}),
+      ...(services.githubArchivedSessionNotifier
+        ? { archivedSessionNotifier: services.githubArchivedSessionNotifier }
+        : {}),
       ...(config.webBaseUrl ? { webBaseUrl: config.webBaseUrl } : {}),
     }).handle({ headers, payload });
-    return c.json({ ok: true, type: result.type, ...('reason' in result ? { reason: result.reason } : {}) }, result.type === 'accepted' ? 202 : 200);
+    return c.json(
+      { ok: true, type: result.type, ...('reason' in result ? { reason: result.reason } : {}) },
+      result.type === 'accepted' ? 202 : 200,
+    );
   });
 
   app.get('/sessions/:sessionId', async (c) => {
@@ -324,7 +376,8 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.patch('/sessions/:sessionId', async (c) => {
     const body = await readJsonBody(c, config.maxJsonBodyBytes);
     const title = optionalString(body.title);
-    if (body.title !== undefined && !title) return writeError(c, 400, 'invalid_request', 'Expected non-empty string field: title');
+    if (body.title !== undefined && !title)
+      return writeError(c, 400, 'invalid_request', 'Expected non-empty string field: title');
 
     try {
       const session = await services.sessions.update({ id: c.req.param('sessionId'), ...(title ? { title } : {}) });
@@ -367,7 +420,8 @@ export function createApp(config: AppConfig, services = createServices()) {
       const session = await services.sessions.pauseQueue(c.req.param('sessionId'));
       return c.json({ session });
     } catch (error) {
-      if (error instanceof SessionServiceError && error.code === 'not_found') return writeError(c, 404, 'not_found', 'Session not found');
+      if (error instanceof SessionServiceError && error.code === 'not_found')
+        return writeError(c, 404, 'not_found', 'Session not found');
       throw error;
     }
   });
@@ -377,7 +431,8 @@ export function createApp(config: AppConfig, services = createServices()) {
       const session = await services.sessions.resumeQueue(c.req.param('sessionId'));
       return c.json({ session });
     } catch (error) {
-      if (error instanceof SessionServiceError && error.code === 'not_found') return writeError(c, 404, 'not_found', 'Session not found');
+      if (error instanceof SessionServiceError && error.code === 'not_found')
+        return writeError(c, 404, 'not_found', 'Session not found');
       throw error;
     }
   });
@@ -387,8 +442,10 @@ export function createApp(config: AppConfig, services = createServices()) {
       const messages = await services.messages.cancelActiveRun({ sessionId: c.req.param('sessionId') });
       return c.json({ messages });
     } catch (error) {
-      if (error instanceof MessageServiceError && error.code === 'not_found') return writeError(c, 404, 'not_found', 'Session not found');
-      if (error instanceof MessageServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      if (error instanceof MessageServiceError && error.code === 'not_found')
+        return writeError(c, 404, 'not_found', 'Session not found');
+      if (error instanceof MessageServiceError && error.code === 'conflict')
+        return writeError(c, 409, 'conflict', error.message);
       throw error;
     }
   });
@@ -411,7 +468,8 @@ export function createApp(config: AppConfig, services = createServices()) {
       if (error instanceof MessageServiceError && error.code === 'not_found') {
         return writeError(c, 404, 'not_found', 'Session not found');
       }
-      if (error instanceof MessageServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      if (error instanceof MessageServiceError && error.code === 'conflict')
+        return writeError(c, 409, 'conflict', error.message);
       throw error;
     }
   });
@@ -430,31 +488,45 @@ export function createApp(config: AppConfig, services = createServices()) {
     const prompt = optionalString(body.prompt);
     if (!prompt) return writeError(c, 400, 'invalid_request', 'Expected non-empty string field: prompt');
     try {
-      const message = await services.messages.updatePending({ sessionId: c.req.param('sessionId'), messageId: c.req.param('messageId'), prompt });
+      const message = await services.messages.updatePending({
+        sessionId: c.req.param('sessionId'),
+        messageId: c.req.param('messageId'),
+        prompt,
+      });
       return c.json({ message });
     } catch (error) {
-      if (error instanceof MessageServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      if (error instanceof MessageServiceError && error.code === 'conflict')
+        return writeError(c, 409, 'conflict', error.message);
       throw error;
     }
   });
 
   app.post('/sessions/:sessionId/messages/:messageId/cancel', async (c) => {
     try {
-      const message = await services.messages.cancelPending({ sessionId: c.req.param('sessionId'), messageId: c.req.param('messageId') });
+      const message = await services.messages.cancelPending({
+        sessionId: c.req.param('sessionId'),
+        messageId: c.req.param('messageId'),
+      });
       return c.json({ message });
     } catch (error) {
-      if (error instanceof MessageServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      if (error instanceof MessageServiceError && error.code === 'conflict')
+        return writeError(c, 409, 'conflict', error.message);
       throw error;
     }
   });
 
   app.post('/sessions/:sessionId/messages/:messageId/retry', async (c) => {
     try {
-      const message = await services.messages.retryFailed({ sessionId: c.req.param('sessionId'), messageId: c.req.param('messageId') });
+      const message = await services.messages.retryFailed({
+        sessionId: c.req.param('sessionId'),
+        messageId: c.req.param('messageId'),
+      });
       return c.json({ message }, 202);
     } catch (error) {
-      if (error instanceof MessageServiceError && error.code === 'not_found') return writeError(c, 404, 'not_found', error.message);
-      if (error instanceof MessageServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      if (error instanceof MessageServiceError && error.code === 'not_found')
+        return writeError(c, 404, 'not_found', error.message);
+      if (error instanceof MessageServiceError && error.code === 'conflict')
+        return writeError(c, 409, 'conflict', error.message);
       throw error;
     }
   });
@@ -497,7 +569,8 @@ export function createApp(config: AppConfig, services = createServices()) {
       const callback = await services.callbacks.requestReplay({ sessionId, deliveryId: c.req.param('deliveryId') });
       return c.json({ callback });
     } catch (error) {
-      if (error instanceof CallbackServiceError && error.code === 'conflict') return writeError(c, 409, 'conflict', error.message);
+      if (error instanceof CallbackServiceError && error.code === 'conflict')
+        return writeError(c, 409, 'conflict', error.message);
       throw error;
     }
   });
@@ -599,9 +672,10 @@ async function writeGlobalEventStream(
   return writeEventStream(c, {
     after: afterId,
     id: (event) => event.id,
-    list: () => includeAll ? services.events.listAllEvents(afterId) : services.events.listAll(afterId),
+    list: () => (includeAll ? services.events.listAllEvents(afterId) : services.events.listAll(afterId)),
     replay,
-    subscribe: (writeEvent) => includeAll ? services.events.subscribeAllEvents(writeEvent) : services.events.subscribeAll(writeEvent),
+    subscribe: (writeEvent) =>
+      includeAll ? services.events.subscribeAllEvents(writeEvent) : services.events.subscribeAll(writeEvent),
   });
 }
 
@@ -724,7 +798,8 @@ function parseRepositoryBody(value: unknown): RepositoryReference | undefined {
 
   if (typeof value === 'string') {
     const reference = extractRepositoryReference(value);
-    if (!reference) throw new HttpRequestError(400, 'invalid_request', 'Expected repository as owner/repo or GitHub URL');
+    if (!reference)
+      throw new HttpRequestError(400, 'invalid_request', 'Expected repository as owner/repo or GitHub URL');
     return reference;
   }
 
@@ -733,10 +808,12 @@ function parseRepositoryBody(value: unknown): RepositoryReference | undefined {
   }
 
   const repository = value as Record<string, unknown>;
-  if (repository.provider !== 'github') throw new HttpRequestError(400, 'invalid_request', 'Expected repository.provider to be github');
+  if (repository.provider !== 'github')
+    throw new HttpRequestError(400, 'invalid_request', 'Expected repository.provider to be github');
   const owner = optionalString(repository.owner);
   const repo = optionalString(repository.repo);
-  if (!owner || !repo) throw new HttpRequestError(400, 'invalid_request', 'Expected repository.owner and repository.repo');
+  if (!owner || !repo)
+    throw new HttpRequestError(400, 'invalid_request', 'Expected repository.owner and repository.repo');
 
   const reference = extractRepositoryReference(`repo:${owner}/${repo}`);
   if (!reference) throw new HttpRequestError(400, 'invalid_request', 'Expected valid GitHub repository owner and name');

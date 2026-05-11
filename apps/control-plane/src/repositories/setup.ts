@@ -31,8 +31,13 @@ export async function prepareRepositoryShellSetup(input: {
 }): Promise<RepositoryShellSetup | null> {
   const repository = parseRepositoryContext(input.context);
   if (!repository) return null;
-  if (repository.provider !== 'github') throw new RepositorySetupError('unsupported_repository_provider', `Unsupported repository provider: ${repository.provider}`);
-  if (!input.github) throw new RepositorySetupError('repository_access_unavailable', 'GitHub repository access is not configured');
+  if (repository.provider !== 'github')
+    throw new RepositorySetupError(
+      'unsupported_repository_provider',
+      `Unsupported repository provider: ${repository.provider}`,
+    );
+  if (!input.github)
+    throw new RepositorySetupError('repository_access_unavailable', 'GitHub repository access is not configured');
 
   const access = await input.github.getRepositoryAccess({ owner: repository.owner, repo: repository.repo });
   const workspacePath = joinPath(input.sandbox.workspacePath, access.repo);
@@ -93,7 +98,10 @@ function parseRepositoryValue(value: unknown): RepositoryContext | null {
   const repo = typeof value.repo === 'string' ? value.repo.trim() : '';
   if (!owner && !repo) return null;
   if (provider !== 'github' || !owner || !repo) {
-    throw new RepositorySetupError('invalid_repository_context', 'Expected repository context with provider, owner, and repo');
+    throw new RepositorySetupError(
+      'invalid_repository_context',
+      'Expected repository context with provider, owner, and repo',
+    );
   }
   return { provider, owner, repo };
 }

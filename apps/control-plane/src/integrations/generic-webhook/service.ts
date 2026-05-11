@@ -1,7 +1,11 @@
 import type { MessageService } from '../../messages/service.js';
 import type { SessionService } from '../../sessions/service.js';
 import type { AppStore, MessageRecord, SessionRecord, WebhookSourceRecord } from '../../store/types.js';
-import { getOrCreateExternalThreadSession, markIntegrationDeliveryProcessed, receiveIntegrationDelivery } from '../shared-utils.js';
+import {
+  getOrCreateExternalThreadSession,
+  markIntegrationDeliveryProcessed,
+  receiveIntegrationDelivery,
+} from '../shared-utils.js';
 
 export type HandleGenericWebhookInput = {
   sourceKey: string;
@@ -64,10 +68,7 @@ export class GenericWebhookService {
     return { accepted: true, duplicate: false, session, message };
   }
 
-  private async getOrCreateSession(
-    source: WebhookSourceRecord,
-    parsed: ParsedWebhookPayload,
-  ): Promise<SessionRecord> {
+  private async getOrCreateSession(source: WebhookSourceRecord, parsed: ParsedWebhookPayload): Promise<SessionRecord> {
     return getOrCreateExternalThreadSession(this.store, this.sessions, {
       source: source.key,
       externalId: parsed.threadId,

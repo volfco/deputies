@@ -21,7 +21,9 @@ export type SandboxReaperHandle = {
   close(): Promise<void>;
 };
 
-export async function runSandboxReaperOnce(options: Pick<SandboxReaperOptions, 'cleanup' | 'store' | 'stopDelayMs' | 'retentionMs' | 'batchSize'>): Promise<number> {
+export async function runSandboxReaperOnce(
+  options: Pick<SandboxReaperOptions, 'cleanup' | 'store' | 'stopDelayMs' | 'retentionMs' | 'batchSize'>,
+): Promise<number> {
   const run = async () => {
     const stopResult = await options.cleanup.stopIdleSandboxes({
       idleBefore: new Date(Date.now() - options.stopDelayMs),
@@ -58,9 +60,9 @@ export function startSandboxReaper(options: SandboxReaperOptions): SandboxReaper
   tick();
 
   const stop = async (): Promise<void> => {
-      stopped = true;
-      clearInterval(timer);
-      await inFlight;
+    stopped = true;
+    clearInterval(timer);
+    await inFlight;
   };
 
   return {
@@ -70,5 +72,10 @@ export function startSandboxReaper(options: SandboxReaperOptions): SandboxReaper
 }
 
 function hasAdvisoryLock(store: unknown): store is AdvisoryLockStore {
-  return Boolean(store && typeof store === 'object' && 'withAdvisoryLock' in store && typeof (store as AdvisoryLockStore).withAdvisoryLock === 'function');
+  return Boolean(
+    store &&
+    typeof store === 'object' &&
+    'withAdvisoryLock' in store &&
+    typeof (store as AdvisoryLockStore).withAdvisoryLock === 'function',
+  );
 }

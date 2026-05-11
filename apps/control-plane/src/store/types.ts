@@ -1,8 +1,24 @@
 import type { NormalizedEvent } from '../events/types.js';
 
-export type SessionStatus = 'created' | 'queued' | 'active' | 'idle' | 'completed' | 'failed' | 'cancelled' | 'archived';
+export type SessionStatus =
+  | 'created'
+  | 'queued'
+  | 'active'
+  | 'idle'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'archived';
 export type MessageStatus = 'pending' | 'processing' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
-export type RunStatus = 'starting' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'stale';
+export type RunStatus =
+  | 'starting'
+  | 'running'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out'
+  | 'stale';
 export type IntegrationDeliveryStatus = 'received' | 'processed' | 'failed';
 export type SandboxStatus = 'ready' | 'stopped' | 'unhealthy' | 'destroyed' | 'failed';
 export type CallbackDeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed';
@@ -265,8 +281,16 @@ export interface MessageStore {
   createMessage(record: CreateMessageRecord): Promise<MessageRecord>;
   getMessages(sessionId: string): Promise<MessageRecord[]>;
   updatePendingMessage(input: { sessionId: string; messageId: string; prompt: string }): Promise<MessageRecord | null>;
-  cancelPendingMessage(input: { sessionId: string; messageId: string; cancelledAt: Date }): Promise<MessageRecord | null>;
-  requestRunCancellation(input: { sessionId: string; requestedAt: Date; error: string }): Promise<ClaimedMessageBatch | null>;
+  cancelPendingMessage(input: {
+    sessionId: string;
+    messageId: string;
+    cancelledAt: Date;
+  }): Promise<MessageRecord | null>;
+  requestRunCancellation(input: {
+    sessionId: string;
+    requestedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null>;
 }
 
 export interface RunStore {
@@ -284,10 +308,19 @@ export interface RunStore {
     leaseExpiresAt: Date;
     now: Date;
   }): Promise<ClaimedMessageBatch | null>;
-  renewRunLease(input: { runId: string; leaseOwner: string; leaseExpiresAt: Date; heartbeatAt: Date }): Promise<RunRecord | null>;
+  renewRunLease(input: {
+    runId: string;
+    leaseOwner: string;
+    leaseExpiresAt: Date;
+    heartbeatAt: Date;
+  }): Promise<RunRecord | null>;
   getRun(runId: string): Promise<RunRecord | null>;
   recoverStaleRuns(input: { now: Date; limit: number }): Promise<RecoveredRun[]>;
-  requestRunCancellation(input: { sessionId: string; requestedAt: Date; error: string }): Promise<ClaimedMessageBatch | null>;
+  requestRunCancellation(input: {
+    sessionId: string;
+    requestedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null>;
   finalizeRunCancellation(input: { runId: string; cancelledAt: Date; error: string }): Promise<ClaimedMessageBatch>;
   completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage>;
   failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage>;
@@ -309,8 +342,18 @@ export interface CallbackStore {
   listCallbackDeliveries(input: { sessionId: string; messageId?: string }): Promise<CallbackDeliveryRecord[]>;
   claimDueCallbackDeliveries(input: { now: Date; limit: number }): Promise<CallbackDeliveryRecord[]>;
   markCallbackDeliverySent(input: { id: string; deliveredAt: Date }): Promise<CallbackDeliveryRecord>;
-  markCallbackDeliveryFailed(input: { id: string; failedAt: Date; error: string; terminal: boolean; nextAttemptAt?: Date }): Promise<CallbackDeliveryRecord>;
-  requestCallbackReplay(input: { sessionId: string; deliveryId: string; requestedAt: Date }): Promise<CallbackDeliveryRecord | null>;
+  markCallbackDeliveryFailed(input: {
+    id: string;
+    failedAt: Date;
+    error: string;
+    terminal: boolean;
+    nextAttemptAt?: Date;
+  }): Promise<CallbackDeliveryRecord>;
+  requestCallbackReplay(input: {
+    sessionId: string;
+    deliveryId: string;
+    requestedAt: Date;
+  }): Promise<CallbackDeliveryRecord | null>;
 }
 
 export interface EventStore {
@@ -352,5 +395,10 @@ export interface AppStore extends SessionStore, MessageStore, RunStore, SandboxS
     metadata: Record<string, unknown>;
   }): Promise<IntegrationDeliveryRecord | null>;
   markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void>;
-  markIntegrationDeliveryFailed(input: { source: string; dedupeKey: string; failedAt: Date; error: string }): Promise<void>;
+  markIntegrationDeliveryFailed(input: {
+    source: string;
+    dedupeKey: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<void>;
 }

@@ -117,9 +117,7 @@ Current stored source shape is `key`, `name`, `enabled`, `bearer_token`, and opt
     "promptPath": "$.message",
     "titlePath": "$.workflow_run.name"
   },
-  "filters": [
-    { "path": "$.workflow_run.conclusion", "op": "equals", "value": "failure" }
-  ],
+  "filters": [{ "path": "$.workflow_run.conclusion", "op": "equals", "value": "failure" }],
   "defaults": {
     "promptTemplate": "Investigate this CI failure and propose or implement a fix.\n\nPayload:\n{{json payload}}"
   }
@@ -554,12 +552,12 @@ Current implementation:
 
 Separate inbound verification from outbound API credentials.
 
-| Integration | Inbound | Outbound |
-|---|---|---|
-| Generic webhook | Bearer now; HMAC/basic future | Optional HTTP callback URL |
-| GitHub | Webhook secret | GitHub App token, optional user OAuth |
-| Slack | Signing secret | Slack bot token |
-| Linear | Webhook secret | Linear API token |
+| Integration     | Inbound                       | Outbound                              |
+| --------------- | ----------------------------- | ------------------------------------- |
+| Generic webhook | Bearer now; HMAC/basic future | Optional HTTP callback URL            |
+| GitHub          | Webhook secret                | GitHub App token, optional user OAuth |
+| Slack           | Signing secret                | Slack bot token                       |
+| Linear          | Webhook secret                | Linear API token                      |
 
 Credential handling rules:
 

@@ -1,4 +1,8 @@
-import type { CompletionCallback, CompletionCallbackPayload, CompletionCallbackSender } from '../../callbacks/service.js';
+import type {
+  CompletionCallback,
+  CompletionCallbackPayload,
+  CompletionCallbackSender,
+} from '../../callbacks/service.js';
 import type { GitHubClient } from './client.js';
 import type { GitHubRepository } from './types.js';
 
@@ -18,12 +22,19 @@ export class GitHubCompletionCallbackSender implements CompletionCallbackSender 
     const owner = stringTarget(callback.target.owner);
     const repo = stringTarget(callback.target.repo);
     const issueNumber = numberTarget(callback.target.issueNumber);
-    if (!owner || !repo || !issueNumber) throw new Error('GitHub callback target is missing owner, repo, or issueNumber');
+    if (!owner || !repo || !issueNumber)
+      throw new Error('GitHub callback target is missing owner, repo, or issueNumber');
 
     const body = payload.text.trim();
     if (!body || isAcknowledgementOnly(body)) return;
     const repositoryAccess = await this.access.getRepositoryAccess({ owner, repo });
-    await this.client.createIssueComment({ owner, repo, issueNumber, token: repositoryAccess.auth.token, body: appendGitHubFooter(body, callback.target) });
+    await this.client.createIssueComment({
+      owner,
+      repo,
+      issueNumber,
+      token: repositoryAccess.auth.token,
+      body: appendGitHubFooter(body, callback.target),
+    });
   }
 }
 

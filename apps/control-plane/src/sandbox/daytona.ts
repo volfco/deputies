@@ -132,7 +132,8 @@ export class DaytonaSandboxProvider implements SandboxProvider {
       'flue-session-id': input.sessionId,
     };
     const params: Record<string, unknown> = { labels };
-    if (this.options.idleTimeoutMs) params.autoStopInterval = Math.max(1, Math.ceil(this.options.idleTimeoutMs / 60_000));
+    if (this.options.idleTimeoutMs)
+      params.autoStopInterval = Math.max(1, Math.ceil(this.options.idleTimeoutMs / 60_000));
     if (this.options.envVars) params.envVars = this.options.envVars;
     if (this.options.image) params.image = this.options.image;
     if (!this.options.image && this.options.snapshot) params.snapshot = this.options.snapshot;
@@ -219,10 +220,7 @@ function createDaytonaFileSystem(sandbox: DaytonaSandboxLike): SandboxFileSystem
   };
 }
 
-async function execDaytonaCommand(
-  sandbox: DaytonaSandboxLike,
-  input: SandboxExecInput,
-): Promise<SandboxExecResult> {
+async function execDaytonaCommand(sandbox: DaytonaSandboxLike, input: SandboxExecInput): Promise<SandboxExecResult> {
   const startedAt = new Date();
   const response = await sandbox.process.executeCommand(input.command, input.cwd, input.env, input.timeoutMs);
   return {
@@ -245,5 +243,7 @@ function quoteShell(value: string): string {
 function isNotFoundError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const named = error as Error & { code?: string; statusCode?: number; status?: number };
-  return named.name.includes('NotFound') || named.code === 'not_found' || named.statusCode === 404 || named.status === 404;
+  return (
+    named.name.includes('NotFound') || named.code === 'not_found' || named.statusCode === 404 || named.status === 404
+  );
 }

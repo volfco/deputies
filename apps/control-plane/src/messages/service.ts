@@ -31,7 +31,11 @@ export class MessageService {
     const context = mergeMessageContext(session.context, input.context);
     const sessionContext = mergeSessionContext(session.context, input.context);
     if (sessionContext) {
-      const updatedSession = await this.store.updateSession({ ...session, context: sessionContext, updatedAt: new Date() });
+      const updatedSession = await this.store.updateSession({
+        ...session,
+        context: sessionContext,
+        updatedAt: new Date(),
+      });
       await this.events.append({
         sessionId: input.sessionId,
         type: 'session_updated',
@@ -129,12 +133,14 @@ export class MessageService {
   async retryFailed(input: { sessionId: string; messageId: string }): Promise<MessageRecord> {
     const session = await this.store.getSession(input.sessionId);
     if (!session) throw new MessageServiceError('not_found', `Session not found: ${input.sessionId}`);
-    if (session.status === 'archived') throw new MessageServiceError('conflict', 'Cannot retry messages in an archived session');
+    if (session.status === 'archived')
+      throw new MessageServiceError('conflict', 'Cannot retry messages in an archived session');
 
     const messages = await this.store.getMessages(input.sessionId);
     const failedMessage = messages.find((message) => message.id === input.messageId);
     if (!failedMessage) throw new MessageServiceError('not_found', `Message not found: ${input.messageId}`);
-    if (failedMessage.status !== 'failed') throw new MessageServiceError('conflict', 'Only failed messages can be retried');
+    if (failedMessage.status !== 'failed')
+      throw new MessageServiceError('conflict', 'Only failed messages can be retried');
 
     return this.enqueue({
       sessionId: input.sessionId,
@@ -148,7 +154,11 @@ export class MessageService {
     const session = await this.store.getSession(input.sessionId);
     if (!session) throw new MessageServiceError('not_found', `Session not found: ${input.sessionId}`);
 
-    const cancelling = await this.store.requestRunCancellation({ sessionId: input.sessionId, requestedAt: new Date(), error: 'Run cancellation requested by user' });
+    const cancelling = await this.store.requestRunCancellation({
+      sessionId: input.sessionId,
+      requestedAt: new Date(),
+      error: 'Run cancellation requested by user',
+    });
     if (!cancelling) throw new MessageServiceError('conflict', 'Session has no active run to cancel');
 
     const primary = cancelling.messages[0];
@@ -157,7 +167,10 @@ export class MessageService {
       runId: cancelling.run.id,
       ...(primary ? { messageId: primary.id } : {}),
       type: 'run_cancel_requested',
-      payload: { sequences: cancelling.messages.map((message) => message.sequence), batchSize: cancelling.messages.length },
+      payload: {
+        sequences: cancelling.messages.map((message) => message.sequence),
+        batchSize: cancelling.messages.length,
+      },
     });
 
     return cancelling.messages;

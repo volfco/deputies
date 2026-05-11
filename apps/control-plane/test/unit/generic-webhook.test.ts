@@ -60,7 +60,11 @@ describe('GenericWebhookService', () => {
 
     const payload = { threadId: 'thread-1', dedupeKey: 'delivery-1', prompt: 'do work' };
     const first = await services.genericWebhooks.handle({ sourceKey: 'foo', authorization: 'Bearer secret', payload });
-    const duplicate = await services.genericWebhooks.handle({ sourceKey: 'foo', authorization: 'Bearer secret', payload });
+    const duplicate = await services.genericWebhooks.handle({
+      sourceKey: 'foo',
+      authorization: 'Bearer secret',
+      payload,
+    });
 
     expect(first.duplicate).toBe(false);
     expect(duplicate).toMatchObject({ accepted: true, duplicate: true });

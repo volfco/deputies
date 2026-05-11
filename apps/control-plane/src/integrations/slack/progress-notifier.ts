@@ -10,9 +10,11 @@ export class SlackRunProgressNotifier implements RunProgressNotifier {
     const type = 'type' in callback ? callback.type : undefined;
     const channel = 'channel' in callback ? callback.channel : undefined;
     const messageTs = 'messageTs' in callback ? callback.messageTs : undefined;
-    if (type !== 'slack' || typeof channel !== 'string' || !channel || typeof messageTs !== 'string' || !messageTs) return;
+    if (type !== 'slack' || typeof channel !== 'string' || !channel || typeof messageTs !== 'string' || !messageTs)
+      return;
 
     const response = await this.client.addReaction({ channel, timestamp: messageTs, name: 'hourglass_flowing_sand' });
-    if (!response.ok && response.error !== 'already_reacted') throw new Error(`Slack progress reaction failed${response.error ? `: ${response.error}` : ''}`);
+    if (!response.ok && response.error !== 'already_reacted')
+      throw new Error(`Slack progress reaction failed${response.error ? `: ${response.error}` : ''}`);
   }
 }

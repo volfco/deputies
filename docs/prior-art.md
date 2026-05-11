@@ -9,18 +9,18 @@ The goal is not to copy either system directly. The goal is to adopt the durable
 
 ## Summary Comparison
 
-| Area | This Design | Open-Inspect / background-agents | Open SWE |
-|---|---|---|---|
-| Harness | Flue behind runner adapter | OpenCode in sandbox runtime | Deep Agents / LangGraph |
-| Control plane | Portable Node service + Postgres | Cloudflare Workers + Durable Objects + D1/KV | LangGraph server/webapp + thread metadata/store |
-| Deployment target | Railway, ECS, Kubernetes, local | Cloudflare + Modal/Daytona | LangSmith/LangGraph oriented, pluggable sandboxes |
-| Session state | Postgres tables | Durable Object SQLite per session + D1 shared state | LangGraph thread state and metadata |
-| Queueing | Postgres messages + leases | DO-local message queue | LangGraph store queue for busy threads |
-| Events | Append-only Postgres event log + SSE | DO event table + WebSocket fanout | Agent/tool stream plus source replies |
-| Sandbox abstraction | Provider interface + capabilities | Provider lifecycle manager for Modal/Daytona | Sandbox backend protocol selected by env |
-| Runtime bridge | Optional, provider-dependent | Required sandbox bridge/supervisor | Provider-specific backend wrappers |
-| Integrations | Thin adapters with source-specific normalized inputs | Slack/GitHub/Linear bots call control plane | Webhooks normalize into LangGraph thread IDs |
-| Testing | Agent-first layered tests + emulate | Strong production code, infra-specific tests/docs | Python tests around utility/webhook behavior |
+| Area                | This Design                                          | Open-Inspect / background-agents                    | Open SWE                                          |
+| ------------------- | ---------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------- |
+| Harness             | Flue behind runner adapter                           | OpenCode in sandbox runtime                         | Deep Agents / LangGraph                           |
+| Control plane       | Portable Node service + Postgres                     | Cloudflare Workers + Durable Objects + D1/KV        | LangGraph server/webapp + thread metadata/store   |
+| Deployment target   | Railway, ECS, Kubernetes, local                      | Cloudflare + Modal/Daytona                          | LangSmith/LangGraph oriented, pluggable sandboxes |
+| Session state       | Postgres tables                                      | Durable Object SQLite per session + D1 shared state | LangGraph thread state and metadata               |
+| Queueing            | Postgres messages + leases                           | DO-local message queue                              | LangGraph store queue for busy threads            |
+| Events              | Append-only Postgres event log + SSE                 | DO event table + WebSocket fanout                   | Agent/tool stream plus source replies             |
+| Sandbox abstraction | Provider interface + capabilities                    | Provider lifecycle manager for Modal/Daytona        | Sandbox backend protocol selected by env          |
+| Runtime bridge      | Optional, provider-dependent                         | Required sandbox bridge/supervisor                  | Provider-specific backend wrappers                |
+| Integrations        | Thin adapters with source-specific normalized inputs | Slack/GitHub/Linear bots call control plane         | Webhooks normalize into LangGraph thread IDs      |
+| Testing             | Agent-first layered tests + emulate                  | Strong production code, infra-specific tests/docs   | Python tests around utility/webhook behavior      |
 
 ## What We Should Adopt From Open-Inspect
 

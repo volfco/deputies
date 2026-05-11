@@ -1,7 +1,10 @@
 import { createApp, createServices } from '../../src/app/server.js';
 import { loadConfig } from '../../src/config/index.js';
 import { maxPriorContextItems, maxPromptTextCharacters } from '../../src/integrations/prompt-bounds.js';
-import { createGitHubWebhookSignature, verifyGitHubWebhookSignature } from '../../src/integrations/github/webhook-auth.js';
+import {
+  createGitHubWebhookSignature,
+  verifyGitHubWebhookSignature,
+} from '../../src/integrations/github/webhook-auth.js';
 import { GitHubWebhookService } from '../../src/integrations/github/webhook-service.js';
 import { GitHubCompletionCallbackSender } from '../../src/integrations/github/callback-sender.js';
 import { MemoryStore } from '../../src/store/memory.js';
@@ -44,7 +47,12 @@ describe('GitHub webhook integration', () => {
     expect(messages).toHaveLength(2);
     expect(messages.map((message) => message.source)).toEqual(['github', 'github']);
     expect(messages[0]!.context?.repository).toEqual({ provider: 'github', owner: 'acme', repo: 'widget' });
-    expect(messages[0]!.context?.callback).toMatchObject({ type: 'github', owner: 'acme', repo: 'widget', issueNumber: 42 });
+    expect(messages[0]!.context?.callback).toMatchObject({
+      type: 'github',
+      owner: 'acme',
+      repo: 'widget',
+      issueNumber: 42,
+    });
     expect(messages[0]!.prompt).toContain('GitHub webhook context:\n---');
     expect(messages[0]!.prompt).toContain('Event: issues.opened');
     expect(messages[0]!.prompt).toContain('Repository: acme/widget');
@@ -63,7 +71,12 @@ describe('GitHub webhook integration', () => {
         async listIssueComments() {
           return [
             { id: 10, author: 'alice', body: 'Extra repro detail', createdAt: '2026-05-06T00:00:00Z' },
-            { id: 11, author: 'open-inspect-sidpalas', authorType: 'Bot', body: 'Deputy response that should be hidden' },
+            {
+              id: 11,
+              author: 'open-inspect-sidpalas',
+              authorType: 'Bot',
+              body: 'Deputy response that should be hidden',
+            },
             { id: 99, author: 'octocat', body: '@deputies please handle this' },
           ];
         },
@@ -82,9 +95,13 @@ describe('GitHub webhook integration', () => {
     expect(messages[0]!.prompt).toContain('Prior unprocessed GitHub comments:\n---');
     expect(messages[0]!.prompt).toContain('[alice at 2026-05-06T00:00:00Z]:');
     expect(messages[0]!.prompt).toContain('Extra repro detail');
-    expect(messages[0]!.prompt).toContain('Current tagged GitHub message:\n---\n[octocat]: @deputies please handle this');
+    expect(messages[0]!.prompt).toContain(
+      'Current tagged GitHub message:\n---\n[octocat]: @deputies please handle this',
+    );
     expect(messages[0]!.prompt).not.toContain('Deputy response that should be hidden');
-    expect(messages[0]!.prompt).not.toContain('[octocat]: @deputies please handle this\n\nPrior unprocessed GitHub comments');
+    expect(messages[0]!.prompt).not.toContain(
+      '[octocat]: @deputies please handle this\n\nPrior unprocessed GitHub comments',
+    );
     expect(messages[0]!.context?.github).toMatchObject({ commentId: 99, includedCommentIds: [10] });
   });
 
@@ -146,19 +163,28 @@ describe('GitHub webhook integration', () => {
     const priorComments = Array.from({ length: maxPriorContextItems + 2 }, (_, index) => ({
       id: index + 1,
       author: 'alice',
-      body: index === maxPriorContextItems + 1 ? `${'p'.repeat(maxPromptTextCharacters + 20)}${longPriorTail}` : `prior-comment-${index + 1}`,
+      body:
+        index === maxPriorContextItems + 1
+          ? `${'p'.repeat(maxPromptTextCharacters + 20)}${longPriorTail}`
+          : `prior-comment-${index + 1}`,
     }));
     const github = new GitHubWebhookService(store, services.sessions, services.messages, {
       issueContextFetcher: {
         async listIssueComments() {
-          return [...priorComments, { id: 99, author: 'octocat', body: `${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}` }];
+          return [
+            ...priorComments,
+            { id: 99, author: 'octocat', body: `${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}` },
+          ];
         },
       },
     });
 
     const accepted = await github.handle({
       headers: { deliveryId: 'delivery-1', event: 'issue_comment' },
-      payload: issueCommentPayload({ body: `${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}`, issueBody: `${'d'.repeat(maxPromptTextCharacters + 20)}${longDescriptionTail}` }),
+      payload: issueCommentPayload({
+        body: `${'c'.repeat(maxPromptTextCharacters + 20)}${longCurrentTail}`,
+        issueBody: `${'d'.repeat(maxPromptTextCharacters + 20)}${longDescriptionTail}`,
+      }),
     });
 
     expect(accepted.type).toBe('accepted');
@@ -171,7 +197,9 @@ describe('GitHub webhook integration', () => {
     expect(messages[0]!.prompt).not.toContain(longPriorTail);
     expect(messages[0]!.prompt).not.toContain(longCurrentTail);
     expect(messages[0]!.prompt).not.toContain(longDescriptionTail);
-    expect(messages[0]!.context?.github).toMatchObject({ includedCommentIds: priorComments.slice(-maxPriorContextItems).map((comment) => comment.id) });
+    expect(messages[0]!.context?.github).toMatchObject({
+      includedCommentIds: priorComments.slice(-maxPriorContextItems).map((comment) => comment.id),
+    });
   });
 
   it('bounds rendered GitHub diff context', async () => {
@@ -182,7 +210,9 @@ describe('GitHub webhook integration', () => {
 
     const accepted = await github.handle({
       headers: { deliveryId: 'delivery-1', event: 'pull_request_review_comment' },
-      payload: pullRequestReviewCommentPayload({ diffHunk: `${'@'.repeat(maxPromptTextCharacters + 20)}${longDiffTail}` }),
+      payload: pullRequestReviewCommentPayload({
+        diffHunk: `${'@'.repeat(maxPromptTextCharacters + 20)}${longDiffTail}`,
+      }),
     });
 
     expect(accepted.type).toBe('accepted');
@@ -205,8 +235,14 @@ describe('GitHub webhook integration', () => {
       },
     });
 
-    const issue = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({}) });
-    const comment = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({}) });
+    const issue = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({}),
+    });
+    const comment = await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({}),
+    });
 
     expect(issue.type).toBe('accepted');
     expect(comment.type).toBe('accepted');
@@ -269,8 +305,14 @@ describe('GitHub webhook integration', () => {
     const services = createServices(store);
     const github = new GitHubWebhookService(store, services.sessions, services.messages);
 
-    const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({}) });
-    const duplicate = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({}) });
+    const first = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({}),
+    });
+    const duplicate = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({}),
+    });
 
     expect(first.type).toBe('accepted');
     expect(duplicate).toEqual({ ok: true, type: 'duplicate' });
@@ -288,17 +330,31 @@ describe('GitHub webhook integration', () => {
         async postRecoveryAcknowledgement() {},
       },
     });
-    const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({}) });
+    const first = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({}),
+    });
     if (first.type !== 'accepted') throw new Error('Expected accepted GitHub event');
     await services.sessions.archive(first.session.id);
 
-    const ignored = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@deputies follow up' }) });
+    const ignored = await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@deputies follow up' }),
+    });
 
     expect(ignored).toEqual({ ok: true, type: 'ignored', reason: 'session_archived' });
     const messages = await services.messages.list(first.session.id);
     expect(messages).toHaveLength(3);
-    expect(messages[1]).toMatchObject({ source: 'github', status: 'cancelled', prompt: expect.stringContaining('Not queued') });
-    expect(messages[2]).toMatchObject({ source: 'github_notice', status: 'cancelled', prompt: expect.stringContaining('unarchive and proceed') });
+    expect(messages[1]).toMatchObject({
+      source: 'github',
+      status: 'cancelled',
+      prompt: expect.stringContaining('Not queued'),
+    });
+    expect(messages[2]).toMatchObject({
+      source: 'github_notice',
+      status: 'cancelled',
+      prompt: expect.stringContaining('unarchive and proceed'),
+    });
     expect(notices).toEqual([{ owner: 'acme', repo: 'widget', issueNumber: 42 }]);
   });
 
@@ -317,30 +373,52 @@ describe('GitHub webhook integration', () => {
         },
       },
     });
-    const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({ title: '@deputies fix this' }) });
+    const first = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({ title: '@deputies fix this' }),
+    });
     if (first.type !== 'accepted') throw new Error('Expected accepted GitHub event');
     await services.sessions.archive(first.session.id);
 
-    const restored = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: 'unarchive and proceed' }) });
+    const restored = await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: 'unarchive and proceed' }),
+    });
 
     expect(restored.type).toBe('recovered');
     await expect(services.sessions.get(first.session.id)).resolves.toMatchObject({ status: 'idle' });
     const messages = await services.messages.list(first.session.id);
     expect(messages).toHaveLength(3);
-    expect(messages[1]).toMatchObject({ source: 'github', status: 'cancelled', prompt: expect.stringContaining('No agent run was started') });
-    expect(messages[2]).toMatchObject({ source: 'github_notice', status: 'cancelled', prompt: expect.stringContaining('Unarchived and ready') });
+    expect(messages[1]).toMatchObject({
+      source: 'github',
+      status: 'cancelled',
+      prompt: expect.stringContaining('No agent run was started'),
+    });
+    expect(messages[2]).toMatchObject({
+      source: 'github_notice',
+      status: 'cancelled',
+      prompt: expect.stringContaining('Unarchived and ready'),
+    });
     expect(notices).toEqual([{ recovery: { owner: 'acme', repo: 'widget', issueNumber: 42 } }]);
   });
 
   it('queues GitHub recovery comments that include additional instructions', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
-    const github = new GitHubWebhookService(store, services.sessions, services.messages, { triggerPhrases: ['deputies'] });
-    const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({ title: '@deputies fix this' }) });
+    const github = new GitHubWebhookService(store, services.sessions, services.messages, {
+      triggerPhrases: ['deputies'],
+    });
+    const first = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({ title: '@deputies fix this' }),
+    });
     if (first.type !== 'accepted') throw new Error('Expected accepted GitHub event');
     await services.sessions.archive(first.session.id);
 
-    const restored = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@Deputies unarchive and proceed then summarize the PR' }) });
+    const restored = await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@Deputies unarchive and proceed then summarize the PR' }),
+    });
 
     expect(restored.type).toBe('accepted');
     const messages = await services.messages.list(first.session.id);
@@ -351,13 +429,24 @@ describe('GitHub webhook integration', () => {
   it('queues archived GitHub instructions when users recover with the phrase', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
-    const github = new GitHubWebhookService(store, services.sessions, services.messages, { triggerPhrases: ['deputies'] });
-    const first = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issues' }, payload: issuePayload({ title: '@deputies fix this' }) });
+    const github = new GitHubWebhookService(store, services.sessions, services.messages, {
+      triggerPhrases: ['deputies'],
+    });
+    const first = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issues' },
+      payload: issuePayload({ title: '@deputies fix this' }),
+    });
     if (first.type !== 'accepted') throw new Error('Expected accepted GitHub event');
     await services.sessions.archive(first.session.id);
 
-    await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@Deputies please summarize the PR' }) });
-    const recovered = await github.handle({ headers: { deliveryId: 'delivery-3', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@Deputies unarchive and proceed', commentId: 100 }) });
+    await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@Deputies please summarize the PR' }),
+    });
+    const recovered = await github.handle({
+      headers: { deliveryId: 'delivery-3', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@Deputies unarchive and proceed', commentId: 100 }),
+    });
 
     expect(recovered.type).toBe('accepted');
     const messages = await services.messages.list(first.session.id);
@@ -412,7 +501,10 @@ describe('GitHub webhook integration', () => {
     });
     const currentCommentTag = await github.handle({
       headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
-      payload: issueCommentPayload({ issueBody: '/deputies was requested earlier', body: '/deputies ordinary follow-up' }),
+      payload: issueCommentPayload({
+        issueBody: '/deputies was requested earlier',
+        body: '/deputies ordinary follow-up',
+      }),
     });
 
     expect(staleIssueTag).toEqual({ ok: true, type: 'ignored', reason: 'missing_trigger_phrase' });
@@ -426,9 +518,18 @@ describe('GitHub webhook integration', () => {
       triggerPhrases: ['/deputies', 'deputies:', 'acme/deputies'],
     });
 
-    const slash = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issue_comment' }, payload: issueCommentPayload({ body: '/deputies please check this' }) });
-    const text = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: 'deputies: follow up' }) });
-    const team = await github.handle({ headers: { deliveryId: 'delivery-3', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@acme/deputies review this' }) });
+    const slash = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '/deputies please check this' }),
+    });
+    const text = await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: 'deputies: follow up' }),
+    });
+    const team = await github.handle({
+      headers: { deliveryId: 'delivery-3', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@acme/deputies review this' }),
+    });
 
     expect(slash.type).toBe('accepted');
     expect(text.type).toBe('accepted');
@@ -442,9 +543,18 @@ describe('GitHub webhook integration', () => {
       triggerPhrases: ['@deputies', '/deputies'],
     });
 
-    const mentionSubstring = await github.handle({ headers: { deliveryId: 'delivery-1', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@deputieship is not a trigger' }) });
-    const slashSubstring = await github.handle({ headers: { deliveryId: 'delivery-2', event: 'issue_comment' }, payload: issueCommentPayload({ body: '/deputieship is not a trigger' }) });
-    const exact = await github.handle({ headers: { deliveryId: 'delivery-3', event: 'issue_comment' }, payload: issueCommentPayload({ body: '@deputies please check' }) });
+    const mentionSubstring = await github.handle({
+      headers: { deliveryId: 'delivery-1', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@deputieship is not a trigger' }),
+    });
+    const slashSubstring = await github.handle({
+      headers: { deliveryId: 'delivery-2', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '/deputieship is not a trigger' }),
+    });
+    const exact = await github.handle({
+      headers: { deliveryId: 'delivery-3', event: 'issue_comment' },
+      payload: issueCommentPayload({ body: '@deputies please check' }),
+    });
 
     expect(mentionSubstring).toEqual({ ok: true, type: 'ignored', reason: 'missing_trigger_phrase' });
     expect(slashSubstring).toEqual({ ok: true, type: 'ignored', reason: 'missing_trigger_phrase' });
@@ -470,7 +580,8 @@ describe('GitHub webhook integration', () => {
 
     expect(reviewComment.type).toBe('accepted');
     expect(review.type).toBe('accepted');
-    if (reviewComment.type !== 'accepted' || review.type !== 'accepted') throw new Error('Expected accepted GitHub events');
+    if (reviewComment.type !== 'accepted' || review.type !== 'accepted')
+      throw new Error('Expected accepted GitHub events');
     expect(reviewComment.session.id).toBe(review.session.id);
 
     const messages = await services.messages.list(reviewComment.session.id);
@@ -485,14 +596,17 @@ describe('GitHub webhook integration', () => {
 
   it('accepts signed GitHub webhook requests without API auth', async () => {
     const store = new MemoryStore();
-    const app = createApp(loadConfig({
-      API_AUTH_MODE: 'bearer',
-      API_BEARER_TOKEN: 'secret',
-      GITHUB_WEBHOOK_SECRET: secret,
-      GITHUB_ALLOWED_USERS: 'octocat',
-      GITHUB_ALLOWED_ORGANIZATIONS: 'acme',
-      GITHUB_TRIGGER_PHRASES: '/deputies',
-    }), createServices(store));
+    const app = createApp(
+      loadConfig({
+        API_AUTH_MODE: 'bearer',
+        API_BEARER_TOKEN: 'secret',
+        GITHUB_WEBHOOK_SECRET: secret,
+        GITHUB_ALLOWED_USERS: 'octocat',
+        GITHUB_ALLOWED_ORGANIZATIONS: 'acme',
+        GITHUB_TRIGGER_PHRASES: '/deputies',
+      }),
+      createServices(store),
+    );
     const body = JSON.stringify(issuePayload({ title: '/deputies fix the flaky test' }));
 
     const response = await app.request('/webhooks/github/events', {
@@ -514,26 +628,32 @@ describe('GitHub webhook integration', () => {
   it('does not post acknowledgement-only GitHub completion comments', async () => {
     const comments: unknown[] = [];
     let accessCalls = 0;
-    const sender = new GitHubCompletionCallbackSender({
-      async createIssueComment(input) {
-        comments.push(input);
-        return { id: 1 };
+    const sender = new GitHubCompletionCallbackSender(
+      {
+        async createIssueComment(input) {
+          comments.push(input);
+          return { id: 1 };
+        },
       },
-    }, {
-      async getRepositoryAccess() {
-        accessCalls += 1;
-        return { auth: { token: 'ghs_token' } };
+      {
+        async getRepositoryAccess() {
+          accessCalls += 1;
+          return { auth: { token: 'ghs_token' } };
+        },
       },
-    });
+    );
 
-    await sender.deliver({ type: 'github', target: { owner: 'acme', repo: 'widget', issueNumber: 42 } }, {
-      event: 'message_completed',
-      sessionId: 'session-1',
-      runId: 'run-1',
-      messageId: 'message-1',
-      text: 'Webhook event processed: issue_comment.created. New comment from sidpalas has been acknowledged.',
-      artifacts: [],
-    });
+    await sender.deliver(
+      { type: 'github', target: { owner: 'acme', repo: 'widget', issueNumber: 42 } },
+      {
+        event: 'message_completed',
+        sessionId: 'session-1',
+        runId: 'run-1',
+        messageId: 'message-1',
+        text: 'Webhook event processed: issue_comment.created. New comment from sidpalas has been acknowledged.',
+        artifacts: [],
+      },
+    );
 
     expect(comments).toEqual([]);
     expect(accessCalls).toBe(0);
@@ -541,16 +661,19 @@ describe('GitHub webhook integration', () => {
 
   it('posts meaningful GitHub completion comments only', async () => {
     const comments: unknown[] = [];
-    const sender = new GitHubCompletionCallbackSender({
-      async createIssueComment(input) {
-        comments.push(input);
-        return { id: 1 };
+    const sender = new GitHubCompletionCallbackSender(
+      {
+        async createIssueComment(input) {
+          comments.push(input);
+          return { id: 1 };
+        },
       },
-    }, {
-      async getRepositoryAccess() {
-        return { auth: { token: 'ghs_token' } };
+      {
+        async getRepositoryAccess() {
+          return { auth: { token: 'ghs_token' } };
+        },
       },
-    });
+    );
     const callback = { type: 'github' as const, target: { owner: 'acme', repo: 'widget', issueNumber: 42 } };
 
     await sender.deliver(callback, completionPayload('Received and acknowledged.'));
@@ -563,28 +686,34 @@ describe('GitHub webhook integration', () => {
 
   it('appends session links and reply hints to GitHub completion comments', async () => {
     const comments: unknown[] = [];
-    const sender = new GitHubCompletionCallbackSender({
-      async createIssueComment(input) {
-        comments.push(input);
-        return { id: 1 };
+    const sender = new GitHubCompletionCallbackSender(
+      {
+        async createIssueComment(input) {
+          comments.push(input);
+          return { id: 1 };
+        },
       },
-    }, {
-      async getRepositoryAccess() {
-        return { auth: { token: 'ghs_token' } };
+      {
+        async getRepositoryAccess() {
+          return { auth: { token: 'ghs_token' } };
+        },
       },
-    });
+    );
 
-    await sender.deliver({
-      type: 'github',
-      target: {
-        owner: 'acme',
-        repo: 'widget',
-        issueNumber: 42,
-        includeSessionLink: true,
-        sessionUrl: 'https://deputies.example?session=session-1',
-        replyHint: 'Include the phrase `/deputies` to continue here.',
+    await sender.deliver(
+      {
+        type: 'github',
+        target: {
+          owner: 'acme',
+          repo: 'widget',
+          issueNumber: 42,
+          includeSessionLink: true,
+          sessionUrl: 'https://deputies.example?session=session-1',
+          replyHint: 'Include the phrase `/deputies` to continue here.',
+        },
       },
-    }, completionPayload('I fixed the issue.'));
+      completionPayload('I fixed the issue.'),
+    );
 
     expect(comments).toHaveLength(1);
     expect(comments[0]).toMatchObject({
@@ -594,28 +723,34 @@ describe('GitHub webhook integration', () => {
 
   it('keeps GitHub callback footer rendering out of band from payload text', async () => {
     const comments: unknown[] = [];
-    const sender = new GitHubCompletionCallbackSender({
-      async createIssueComment(input) {
-        comments.push(input);
-        return { id: 1 };
+    const sender = new GitHubCompletionCallbackSender(
+      {
+        async createIssueComment(input) {
+          comments.push(input);
+          return { id: 1 };
+        },
       },
-    }, {
-      async getRepositoryAccess() {
-        return { auth: { token: 'ghs_token' } };
+      {
+        async getRepositoryAccess() {
+          return { auth: { token: 'ghs_token' } };
+        },
       },
-    });
+    );
 
-    await sender.deliver({
-      type: 'github',
-      target: {
-        owner: 'acme',
-        repo: 'widget',
-        issueNumber: 42,
-        includeSessionLink: true,
-        sessionUrl: 'https://deputies.example?session=session-1',
-        replyHint: 'Include the phrase `/deputies` to continue here.',
+    await sender.deliver(
+      {
+        type: 'github',
+        target: {
+          owner: 'acme',
+          repo: 'widget',
+          issueNumber: 42,
+          includeSessionLink: true,
+          sessionUrl: 'https://deputies.example?session=session-1',
+          replyHint: 'Include the phrase `/deputies` to continue here.',
+        },
       },
-    }, completionPayload('No work was performed.'));
+      completionPayload('No work was performed.'),
+    );
 
     expect(comments).toHaveLength(1);
     expect(comments[0]).toMatchObject({
@@ -635,10 +770,16 @@ function completionPayload(text: string) {
   };
 }
 
-function issuePayload(input: { action?: string; owner?: string; repo?: string; sender?: string; title?: string; body?: string } = {}) {
+function issuePayload(
+  input: { action?: string; owner?: string; repo?: string; sender?: string; title?: string; body?: string } = {},
+) {
   return {
     action: input.action ?? 'opened',
-    repository: { owner: { login: input.owner ?? 'acme' }, name: input.repo ?? 'widget', full_name: `${input.owner ?? 'acme'}/${input.repo ?? 'widget'}` },
+    repository: {
+      owner: { login: input.owner ?? 'acme' },
+      name: input.repo ?? 'widget',
+      full_name: `${input.owner ?? 'acme'}/${input.repo ?? 'widget'}`,
+    },
     sender: { login: input.sender ?? 'octocat', type: 'User' },
     issue: {
       number: 42,

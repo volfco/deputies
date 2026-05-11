@@ -175,7 +175,12 @@ export async function listMessages(sessionId: string, token: string): Promise<Me
   return body.messages;
 }
 
-export async function enqueueMessage(input: { sessionId: string; prompt: string; token: string; repository?: string | RepositoryInput }): Promise<Message> {
+export async function enqueueMessage(input: {
+  sessionId: string;
+  prompt: string;
+  token: string;
+  repository?: string | RepositoryInput;
+}): Promise<Message> {
   const requestBody: { prompt: string; repository?: string | RepositoryInput } = { prompt: input.prompt };
   if (input.repository) requestBody.repository = input.repository;
   const body = await request<{ message: Message }>(`/sessions/${input.sessionId}/messages`, {
@@ -186,7 +191,12 @@ export async function enqueueMessage(input: { sessionId: string; prompt: string;
   return body.message;
 }
 
-export async function updateMessage(input: { sessionId: string; messageId: string; prompt: string; token: string }): Promise<Message> {
+export async function updateMessage(input: {
+  sessionId: string;
+  messageId: string;
+  prompt: string;
+  token: string;
+}): Promise<Message> {
   const body = await request<{ message: Message }>(`/sessions/${input.sessionId}/messages/${input.messageId}`, {
     method: 'PATCH',
     token: input.token,
@@ -241,7 +251,10 @@ export async function resumeQueue(input: { sessionId: string; token: string }): 
 }
 
 export async function listEvents(sessionId: string, token: string, after?: number): Promise<AgentEvent[]> {
-  const body = await request<{ events: AgentEvent[] }>(`/sessions/${sessionId}/events${after ? `?after=${after}` : ''}`, { token });
+  const body = await request<{ events: AgentEvent[] }>(
+    `/sessions/${sessionId}/events${after ? `?after=${after}` : ''}`,
+    { token },
+  );
   return body.events;
 }
 
@@ -255,12 +268,19 @@ export async function listCallbacks(sessionId: string, token: string): Promise<C
   return body.callbacks;
 }
 
-export async function replayCallback(input: { sessionId: string; callbackId: string; token: string }): Promise<CallbackDelivery> {
-  const body = await request<{ callback: CallbackDelivery }>(`/sessions/${input.sessionId}/callbacks/${input.callbackId}/replay`, {
-    method: 'POST',
-    token: input.token,
-    body: {},
-  });
+export async function replayCallback(input: {
+  sessionId: string;
+  callbackId: string;
+  token: string;
+}): Promise<CallbackDelivery> {
+  const body = await request<{ callback: CallbackDelivery }>(
+    `/sessions/${input.sessionId}/callbacks/${input.callbackId}/replay`,
+    {
+      method: 'POST',
+      token: input.token,
+      body: {},
+    },
+  );
   return body.callback;
 }
 
@@ -314,7 +334,10 @@ async function streamEventResponse(
       signal: abort.signal,
     });
   } catch (error) {
-    if (!input.signal.aborted) dispatchApiConnectionDelayed(idleTimedOut ? 'Realtime connection went idle.' : 'Realtime connection interrupted.');
+    if (!input.signal.aborted)
+      dispatchApiConnectionDelayed(
+        idleTimedOut ? 'Realtime connection went idle.' : 'Realtime connection interrupted.',
+      );
     throw error;
   }
 

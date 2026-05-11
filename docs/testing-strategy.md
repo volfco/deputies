@@ -14,16 +14,16 @@ Rules:
 
 ## Test Layers
 
-| Layer | Purpose | Dependencies |
-|---|---|---|
-| Unit | Pure logic and domain decisions | None |
-| Contract | API/event/schema stability | Schema validators |
-| Integration | Module seams with real Postgres/emulators | Postgres, emulate |
-| E2E | Full app behavior with fake runner/sandbox | App, Postgres |
-| UAT | Built artifact behavior | Built server, Postgres, emulate |
-| Adversarial | Hostile inputs and edge cases | Varies |
-| Eval | Prompt/context/routing behavior | Promptfoo or equivalent later |
-| Architecture fitness | Dependency boundaries | Static import checks |
+| Layer                | Purpose                                    | Dependencies                    |
+| -------------------- | ------------------------------------------ | ------------------------------- |
+| Unit                 | Pure logic and domain decisions            | None                            |
+| Contract             | API/event/schema stability                 | Schema validators               |
+| Integration          | Module seams with real Postgres/emulators  | Postgres, emulate               |
+| E2E                  | Full app behavior with fake runner/sandbox | App, Postgres                   |
+| UAT                  | Built artifact behavior                    | Built server, Postgres, emulate |
+| Adversarial          | Hostile inputs and edge cases              | Varies                          |
+| Eval                 | Prompt/context/routing behavior            | Promptfoo or equivalent later   |
+| Architecture fitness | Dependency boundaries                      | Static import checks            |
 
 ## Unit Tests
 

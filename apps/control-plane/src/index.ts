@@ -1,7 +1,14 @@
 import { AppLifecycle, installProcessShutdownHandlers, type CloseableResource } from './app/lifecycle.js';
 import { createServer, createServices } from './app/server.js';
 import { HttpCompletionCallbackSender, type CompletionCallbackSender } from './callbacks/service.js';
-import { loadConfig, requireDatabaseUrl, requireDaytonaApiKey, requireDockerOrchestratorUrl, requireFlueModel, requireGitHubAppCredentials } from './config/index.js';
+import {
+  loadConfig,
+  requireDatabaseUrl,
+  requireDaytonaApiKey,
+  requireDockerOrchestratorUrl,
+  requireFlueModel,
+  requireGitHubAppCredentials,
+} from './config/index.js';
 import { GitHubArchivedSessionNotifier } from './integrations/github/archived-session-notifier.js';
 import { GitHubCompletionCallbackSender } from './integrations/github/callback-sender.js';
 import { GitHubClient } from './integrations/github/client.js';
@@ -31,7 +38,8 @@ const config = loadConfig(process.env);
 const store = config.appStore === 'postgres' ? new PostgresStore(requireDatabaseUrl(config)) : new MemoryStore();
 const sandboxProvider = createSandboxProvider();
 const services = createServices(store, { sandboxProvider });
-const githubClient = config.githubAppId || config.githubAppPrivateKey ? new GitHubClient({ apiBaseUrl: config.githubApiBaseUrl }) : null;
+const githubClient =
+  config.githubAppId || config.githubAppPrivateKey ? new GitHubClient({ apiBaseUrl: config.githubApiBaseUrl }) : null;
 const githubRepositoryAccess = githubClient ? createGitHubRepositoryAccess(githubClient) : null;
 if (githubClient && githubRepositoryAccess) {
   services.githubReactionSender = new GitHubReactionSender(githubClient, githubRepositoryAccess);
@@ -44,7 +52,10 @@ let workerLoop: WorkerLoopHandle | undefined;
 let sandboxReaper: ReturnType<typeof startSandboxReaper> | undefined;
 
 if ('close' in store && typeof store.close === 'function') resources.push(store as CloseableResource);
-if (store instanceof PostgresStore && (config.runMode === 'all' || config.runMode === 'api' || config.runMode === 'worker')) {
+if (
+  store instanceof PostgresStore &&
+  (config.runMode === 'all' || config.runMode === 'api' || config.runMode === 'worker')
+) {
   resources.unshift(await store.listenEvents((event) => services.events.publishExternal(event)));
 }
 
@@ -100,10 +111,15 @@ if (config.runMode === 'all' || config.runMode === 'worker') {
 function createCallbackSenders(): CompletionCallbackSender[] {
   const senders: CompletionCallbackSender[] = [new HttpCompletionCallbackSender()];
   if (config.slackBotToken) {
-    senders.push(new SlackCompletionCallbackSender(new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken })));
+    senders.push(
+      new SlackCompletionCallbackSender(
+        new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }),
+      ),
+    );
   }
   if (config.githubAppId || config.githubAppPrivateKey) {
-    if (!githubClient || !githubRepositoryAccess) throw new Error('GitHub callback sender requires GitHub App credentials');
+    if (!githubClient || !githubRepositoryAccess)
+      throw new Error('GitHub callback sender requires GitHub App credentials');
     senders.push(new GitHubCompletionCallbackSender(githubClient, githubRepositoryAccess));
   }
   return senders;
@@ -111,7 +127,11 @@ function createCallbackSenders(): CompletionCallbackSender[] {
 
 function createProgressNotifiers() {
   if (!config.slackBotToken) return [];
-  return [new SlackRunProgressNotifier(new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }))];
+  return [
+    new SlackRunProgressNotifier(
+      new SlackClient({ apiBaseUrl: config.slackApiBaseUrl, botToken: config.slackBotToken }),
+    ),
+  ];
 }
 
 function createRepositoryAccess() {
@@ -142,26 +162,33 @@ installProcessShutdownHandlers(new AppLifecycle(lifecycleOptions));
 function createSandboxProvider(): SandboxProvider {
   if (config.sandboxProvider === 'fake') return new FakeSandboxProvider();
   if (config.sandboxProvider === 'local') {
-    return new LocalSandboxProvider(config.localSandboxAllowedCommands.length ? { allowedCommands: config.localSandboxAllowedCommands } : {});
+    return new LocalSandboxProvider(
+      config.localSandboxAllowedCommands.length ? { allowedCommands: config.localSandboxAllowedCommands } : {},
+    );
   }
   if (config.sandboxProvider === 'docker') {
-    const orchestrator = config.dockerOrchestratorMode === 'http'
-      ? new HttpDockerOrchestratorClient(optional({ baseUrl: requireDockerOrchestratorUrl(config), token: config.dockerOrchestratorToken }))
-      : new InProcessDockerOrchestrator(optional({
-        image: config.dockerSandboxImage,
-        workspacePath: config.dockerSandboxWorkspacePath,
-        bridgeHost: config.dockerSandboxBridgeHost,
-        network: config.dockerSandboxNetwork,
-        memory: config.dockerSandboxMemory,
-        cpus: config.dockerSandboxCpus,
-      }));
+    const orchestrator =
+      config.dockerOrchestratorMode === 'http'
+        ? new HttpDockerOrchestratorClient(
+            optional({ baseUrl: requireDockerOrchestratorUrl(config), token: config.dockerOrchestratorToken }),
+          )
+        : new InProcessDockerOrchestrator(
+            optional({
+              image: config.dockerSandboxImage,
+              workspacePath: config.dockerSandboxWorkspacePath,
+              bridgeHost: config.dockerSandboxBridgeHost,
+              network: config.dockerSandboxNetwork,
+              memory: config.dockerSandboxMemory,
+              cpus: config.dockerSandboxCpus,
+            }),
+          );
     return new DockerSandboxProvider({ orchestrator });
   }
   if (config.sandboxProvider === 'daytona') {
-      const options = {
-        apiKey: requireDaytonaApiKey(config),
-        idleTimeoutMs: config.sandboxIdleTimeoutMs,
-      };
+    const options = {
+      apiKey: requireDaytonaApiKey(config),
+      idleTimeoutMs: config.sandboxIdleTimeoutMs,
+    };
     if (config.daytonaApiUrl) Object.assign(options, { apiUrl: config.daytonaApiUrl });
     if (config.daytonaTarget) Object.assign(options, { target: config.daytonaTarget });
     if (config.daytonaImage) Object.assign(options, { image: config.daytonaImage });

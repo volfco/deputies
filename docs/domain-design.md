@@ -226,14 +226,14 @@ Rules:
 
 External systems must be translated at the boundary.
 
-| External System | Internal Translation |
-|---|---|
-| Slack events | source-specific normalized event + external thread mapping + callback target |
-| GitHub webhooks | source-specific normalized event + prompt context + callback target |
-| Linear webhooks | planned normalized event + repo resolution + callback target |
-| Generic webhooks | required simple payload shape -> session/message/context/callback target |
-| Flue | `Runner` interface + Flue session store |
-| Sandbox providers | `SandboxProvider` interface + capabilities |
+| External System   | Internal Translation                                                         |
+| ----------------- | ---------------------------------------------------------------------------- |
+| Slack events      | source-specific normalized event + external thread mapping + callback target |
+| GitHub webhooks   | source-specific normalized event + prompt context + callback target          |
+| Linear webhooks   | planned normalized event + repo resolution + callback target                 |
+| Generic webhooks  | required simple payload shape -> session/message/context/callback target     |
+| Flue              | `Runner` interface + Flue session store                                      |
+| Sandbox providers | `SandboxProvider` interface + capabilities                                   |
 
 Do not let external payload shapes leak into core session/message/run services.
 

@@ -150,7 +150,10 @@ export class SandboxCleanupService {
     return { destroyed: 0, stopped, failed };
   }
 
-  private async destroySandboxes(sandboxes: SandboxRecord[], reason: string): Promise<Omit<SandboxCleanupResult, 'stopped'>> {
+  private async destroySandboxes(
+    sandboxes: SandboxRecord[],
+    reason: string,
+  ): Promise<Omit<SandboxCleanupResult, 'stopped'>> {
     let destroyed = 0;
     let failed = 0;
 

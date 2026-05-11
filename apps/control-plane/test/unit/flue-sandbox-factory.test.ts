@@ -53,7 +53,10 @@ describe('sandboxHandleToFlueFactory', () => {
       },
     };
 
-    const env = await sandboxHandleToFlueFactory(handle).createSessionEnv({ id: 'session-1', cwd: '/workspace/project' });
+    const env = await sandboxHandleToFlueFactory(handle).createSessionEnv({
+      id: 'session-1',
+      cwd: '/workspace/project',
+    });
 
     await env.writeFile('file.txt', 'hello');
     expect(await env.readFile('file.txt')).toBe('hello');
