@@ -1,0 +1,71 @@
+name: deputies
+
+include:
+  # Includes shared services: postgres, control-plane-migrate, and web.
+  - docker-compose.common.yml
+
+services:
+  api:
+    image: deputies-control-plane-api
+    build:
+      context: ../..
+      dockerfile: apps/control-plane/Dockerfile
+    env_file:
+      - ../../.env.local
+    environment:
+      PORT: 3583
+      RUN_MODE: api
+      DATABASE_URL: postgres://flue:flue@postgres:5432/flue
+      TEST_DATABASE_URL: postgres://flue:flue@postgres:5432/flue_test
+      DOCKER_ORCHESTRATOR_MODE: http
+      DOCKER_ORCHESTRATOR_URL: http://docker-orchestrator:3585
+      AUTH_SUCCESS_REDIRECT_URL: http://localhost:5173
+      WEB_BASE_URL: http://localhost:5173
+      GITHUB_APP_CALLBACK_URL: http://localhost:5173/auth/oauth/github/callback
+    ports:
+      - '3583:3583'
+    depends_on:
+      control-plane-migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: deputies-control-plane-worker
+    build:
+      context: ../..
+      dockerfile: apps/control-plane/Dockerfile
+    env_file:
+      - ../../.env.local
+    environment:
+      RUN_MODE: worker
+      FLUE_OPENAI_CODEX_AUTH_FILE: /run/secrets/openai-codex-auth.json
+      DATABASE_URL: postgres://flue:flue@postgres:5432/flue
+      TEST_DATABASE_URL: postgres://flue:flue@postgres:5432/flue_test
+      DOCKER_ORCHESTRATOR_MODE: http
+      DOCKER_ORCHESTRATOR_URL: http://docker-orchestrator:3585
+    depends_on:
+      control-plane-migrate:
+        condition: service_completed_successfully
+      docker-orchestrator:
+        condition: service_started
+    scale: 2
+    volumes:
+      - ${HOME}/.pi/agent/auth.json:/run/secrets/openai-codex-auth.json
+
+  docker-orchestrator:
+    image: deputies-control-plane-docker-orchestrator
+    build:
+      context: ../..
+      dockerfile: apps/control-plane/Dockerfile
+    env_file:
+      - ../../.env.local
+    environment:
+      DOCKER_ORCHESTRATOR_PORT: 3585
+      DOCKER_SANDBOX_BRIDGE_HOST: host.docker.internal
+    command: ['node', 'apps/control-plane/dist/sandbox/docker-orchestrator-server.js']
+    ports:
+      - '3585:3585'
+    user: root
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

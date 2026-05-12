@@ -1,0 +1,47 @@
+services:
+  control-plane-migrate:
+    image: deputies-control-plane-migrate
+    build:
+      context: ../..
+      dockerfile: apps/control-plane/Dockerfile
+    env_file:
+      - ../../.env.local
+    environment:
+      DATABASE_URL: postgres://flue:flue@postgres:5432/flue
+    command: ['node', 'apps/control-plane/dist/db/migrate.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: deputies-web
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ''
+    environment:
+      PORT: 5173
+      API_UPSTREAM: http://api:3583
+    ports:
+      - '5173:5173'
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: flue
+      POSTGRES_PASSWORD: flue
+      POSTGRES_DB: flue
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-test-db.sql:/docker-entrypoint-initdb.d/10-init-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flue -d flue']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

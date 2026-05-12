@@ -12,7 +12,35 @@ The system should be deployable to:
 
 Cloud-specific primitives such as Durable Objects, D1, KV, or provider-native queues must not be required for correctness.
 
-## Initial Deployment Shape
+## Deployment Modes
+
+The control plane can run as a monolith or as split services. Both modes share the same schema, queueing model, leases, integrations, and sandbox contracts.
+
+Terminology in this document:
+
+- `SandboxProvider` is the code-level adapter interface inside `apps/control-plane/src/sandbox`.
+- A sandbox backend is the runtime system the adapter controls or calls, such as Docker, local processes, Daytona, Kubernetes, or ECS.
+- First-party sandbox backends are operated by this system and can separate backend control from sandbox runtime.
+- Third-party sandbox backends own both their control API and runtime environment behind an external service boundary.
+
+Run modes:
+
+```txt
+RUN_MODE=all       # API + worker in one process
+RUN_MODE=api       # API only
+RUN_MODE=worker    # worker only
+```
+
+### Monolith Mode
+
+Monolith mode runs API, integration, event streaming, worker, runner, and sandbox lifecycle work in one process. It is the smallest operational shape.
+
+Responsibilities:
+
+- API, auth, integration webhooks, and event streams.
+- Queue writes, worker polling, run leases, Flue execution, and event normalization.
+- Sandbox lifecycle and cleanup.
+- Durable state in Postgres, with optional large artifact storage.
 
 ```txt
 background-agent service
@@ -40,23 +68,133 @@ Object storage, optional at first
   large artifacts
 ```
 
-Run modes:
+```mermaid
+flowchart LR
+  subgraph Ingress[Ingress]
+    direction TB
+    Client[Web UI / API client]
+    Integration[Slack / GitHub / webhook]
+  end
 
-```txt
-RUN_MODE=all       # API + worker in one process, default MVP
-RUN_MODE=api       # API only, future split
-RUN_MODE=worker    # Worker only, future split
+  subgraph Runtime[Control plane process<br/>RUN_MODE=all]
+    direction TB
+    API[API routes + auth + event streams]
+    Worker[Worker loop + leases<br/>Flue runner adapter]
+    FirstPartyControl[First-party sandbox control<br/>e.g. Docker orchestrator]
+    API --> Worker
+    Worker --> FirstPartyControl
+  end
+
+  subgraph Durable[Durable state]
+    direction TB
+    Postgres[(Postgres)]
+    ObjectStorage[(Object storage<br/>optional)]
+  end
+
+  subgraph SandboxLayer[Sandbox layer]
+    direction TB
+    FirstPartySandbox[First-party sandbox runtime<br/>bridge process in sandbox]
+    ThirdPartyBackend[Third-party sandbox backend<br/>e.g. Daytona]
+  end
+
+  Client <-->|HTTP + SSE| API
+  Integration <-->|webhooks + callbacks| API
+  API <-->|sessions + events| Postgres
+  Worker <-->|queue + leases + events| Postgres
+  Worker -->|artifact blobs| ObjectStorage
+  FirstPartyControl -->|provisions + lifecycle| FirstPartySandbox
+  Worker <-->|execute commands + fs| FirstPartySandbox
+  Worker <-->|lifecycle + execute commands + fs| ThirdPartyBackend
 ```
 
-Process lifecycle:
+### Split-Service Mode
+
+Split-service mode runs API and workers as separate processes so they can scale, isolate resources, and roll out independently.
+
+The API does not call workers directly. It writes durable state to Postgres; workers claim runnable work from Postgres using leases.
+
+API responsibilities:
+
+- API, auth, integration webhooks, and event streams.
+- Request validation, integration normalization, queue writes, dedupe, and state reads.
+- Cancellation/archive requests. The API does not execute agent runs.
+
+Worker responsibilities:
+
+- Polling, run leases, heartbeats, stale lease recovery, and active-run exclusivity.
+- Sandbox lifecycle, Flue execution, cancellation, and event normalization.
+- Artifact recording and run/message finalization.
+
+Shared durable state:
+
+- Postgres stores sessions, messages, runs, leases, events, sandbox records, auth sessions, and integration mappings.
+- Object storage is optional for large artifacts; Postgres remains the source of truth for artifact metadata.
+
+```mermaid
+flowchart LR
+  subgraph Ingress[Ingress]
+    direction TB
+    Client[Web UI / API client]
+    Integration[Slack / GitHub / webhook]
+  end
+
+  subgraph APIService[API tier]
+    direction TB
+    API[API service<br/>RUN_MODE=api]
+  end
+
+  subgraph WorkerTier[Worker tier]
+    Workers[Worker service replicas<br/>RUN_MODE=worker<br/>Flue runner adapter]
+  end
+
+  subgraph Durable[Durable state]
+    direction TB
+    Postgres[(Postgres<br/>queue + leases + events)]
+    ObjectStorage[(Object storage<br/>optional)]
+  end
+
+  subgraph Execution[Execution layer]
+    direction TB
+    FirstPartyControl[First-party sandbox control<br/>e.g. Docker orchestrator]
+    FirstPartySandbox[First-party sandbox runtime<br/>bridge process in sandbox]
+    ThirdPartyBackend[Third-party sandbox backend<br/>e.g. Daytona]
+  end
+
+  Client <-->|HTTP + SSE| API
+  Integration <-->|webhooks + callbacks| API
+  API <-->|sessions + events| Postgres
+  API -->|artifact metadata| ObjectStorage
+  Workers <-->|queue + leases + events| Postgres
+  Workers -->|artifact blobs| ObjectStorage
+  Workers <-->|lifecycle requests| FirstPartyControl
+  FirstPartyControl -->|provisions + lifecycle| FirstPartySandbox
+  Workers <-->|execute commands + fs| FirstPartySandbox
+  Workers <-->|lifecycle + execute commands + fs| ThirdPartyBackend
+```
+
+Sandbox backends have two shapes. First-party backends separate sandbox control from sandbox runtime. Docker is the current example, but the shape also fits Firecracker, EC2, Kubernetes, or ECS. Workers use first-party control for lifecycle operations, then talk directly to the sandbox bridge for shell/filesystem work. Third-party backends, such as Daytona, colocate control and runtime behind the backend API.
+
+Product custom tools run in the trusted worker process. Sandbox-backed shell/filesystem tools run through the sandbox bridge. With first-party backends, lifecycle traffic and tool traffic are separate; with third-party backends, both go through the backend API.
+
+With `SANDBOX_PROVIDER=docker`, Docker orchestration can run in-process or as a separate HTTP service.
+
+Docker orchestrator responsibilities:
+
+- Hold Docker daemon access and runtime configuration.
+- Create, start, stop, inspect, and destroy sandbox containers.
+- Keep API and worker services free of direct Docker socket access.
+
+The preferred Docker orchestrator deployment is colocated with the Docker daemon and uses the daemon's Unix socket. API and worker services authenticate only to the orchestrator HTTP API; they never receive Docker socket access.
+
+Remote Docker daemon access is possible via `DOCKER_HOST`, `DOCKER_TLS_VERIFY`, and `DOCKER_CERT_PATH`. In that shape, Docker auth is handled by Docker transport credentials, while API/worker-to-orchestrator auth still uses `DOCKER_ORCHESTRATOR_TOKEN`.
+
+### Process Lifecycle
 
 - `SIGTERM` and `SIGINT` trigger graceful shutdown.
 - The HTTP server stops accepting new requests.
 - Worker polling stops and waits for any in-flight `processNext()` call to finish.
 - Postgres-backed stores are closed before process exit.
 - Shutdown has a bounded timeout so orchestrators such as Railway, ECS, and Kubernetes can terminate predictably.
-
-The code must behave correctly with multiple replicas even when deployed in `RUN_MODE=all`. Any code path that allocates durable work or processes work must use Postgres-backed concurrency controls from its first implementation. The current store uses database-backed per-session sequence counters and Postgres-backed run leases, including active/cancelling run exclusivity and stale lease recovery.
 
 ## Flue Node Deployment Implications
 
@@ -289,6 +427,8 @@ worker loop
 ## Concurrency Model
 
 Correctness must not depend on a single process.
+
+The code must behave correctly with multiple replicas even when deployed in `RUN_MODE=all`. Any code path that allocates durable work or processes work must use Postgres-backed concurrency controls. The current store uses database-backed per-session sequence counters and Postgres-backed run leases, including active/cancelling run exclusivity and stale lease recovery.
 
 Rules:
 
