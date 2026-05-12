@@ -16,6 +16,7 @@ The goal is a deployable background coding-agent service that can start as a sin
 - [Testing Strategy](./testing-strategy.md): unit, integration, e2e, UAT, adversarial, prompt/context, and emulator-backed tests.
 - [Prior Art](./prior-art.md): comparison with Open-Inspect/background-agents and Open SWE, including what to adopt or avoid.
 - [Roadmap](./roadmap.md): phased implementation sequence and acceptance criteria.
+- [Product Documentation](./product/): PRDs, technical specs, research notes, and durable product decisions.
 
 ## Repository Layout
 
