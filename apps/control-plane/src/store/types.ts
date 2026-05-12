@@ -112,6 +112,7 @@ export type ClaimedMessageBatch = {
 
 export type RecoveredRun = {
   message: MessageRecord;
+  messages: MessageRecord[];
   run: RunRecord;
 };
 

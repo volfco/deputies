@@ -635,15 +635,22 @@ export class PostgresStore implements AppStore {
           [messageIds],
         );
 
-        if (!messageResult.rows[0]) continue;
+        const messages = messageResult.rows.map(toMessage).sort((a, b) => a.sequence - b.sequence);
+        if (!messages[0]) continue;
 
-        await client.query('UPDATE sessions SET status = $2, updated_at = $3 WHERE id = $1', [
-          staleRun.session_id,
-          'idle',
-          input.now,
-        ]);
+        await client.query(
+          `UPDATE sessions
+           SET status = CASE
+                 WHEN status = 'archived' THEN 'archived'
+                 WHEN EXISTS (SELECT 1 FROM messages WHERE session_id = $1 AND status = 'pending') THEN 'queued'
+                 ELSE 'idle'
+               END,
+               updated_at = $2
+           WHERE id = $1`,
+          [staleRun.session_id, input.now],
+        );
 
-        recovered.push({ message: toMessage(messageResult.rows[0]), run: toRun(runResult.rows[0]!) });
+        recovered.push({ message: messages[0], messages, run: toRun(runResult.rows[0]!) });
       }
 
       return recovered;

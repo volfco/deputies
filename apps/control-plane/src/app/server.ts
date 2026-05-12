@@ -4,6 +4,7 @@ import { createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
+import { ArtifactService } from '../artifacts/service.js';
 import { FetchGitHubOAuthClient, type GitHubOAuthClient } from '../auth/github.js';
 import { apiAuthMiddleware } from '../auth/middleware.js';
 import {
@@ -35,12 +36,20 @@ import { verifySlackSignature } from '../integrations/slack/auth.js';
 import { SlackIntegrationError, SlackIntegrationService } from '../integrations/slack/service.js';
 import type { SlackEventEnvelope } from '../integrations/slack/types.js';
 import { MessageService, MessageServiceError } from '../messages/service.js';
-import { extractRepositoryReference, type RepositoryReference } from '../repositories/extract.js';
 import { SandboxCleanupService } from '../sandbox/service.js';
 import type { SandboxProvider } from '../sandbox/types.js';
 import { SessionService, SessionServiceError } from '../sessions/service.js';
 import { MemoryStore } from '../store/memory.js';
 import type { AppStore, AuthUserRecord } from '../store/types.js';
+import { writeGlobalEventStream, writeSessionEventStream } from './event-stream.js';
+import {
+  HttpRequestError,
+  optionalString,
+  parseCursor,
+  parseRepositoryBody,
+  readJsonBody,
+  readRawBody,
+} from './request.js';
 
 type AppVariables = {
   requestId: string;
@@ -51,6 +60,7 @@ export type AppServices = {
   events: EventService;
   sessions: SessionService;
   messages: MessageService;
+  artifacts: ArtifactService;
   genericWebhooks: GenericWebhookService;
   callbacks: CallbackService;
   sandboxCleanup?: SandboxCleanupService;
@@ -72,6 +82,7 @@ export function createServices(
     events,
     sessions,
     messages,
+    artifacts: new ArtifactService(store, events),
     genericWebhooks: new GenericWebhookService(store, sessions, messages),
     callbacks: new CallbackService(store, events),
   };
@@ -250,7 +261,7 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.get('/events/stream', async (c) => {
     const after = parseCursor(c.req.query('after') ?? c.req.header('last-event-id') ?? null) ?? 0;
     const includeAll = c.req.query('include') === 'all';
-    return writeGlobalEventStream(c, services, after, c.req.query('replay') !== 'false', includeAll);
+    return writeGlobalEventStream(c, services.events, after, c.req.query('replay') !== 'false', includeAll);
   });
 
   app.post('/webhooks/generic/:sourceKey', async (c) => {
@@ -546,7 +557,7 @@ export function createApp(config: AppConfig, services = createServices()) {
     const session = await services.sessions.get(sessionId);
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
 
-    const artifacts = await services.store.getArtifacts(sessionId);
+    const artifacts = await services.artifacts.list(sessionId);
     return c.json({ artifacts });
   });
 
@@ -581,7 +592,7 @@ export function createApp(config: AppConfig, services = createServices()) {
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
 
     const after = parseCursor(c.req.query('after') ?? c.req.header('last-event-id') ?? null) ?? 0;
-    return writeSessionEventStream(c, services, sessionId, after);
+    return writeSessionEventStream(c, services.events, sessionId, after);
   });
 
   return app;
@@ -646,183 +657,4 @@ function safeStringEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
-}
-
-async function writeSessionEventStream(
-  c: Context,
-  services: AppServices,
-  sessionId: string,
-  afterSequence: number,
-): Promise<Response> {
-  return writeEventStream(c, {
-    after: afterSequence,
-    id: (event) => event.sequence,
-    list: () => services.events.list(sessionId, afterSequence),
-    subscribe: (writeEvent) => services.events.subscribe(sessionId, writeEvent),
-  });
-}
-
-async function writeGlobalEventStream(
-  c: Context,
-  services: AppServices,
-  afterId: number,
-  replay: boolean,
-  includeAll: boolean,
-): Promise<Response> {
-  return writeEventStream(c, {
-    after: afterId,
-    id: (event) => event.id,
-    list: () => (includeAll ? services.events.listAllEvents(afterId) : services.events.listAll(afterId)),
-    replay,
-    subscribe: (writeEvent) =>
-      includeAll ? services.events.subscribeAllEvents(writeEvent) : services.events.subscribeAll(writeEvent),
-  });
-}
-
-async function writeEventStream(
-  c: Context,
-  options: {
-    after: number;
-    id: (event: Awaited<ReturnType<EventService['listAll']>>[number]) => number;
-    list: () => Promise<Awaited<ReturnType<EventService['listAll']>>>;
-    replay?: boolean;
-    subscribe: (writeEvent: (event: Awaited<ReturnType<EventService['listAll']>>[number]) => void) => () => void;
-  },
-): Promise<Response> {
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
-  let cursor = options.after;
-  let closed = false;
-  let writeQueue: Promise<void> = Promise.resolve();
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let unsubscribe: (() => void) | undefined;
-
-  const cleanup = () => {
-    if (closed) return;
-    closed = true;
-    if (heartbeat) clearInterval(heartbeat);
-    unsubscribe?.();
-    writer.close().catch(() => {});
-  };
-
-  const write = (chunk: string): Promise<void> => {
-    if (closed) return Promise.resolve();
-    const nextWrite = writeQueue.then(async () => {
-      if (!closed) await writer.write(encoder.encode(chunk));
-    });
-    writeQueue = nextWrite.catch(() => {});
-    nextWrite.catch(cleanup);
-    return nextWrite;
-  };
-  const writeEvent = (event: Awaited<ReturnType<EventService['list']>>[number]) => {
-    const eventId = options.id(event);
-    if (eventId <= cursor || closed) return;
-    cursor = eventId;
-    write(`id: ${eventId}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).catch(() => {});
-  };
-
-  unsubscribe = options.subscribe(writeEvent);
-  heartbeat = setInterval(() => {
-    write(': keep-alive\n\n').catch(() => {});
-  }, 15_000);
-
-  c.req.raw.signal.addEventListener('abort', cleanup, { once: true });
-
-  void (async () => {
-    try {
-      await write(': connected\n\n');
-      if (options.replay !== false) {
-        for (const event of await options.list()) {
-          writeEvent(event);
-        }
-      }
-    } catch {
-      cleanup();
-    }
-  })();
-
-  return new Response(readable, {
-    status: 200,
-    headers: {
-      'content-type': 'text/event-stream',
-      'cache-control': 'no-cache, no-transform',
-      connection: 'keep-alive',
-    },
-  });
-}
-
-async function readJsonBody(c: Context, maxBytes: number): Promise<Record<string, unknown>> {
-  const text = await readRawBody(c, maxBytes, 'JSON body');
-
-  const trimmed = text.trim();
-  if (!trimmed) return {};
-
-  let value: unknown;
-  try {
-    value = JSON.parse(trimmed);
-  } catch {
-    throw new HttpRequestError(400, 'invalid_json', 'Expected valid JSON request body');
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new HttpRequestError(400, 'invalid_request', 'Expected JSON object request body');
-  }
-
-  return value as Record<string, unknown>;
-}
-
-async function readRawBody(c: Context, maxBytes: number, label: string): Promise<string> {
-  const text = await c.req.text();
-  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
-    throw new HttpRequestError(413, 'payload_too_large', `${label} exceeds ${maxBytes} bytes`);
-  }
-  return text;
-}
-
-class HttpRequestError extends Error {
-  constructor(
-    readonly statusCode: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-function parseRepositoryBody(value: unknown): RepositoryReference | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-
-  if (typeof value === 'string') {
-    const reference = extractRepositoryReference(value);
-    if (!reference)
-      throw new HttpRequestError(400, 'invalid_request', 'Expected repository as owner/repo or GitHub URL');
-    return reference;
-  }
-
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new HttpRequestError(400, 'invalid_request', 'Expected repository as owner/repo, GitHub URL, or object');
-  }
-
-  const repository = value as Record<string, unknown>;
-  if (repository.provider !== 'github')
-    throw new HttpRequestError(400, 'invalid_request', 'Expected repository.provider to be github');
-  const owner = optionalString(repository.owner);
-  const repo = optionalString(repository.repo);
-  if (!owner || !repo)
-    throw new HttpRequestError(400, 'invalid_request', 'Expected repository.owner and repository.repo');
-
-  const reference = extractRepositoryReference(`repo:${owner}/${repo}`);
-  if (!reference) throw new HttpRequestError(400, 'invalid_request', 'Expected valid GitHub repository owner and name');
-  return reference;
-}
-
-function parseCursor(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) return undefined;
-  return parsed;
 }

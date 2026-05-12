@@ -1,3 +1,5 @@
+import { publicApiResponseSchemas, type PublicApiResponseSchemaName } from '../../src/app/response-schemas.js';
+
 const eventTypes = new Set([
   'session_created',
   'session_archived',
@@ -37,6 +39,7 @@ const eventTypes = new Set([
 export function expectSessionResponse(
   value: unknown,
 ): asserts value is { session: { id: string; status: string; title?: string } } {
+  expectResponseSchemaField('session', 'session');
   expect(isRecord(value)).toBe(true);
   const session = isRecord(value) ? value.session : undefined;
   expect(isRecord(session)).toBe(true);
@@ -51,6 +54,7 @@ export function expectSessionResponse(
 export function expectSessionsResponse(
   value: unknown,
 ): asserts value is { sessions: Array<{ id: string; status: string; title?: string }> } {
+  expectResponseSchemaField('sessions', 'sessions');
   expect(isRecord(value)).toBe(true);
   const sessions = isRecord(value) ? value.sessions : undefined;
   expect(Array.isArray(sessions)).toBe(true);
@@ -61,6 +65,7 @@ export function expectSessionsResponse(
 export function expectMessageResponse(
   value: unknown,
 ): asserts value is { message: { id: string; sessionId: string; sequence: number; status: string; prompt: string } } {
+  expectResponseSchemaField('message', 'message');
   expect(isRecord(value)).toBe(true);
   const message = isRecord(value) ? value.message : undefined;
   expect(isRecord(message)).toBe(true);
@@ -76,6 +81,7 @@ export function expectMessageResponse(
 export function expectMessagesResponse(value: unknown): asserts value is {
   messages: Array<{ id: string; sessionId: string; sequence: number; status: string; prompt: string }>;
 } {
+  expectResponseSchemaField('messages', 'messages');
   expect(isRecord(value)).toBe(true);
   const messages = isRecord(value) ? value.messages : undefined;
   expect(Array.isArray(messages)).toBe(true);
@@ -86,6 +92,7 @@ export function expectMessagesResponse(value: unknown): asserts value is {
 export function expectEventsResponse(
   value: unknown,
 ): asserts value is { events: Array<{ type: string; sequence: number }> } {
+  expectResponseSchemaField('events', 'events');
   expect(isRecord(value)).toBe(true);
   const events = isRecord(value) ? value.events : undefined;
   expect(Array.isArray(events)).toBe(true);
@@ -96,6 +103,7 @@ export function expectEventsResponse(
 export function expectArtifactsResponse(
   value: unknown,
 ): asserts value is { artifacts: Array<{ id: string; type: string; payload: Record<string, unknown> }> } {
+  expectResponseSchemaField('artifacts', 'artifacts');
   expect(isRecord(value)).toBe(true);
   const artifacts = isRecord(value) ? value.artifacts : undefined;
   expect(Array.isArray(artifacts)).toBe(true);
@@ -118,6 +126,8 @@ export function expectGenericWebhookResponse(value: unknown): asserts value is {
   session?: { id: string };
   message?: { id: string; prompt: string };
 } {
+  expectResponseSchemaField('genericWebhook', 'accepted');
+  expectResponseSchemaField('genericWebhook', 'duplicate');
   expect(isRecord(value)).toBe(true);
   if (!isRecord(value)) return;
   expect(typeof value.accepted).toBe('boolean');
@@ -136,6 +146,8 @@ export function expectGenericWebhookResponse(value: unknown): asserts value is {
 }
 
 export function expectErrorResponse(value: unknown): asserts value is { error: string; message: string } {
+  expectResponseSchemaField('error', 'error');
+  expectResponseSchemaField('error', 'message');
   expect(isRecord(value)).toBe(true);
   if (!isRecord(value)) return;
   expect(typeof value.error).toBe('string');
@@ -145,6 +157,7 @@ export function expectErrorResponse(value: unknown): asserts value is { error: s
 export function expectCallbacksResponse(value: unknown): asserts value is {
   callbacks: Array<{ id: string; sessionId: string; targetType: string; status: string; attempts: number }>;
 } {
+  expectResponseSchemaField('callbacks', 'callbacks');
   expect(isRecord(value)).toBe(true);
   const callbacks = isRecord(value) ? value.callbacks : undefined;
   expect(Array.isArray(callbacks)).toBe(true);
@@ -155,6 +168,7 @@ export function expectCallbacksResponse(value: unknown): asserts value is {
 export function expectCallbackResponse(value: unknown): asserts value is {
   callback: { id: string; sessionId: string; targetType: string; status: string; attempts: number };
 } {
+  expectResponseSchemaField('callback', 'callback');
   expect(isRecord(value)).toBe(true);
   const callback = isRecord(value) ? value.callback : undefined;
   expectCallbackRecord(callback);
@@ -208,4 +222,8 @@ function expectCallbackRecord(value: unknown): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function expectResponseSchemaField(schemaName: PublicApiResponseSchemaName, field: string): void {
+  expect(publicApiResponseSchemas[schemaName].fields).toHaveProperty(field);
 }

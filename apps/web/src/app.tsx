@@ -36,6 +36,35 @@ import {
 } from './api.js';
 import { Button } from './components/ui/button.js';
 import {
+  archivedSessionsOpenStorageKey,
+  applyThemePreference,
+  connectionDelayedMessage,
+  initialConnectionStatus,
+  isPageVisible,
+  isStreamConnectionOk,
+  isThreadComposerFocused,
+  isThreadNearBottom,
+  isWakeRecoveryStatus,
+  loadInitialIsCreatingThread,
+  loadInitialSelectedSessionId,
+  loadStoredToken,
+  loadThemePreference,
+  newSessionSelectedStorageKey,
+  realtimeReconnectInitialDelayMs,
+  realtimeReconnectMaxDelayMs,
+  scrollThreadByWheel,
+  selectedSessionStorageKey,
+  shouldLetWheelTargetHandleScroll,
+  startupConnectionDelayMs,
+  startupDelayedConnectionStatus,
+  themeStorageKey,
+  tokenStorageKey,
+  wakeRecoveryConnectionStatus,
+  wakeRecoveryThresholdMs,
+  type ConnectionStatus,
+  type ThemePreference,
+} from './app-helpers.js';
+import {
   ArchivedSessionNotice,
   BearerAuthPanel,
   ConnectionStatusBanner,
@@ -49,153 +78,6 @@ import {
 } from './components/app-panels.js';
 import { cn } from './lib/utils.js';
 import { ChatPanel, DesktopContextPanel, MobileContextPanel } from './components/thread/thread-content.js';
-
-const tokenStorageKey = 'deputies-api-token';
-const selectedSessionStorageKey = 'deputies-selected-session-id';
-const newSessionSelectedStorageKey = 'deputies-new-session-selected';
-const archivedSessionsOpenStorageKey = 'deputies-archived-sessions-open';
-const themeStorageKey = 'deputies-theme';
-const threadAutoFollowThreshold = 160;
-const startupConnectionDelayMs = 3_000;
-const wakeRecoveryThresholdMs = 5_000;
-const realtimeReconnectInitialDelayMs = 500;
-const realtimeReconnectMaxDelayMs = 5_000;
-const liveConnectionMessage = 'Live updates connected.';
-const wakeRecoveryMessage = 'Reconnecting after your computer was asleep or offline.';
-type ThemePreference = 'light' | 'dark' | 'system';
-type ConnectionState = 'ok' | 'delayed' | 'reconnecting';
-
-type ConnectionStatus = {
-  state: ConnectionState;
-  message: string;
-};
-
-type ApiConnectionOkDetail = {
-  source?: unknown;
-};
-
-type ApiConnectionDelayedDetail = {
-  message?: unknown;
-};
-
-function loadStoredToken(): string {
-  return localStorage.getItem(tokenStorageKey) ?? '';
-}
-
-function loadInitialSelectedSessionId(): string {
-  return (
-    new URLSearchParams(window.location.search).get('session') ?? localStorage.getItem(selectedSessionStorageKey) ?? ''
-  );
-}
-
-function loadInitialIsCreatingThread(): boolean {
-  return !new URLSearchParams(window.location.search).get('session') && localStorage.getItem(newSessionSelectedStorageKey) === 'true';
-}
-
-function loadThemePreference(): ThemePreference {
-  const stored = localStorage.getItem(themeStorageKey);
-  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
-}
-
-function resolveThemePreference(theme: ThemePreference): 'light' | 'dark' {
-  if (theme !== 'system') return theme;
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function applyThemePreference(theme: ThemePreference) {
-  document.documentElement.classList.toggle('dark', resolveThemePreference(theme) === 'dark');
-}
-
-function isPageVisible(): boolean {
-  return document.visibilityState !== 'hidden';
-}
-
-function isThreadNearBottom(container: HTMLElement): boolean {
-  return container.scrollHeight - container.scrollTop - container.clientHeight <= threadAutoFollowThreshold;
-}
-
-function isScrollableElement(element: Element): element is HTMLElement {
-  if (!(element instanceof HTMLElement)) return false;
-  const overflowY = window.getComputedStyle(element).overflowY;
-  return ['auto', 'scroll', 'overlay'].includes(overflowY) && element.scrollHeight > element.clientHeight;
-}
-
-function canScrollElementByWheel(element: HTMLElement, deltaY: number): boolean {
-  if (deltaY < 0) return element.scrollTop > 0;
-  if (deltaY > 0) return element.scrollTop + element.clientHeight < element.scrollHeight;
-  return false;
-}
-
-function findScrollableAncestor(target: EventTarget | null, root: HTMLElement): HTMLElement | null {
-  if (!(target instanceof Element)) return null;
-
-  for (let element: Element | null = target; element && element !== root; element = element.parentElement) {
-    if (isScrollableElement(element)) return element;
-  }
-
-  return null;
-}
-
-function shouldLetWheelTargetHandleScroll(
-  target: EventTarget | null,
-  root: HTMLElement,
-  threadScroll: HTMLElement,
-  deltaY: number,
-): boolean {
-  if (!(target instanceof Element)) return false;
-
-  const excludedPane = target.closest('[data-thread-scroll-exclude="true"]');
-  if (excludedPane instanceof HTMLElement) {
-    const scrollablePane =
-      findScrollableAncestor(target, excludedPane) ?? (isScrollableElement(excludedPane) ? excludedPane : null);
-    return Boolean(scrollablePane);
-  }
-
-  const scrollable = findScrollableAncestor(target, root);
-  if (!scrollable) return false;
-  if (scrollable === threadScroll) return true;
-  return canScrollElementByWheel(scrollable, deltaY);
-}
-
-function scrollThreadByWheel(container: HTMLElement, deltaY: number): void {
-  if (typeof container.scrollBy === 'function') {
-    container.scrollBy({ top: deltaY, behavior: 'auto' });
-    return;
-  }
-
-  container.scrollTop += deltaY;
-}
-
-function isThreadComposerFocused(): boolean {
-  const activeElement = document.activeElement;
-  return activeElement instanceof HTMLElement && Boolean(activeElement.closest('[data-thread-composer="true"]'));
-}
-
-function initialConnectionStatus(): ConnectionStatus {
-  return { state: 'ok', message: liveConnectionMessage };
-}
-
-function startupDelayedConnectionStatus(): ConnectionStatus {
-  return { state: 'delayed', message: 'Still waiting for the API to respond.' };
-}
-
-function wakeRecoveryConnectionStatus(): ConnectionStatus {
-  return { state: 'reconnecting', message: wakeRecoveryMessage };
-}
-
-function isStreamConnectionOk(event: Event): boolean {
-  const detail = event instanceof CustomEvent ? (event.detail as ApiConnectionOkDetail) : undefined;
-  return detail?.source === 'stream';
-}
-
-function connectionDelayedMessage(event: Event): string {
-  const detail = event instanceof CustomEvent ? (event.detail as ApiConnectionDelayedDetail) : undefined;
-  return typeof detail?.message === 'string' ? detail.message : 'API requests are taking longer than expected.';
-}
-
-function isWakeRecoveryStatus(status: ConnectionStatus): boolean {
-  return status.state === 'reconnecting' && status.message === wakeRecoveryMessage;
-}
 
 export function App() {
   const [health, setHealth] = useState<Health | null>(null);

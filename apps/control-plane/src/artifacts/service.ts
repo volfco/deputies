@@ -5,6 +5,7 @@ import type { ArtifactRecord, CreateArtifactRecord } from '../store/types.js';
 
 type ArtifactStore = {
   createArtifact(record: CreateArtifactRecord): Promise<ArtifactRecord>;
+  getArtifacts?: (sessionId: string) => Promise<ArtifactRecord[]>;
 };
 
 export class ArtifactService {
@@ -45,5 +46,10 @@ export class ArtifactService {
     }
 
     return records;
+  }
+
+  async list(sessionId: string): Promise<ArtifactRecord[]> {
+    if (!this.store.getArtifacts) throw new Error('Artifact store does not support listing artifacts');
+    return this.store.getArtifacts(sessionId);
   }
 }

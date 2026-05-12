@@ -128,13 +128,15 @@ export class WorkerService {
     });
 
     for (const item of recovered) {
-      await this.options.events.append({
-        sessionId: item.message.sessionId,
-        runId: item.run.id,
-        messageId: item.message.id,
-        type: 'run_failed',
-        payload: { error: item.run.error ?? 'Run lease expired', recovered: true },
-      });
+      for (const message of item.messages) {
+        await this.options.events.append({
+          sessionId: message.sessionId,
+          runId: item.run.id,
+          messageId: message.id,
+          type: 'run_failed',
+          payload: { error: item.run.error ?? 'Run lease expired', recovered: true },
+        });
+      }
     }
 
     return recovered.length;

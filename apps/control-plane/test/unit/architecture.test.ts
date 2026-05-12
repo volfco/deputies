@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
+import { publicApiResponseEnvelopeFields, publicApiResponseSchemas } from '../../src/app/response-schemas.js';
 
 const root = process.cwd();
 const srcRoot = join(root, 'src');
@@ -118,6 +119,30 @@ describe('architecture boundaries', () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it('declares source-owned schemas for public API response envelopes', async () => {
+    const text = await readFile(join(srcRoot, 'app/server.ts'), 'utf8');
+    const missingFields = [...jsonResponseEnvelopeFields(text)]
+      .filter((field) => !publicApiResponseEnvelopeFields.has(field))
+      .sort();
+
+    expect(missingFields).toEqual([]);
+    expect(Object.keys(publicApiResponseSchemas)).toEqual(
+      expect.arrayContaining([
+        'artifacts',
+        'callback',
+        'callbacks',
+        'error',
+        'events',
+        'genericWebhook',
+        'health',
+        'message',
+        'messages',
+        'session',
+        'sessions',
+      ]),
+    );
+  });
 });
 
 async function sourceFiles(dir = srcRoot): Promise<string[]> {
@@ -149,4 +174,15 @@ function internalImports(file: string, text: string): string[] {
 
 function normalizeInternalImport(file: string, specifier: string): string {
   return join(dirname(file), specifier.replace(/\.(js|ts)$/, '')).replace(/\\/g, '/');
+}
+
+function jsonResponseEnvelopeFields(text: string): Set<string> {
+  const fields = new Set<string>();
+  for (const match of text.matchAll(/c\.json\(\s*\{([\s\S]*?)\}\s*(?:,|\))/g)) {
+    const body = match[1] ?? '';
+    for (const field of body.matchAll(/(?:^|[,\n])\s*([A-Za-z_$][\w$]*)\s*(?::|[,\n]|$)/g)) {
+      fields.add(field[1]!);
+    }
+  }
+  return fields;
 }

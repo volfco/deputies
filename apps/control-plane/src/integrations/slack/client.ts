@@ -10,7 +10,11 @@ export type SlackReplyClient = {
 };
 
 export type SlackAssistantThreadClient = {
-  setThreadStatus(input: { channel: string; threadTs: string; status: string }): Promise<{ ok: boolean; error?: string }>;
+  setThreadStatus(input: {
+    channel: string;
+    threadTs: string;
+    status: string;
+  }): Promise<{ ok: boolean; error?: string }>;
 };
 
 export type SlackThreadClient = {

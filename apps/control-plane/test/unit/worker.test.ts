@@ -109,6 +109,34 @@ describe('WorkerService', () => {
     expect(text).toContain('third');
   });
 
+  it('recovers all messages in a stale queued batch for retry', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Stale batch' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'second' });
+
+    const claimedAt = new Date('2026-05-06T00:00:00.000Z');
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000031',
+      runnerType: 'fake',
+      leaseOwner: 'crashed-worker',
+      leaseExpiresAt: new Date(claimedAt.getTime() - 1_000),
+      now: claimedAt,
+    });
+    expect(claimed?.messages).toHaveLength(2);
+
+    const recovered = await store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 1_000), limit: 10 });
+
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.messages.map((message) => message.status)).toEqual(['pending', 'pending']);
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([
+      { status: 'pending' },
+      { status: 'pending' },
+    ]);
+    await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'queued' });
+  });
+
   it('runs a queued batch with the latest message context', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
@@ -203,7 +231,11 @@ describe('WorkerService', () => {
         {
           async onRunStarted({ message }) {
             const callback = message.context?.callback as { channel: string; threadTs: string };
-            progress.push({ channel: callback.channel, threadTs: callback.threadTs, status: 'Working on your request...' });
+            progress.push({
+              channel: callback.channel,
+              threadTs: callback.threadTs,
+              status: 'Working on your request...',
+            });
           },
         },
       ],

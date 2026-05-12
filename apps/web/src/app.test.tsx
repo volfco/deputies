@@ -1391,7 +1391,9 @@ it('opens a session link over the persisted new-session page', async () => {
   mockApi();
   render(<App />);
 
-  expect(await screen.findByPlaceholderText('Ask your deputy to investigate, change code, or follow up...')).toBeInTheDocument();
+  expect(
+    await screen.findByPlaceholderText('Ask your deputy to investigate, change code, or follow up...'),
+  ).toBeInTheDocument();
   expect(screen.queryByText('What needs doing?')).not.toBeInTheDocument();
 });
 

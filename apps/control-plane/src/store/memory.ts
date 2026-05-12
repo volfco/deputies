@@ -288,11 +288,18 @@ export class MemoryStore implements AppStore {
       if (!run.leaseExpiresAt || run.leaseExpiresAt > input.now) continue;
 
       const sessionMessages = this.messages.get(run.sessionId) ?? [];
-      const message = sessionMessages.find((candidate) => candidate.id === run.messageId);
-      if (!message) continue;
-
-      const pendingMessage: MessageRecord = { ...message, status: 'pending' };
-      sessionMessages[sessionMessages.indexOf(message)] = pendingMessage;
+      const pendingMessages: MessageRecord[] = [];
+      for (const messageId of getRunMessageIds(run)) {
+        const message = sessionMessages.find(
+          (candidate) =>
+            candidate.id === messageId && (candidate.status === 'processing' || candidate.status === 'cancelling'),
+        );
+        if (!message) continue;
+        const pendingMessage: MessageRecord = { ...message, status: 'pending' };
+        sessionMessages[sessionMessages.indexOf(message)] = pendingMessage;
+        pendingMessages.push(pendingMessage);
+      }
+      if (!pendingMessages.length) continue;
 
       const { leaseExpiresAt: _leaseExpiresAt, leaseOwner: _leaseOwner, ...runWithoutLease } = run;
       const staleRun: RunRecord = {
@@ -305,9 +312,20 @@ export class MemoryStore implements AppStore {
       this.runs.set(run.id, staleRun);
 
       const session = this.sessions.get(run.sessionId);
-      if (session) this.sessions.set(run.sessionId, { ...session, status: 'idle', updatedAt: input.now });
+      if (session) {
+        this.sessions.set(run.sessionId, {
+          ...session,
+          status:
+            session.status === 'archived'
+              ? 'archived'
+              : sessionMessages.some((message) => message.status === 'pending')
+                ? 'queued'
+                : 'idle',
+          updatedAt: input.now,
+        });
+      }
 
-      recovered.push({ message: pendingMessage, run: staleRun });
+      recovered.push({ message: pendingMessages[0]!, messages: pendingMessages, run: staleRun });
     }
 
     return recovered;
