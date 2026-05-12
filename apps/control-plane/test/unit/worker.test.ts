@@ -337,6 +337,7 @@ describe('WorkerService', () => {
     await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
     await services.messages.enqueue({ sessionId: session.id, prompt: 'second' });
     const runner = new BlockingRunner();
+    const progress: string[] = [];
 
     const worker = new WorkerService({
       store,
@@ -347,6 +348,16 @@ describe('WorkerService', () => {
       leaseOwner: 'test-worker',
       heartbeatIntervalMs: 60_000,
       cancellationPollIntervalMs: 5,
+      progressNotifiers: [
+        {
+          async onRunStarted() {
+            progress.push('started');
+          },
+          async onRunCancelled() {
+            progress.push('cancelled');
+          },
+        },
+      ],
     });
 
     const processing = worker.processNext();
@@ -362,6 +373,7 @@ describe('WorkerService', () => {
       { sequence: 1, status: 'cancelled' },
       { sequence: 2, status: 'cancelled' },
     ]);
+    expect(progress).toEqual(['started', 'cancelled']);
     expect(await store.getArtifacts(session.id)).toEqual([]);
     expect((await services.events.list(session.id)).map((event) => event.type)).toEqual([
       'session_created',

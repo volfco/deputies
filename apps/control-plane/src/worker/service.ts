@@ -26,6 +26,7 @@ type WorkerStore = RunStore &
 
 export type RunProgressNotifier = {
   onRunStarted?(input: { message: MessageRecord; run: RunRecord }): Promise<void>;
+  onRunCancelled?(input: { message: MessageRecord; run: RunRecord }): Promise<void>;
 };
 
 export type WorkerServiceOptions = {
@@ -286,6 +287,7 @@ export class WorkerService {
         batchSize: cancelled.messages.length,
       },
     });
+    await this.notifyRunCancelled(primary, cancelled.run);
     for (const message of cancelled.messages) {
       await this.options.events.append({
         sessionId: message.sessionId,
@@ -306,6 +308,16 @@ export class WorkerService {
     for (const notifier of this.options.progressNotifiers ?? []) {
       try {
         await notifier.onRunStarted?.({ message, run });
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : error);
+      }
+    }
+  }
+
+  private async notifyRunCancelled(message: MessageRecord, run: RunRecord): Promise<void> {
+    for (const notifier of this.options.progressNotifiers ?? []) {
+      try {
+        await notifier.onRunCancelled?.({ message, run });
       } catch (error) {
         console.warn(error instanceof Error ? error.message : error);
       }

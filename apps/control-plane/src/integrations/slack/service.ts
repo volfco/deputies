@@ -205,17 +205,21 @@ export class SlackIntegrationService {
     if (!this.options.replyClient) return;
     const sessionUrl = callbackSessionUrl(sessionId, this.options.webBaseUrl).sessionUrl;
     if (!sessionUrl) return;
-    const text = `:incoming_envelope: Your Deputy will reply when it has finished processing.
+    const deputyMention = slackMentionFromText(event.raw.text) ?? '`@deputies`';
+    const message = `:incoming_envelope: Your Deputy will reply when it has finished processing.
 
 :link: You can follow along on the web here: ${sessionUrl}
 
-:speech_balloon: You can also continue the session here with follow-up messages. Make sure to tag @deputies in your messages.`;
+:speech_balloon: You can also continue the session here with follow-up messages. Make sure to tag ${deputyMention} in your messages.`;
+    const text = `${message}
+
+---`;
     try {
       const response = await this.options.replyClient.postThreadReply({
         channel: event.channel,
         threadTs: event.threadTs,
         text,
-        blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }],
+        blocks: [{ type: 'section', text: { type: 'mrkdwn', text: message } }, { type: 'divider' }],
       });
       if (!response.ok) console.warn(`Slack session-link reply failed: ${response.error ?? 'unknown_error'}`);
     } catch (error) {
@@ -435,6 +439,10 @@ export function slackExternalThreadId(event: Pick<SlackAcceptedEvent, 'teamId' |
 
 function cleanSlackText(text: string): string {
   return decodeSlackText(text.replace(/<@[A-Z0-9]+>/g, '')).trim();
+}
+
+function slackMentionFromText(text: string | undefined): string | undefined {
+  return text?.match(/<@[A-Z0-9]+>/)?.[0];
 }
 
 function decodeSlackText(text: string): string {

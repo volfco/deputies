@@ -12,7 +12,7 @@ export function slackCallbackTarget(input: SlackCallbackTargetInput): Record<str
     channel: input.channel,
     threadTs: input.threadTs,
     messageTs: input.messageTs,
-    replyHint: 'Tag @deputies in replies to continue here.',
+    replyHint: 'Tag `@deputies` in replies to continue here.',
     ...(input.sessionUrl ? { sessionUrl: input.sessionUrl } : {}),
     ...(input.includeSessionLink ? { includeSessionLink: true } : {}),
   };

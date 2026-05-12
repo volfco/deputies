@@ -4,6 +4,7 @@ import { loadConfig } from '../../src/config/index.js';
 import { maxPriorContextItems, maxPromptTextCharacters } from '../../src/integrations/prompt-bounds.js';
 import { createSlackSignature, verifySlackSignature } from '../../src/integrations/slack/auth.js';
 import { SlackCompletionCallbackSender } from '../../src/integrations/slack/callback-sender.js';
+import { SlackRunProgressNotifier } from '../../src/integrations/slack/progress-notifier.js';
 import { SlackIntegrationService } from '../../src/integrations/slack/service.js';
 import { MemoryStore } from '../../src/store/memory.js';
 
@@ -107,6 +108,56 @@ describe('Slack integration', () => {
     ]);
   });
 
+  it('clears Slack status and posts a cancellation reply when runs are cancelled', async () => {
+    const statuses: Array<{ channel: string; threadTs: string; status: string }> = [];
+    const replies: Array<{ channel: string; threadTs: string; text: string; blocks?: unknown[] }> = [];
+    const notifier = new SlackRunProgressNotifier({
+      async setThreadStatus(input) {
+        statuses.push(input);
+        return { ok: true };
+      },
+      async postThreadReply(input) {
+        replies.push(input);
+        return { ok: true };
+      },
+    });
+
+    await notifier.onRunCancelled?.({
+      run: {
+        id: 'run-1',
+        sessionId: 'session-1',
+        messageId: 'message-1',
+        status: 'cancelled',
+        runnerType: 'fake',
+        attempt: 1,
+        startedAt: new Date(),
+        metadata: {},
+      },
+      message: {
+        id: 'message-1',
+        sessionId: 'session-1',
+        sequence: 1,
+        status: 'cancelled',
+        prompt: 'from slack',
+        source: 'slack',
+        context: { callback: { type: 'slack', channel: 'C123', threadTs: '1710000000.000100' } },
+        createdAt: new Date(),
+      },
+    });
+
+    expect(statuses).toEqual([{ channel: 'C123', threadTs: '1710000000.000100', status: '' }]);
+    expect(replies).toEqual([
+      {
+        channel: 'C123',
+        threadTs: '1710000000.000100',
+        text: ':no_entry: Execution was cancelled.',
+        blocks: [
+          { type: 'section', text: { type: 'mrkdwn', text: ':no_entry: Execution was cancelled.' } },
+        ],
+      },
+    ]);
+  });
+
   it('creates sessions from app mentions and reuses Slack threads for follow-ups', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
@@ -167,7 +218,7 @@ describe('Slack integration', () => {
       threadTs: '1710000000.000100',
       messageTs: '1710000000.000100',
       sessionUrl: `https://deputies.example/?session=${first.session.id}`,
-      replyHint: 'Tag @deputies in replies to continue here.',
+      replyHint: 'Tag `@deputies` in replies to continue here.',
     });
     expect(messages[0]!.context?.callback).not.toMatchObject({ includeSessionLink: true });
     expect(replies).toEqual([
@@ -178,7 +229,9 @@ describe('Slack integration', () => {
 
 :link: You can follow along on the web here: https://deputies.example/?session=${first.session.id}
 
-:speech_balloon: You can also continue the session here with follow-up messages. Make sure to tag @deputies in your messages.`,
+:speech_balloon: You can also continue the session here with follow-up messages. Make sure to tag <@${botUserId}> in your messages.
+
+---`,
         blocks: [
           {
             type: 'section',
@@ -188,9 +241,10 @@ describe('Slack integration', () => {
 
 :link: You can follow along on the web here: https://deputies.example/?session=${first.session.id}
 
-:speech_balloon: You can also continue the session here with follow-up messages. Make sure to tag @deputies in your messages.`,
+:speech_balloon: You can also continue the session here with follow-up messages. Make sure to tag <@${botUserId}> in your messages.`,
             },
           },
+          { type: 'divider' },
         ],
       },
     ]);
