@@ -10,6 +10,7 @@
   "scripts": {
     "db:up": "docker compose -f deploy/local/docker-compose.yml up -d postgres",
     "db:down": "docker compose -f deploy/local/docker-compose.yml down",
+    "infra:up": "docker compose -f deploy/local/docker-compose.yml up -d postgres seaweedfs",
     "auth:login:openai-codex": "pnpm --dir apps/control-plane auth:login:openai-codex",
     "control-plane:db:migrate": "pnpm --dir apps/control-plane db:migrate",
     "control-plane:docker-orchestrator:dev": "pnpm --dir apps/control-plane docker-orchestrator:dev",

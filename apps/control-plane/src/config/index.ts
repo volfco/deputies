@@ -6,6 +6,7 @@ export type AppStoreKind = 'memory' | 'postgres';
 export type ApiAuthMode = 'none' | 'bearer' | 'session';
 export type AuthProviderKind = 'static' | 'github';
 export type AuthCookieSameSite = 'lax' | 'none';
+export type ArtifactStorageKind = 'disabled' | 'filesystem' | 's3';
 
 export type AppConfig = {
   port: number;
@@ -73,6 +74,16 @@ export type AppConfig = {
   githubAppId?: string;
   githubAppPrivateKey?: string;
   githubWebhookSecret?: string;
+  artifactStorage: ArtifactStorageKind;
+  artifactStorageFilesystemPath?: string;
+  artifactStorageS3Endpoint?: string;
+  artifactStorageS3Region: string;
+  artifactStorageS3Bucket?: string;
+  artifactStorageS3AccessKeyId?: string;
+  artifactStorageS3SecretAccessKey?: string;
+  artifactStorageS3ForcePathStyle: boolean;
+  artifactStorageS3CreateBucket: boolean;
+  artifactToolMaxBytes: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -127,6 +138,23 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     githubAllowedUsers: parseStringList(env.GITHUB_ALLOWED_USERS),
     githubAllowedOrganizations: parseStringList(env.GITHUB_ALLOWED_ORGANIZATIONS),
     githubTriggerPhrases: parseStringList(env.GITHUB_TRIGGER_PHRASES),
+    artifactStorage: parseEnum(env.ARTIFACT_STORAGE_PROVIDER, ['disabled', 'filesystem', 's3'], 'disabled'),
+    artifactStorageS3Region: env.ARTIFACT_STORAGE_S3_REGION ?? 'us-east-1',
+    artifactStorageS3ForcePathStyle: parseBoolean(
+      env.ARTIFACT_STORAGE_S3_FORCE_PATH_STYLE,
+      true,
+      'ARTIFACT_STORAGE_S3_FORCE_PATH_STYLE',
+    ),
+    artifactStorageS3CreateBucket: parseBoolean(
+      env.ARTIFACT_STORAGE_S3_CREATE_BUCKET,
+      false,
+      'ARTIFACT_STORAGE_S3_CREATE_BUCKET',
+    ),
+    artifactToolMaxBytes: parsePositiveInteger(
+      env.ARTIFACT_TOOL_MAX_BYTES,
+      25 * 1024 * 1024,
+      'ARTIFACT_TOOL_MAX_BYTES',
+    ),
   };
 
   if (env.API_BEARER_TOKEN) config.apiBearerToken = env.API_BEARER_TOKEN;
@@ -158,8 +186,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.GITHUB_APP_ID) config.githubAppId = env.GITHUB_APP_ID;
   if (env.GITHUB_APP_PRIVATE_KEY) config.githubAppPrivateKey = normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY);
   if (env.GITHUB_WEBHOOK_SECRET) config.githubWebhookSecret = env.GITHUB_WEBHOOK_SECRET;
+  if (env.ARTIFACT_STORAGE_FILESYSTEM_PATH) config.artifactStorageFilesystemPath = env.ARTIFACT_STORAGE_FILESYSTEM_PATH;
+  if (env.ARTIFACT_STORAGE_S3_ENDPOINT) config.artifactStorageS3Endpoint = env.ARTIFACT_STORAGE_S3_ENDPOINT;
+  if (env.ARTIFACT_STORAGE_S3_BUCKET) config.artifactStorageS3Bucket = env.ARTIFACT_STORAGE_S3_BUCKET;
+  if (env.ARTIFACT_STORAGE_S3_ACCESS_KEY_ID)
+    config.artifactStorageS3AccessKeyId = env.ARTIFACT_STORAGE_S3_ACCESS_KEY_ID;
+  if (env.ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY)
+    config.artifactStorageS3SecretAccessKey = env.ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY;
 
   validateProductAuthConfig(config);
+  validateArtifactStorageConfig(config);
 
   if (config.slackSigningSecret && !config.unsafeAllowAllSlackIds && !hasAnySlackAllowlist(config)) {
     throw new Error(
@@ -178,6 +214,22 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   }
 
   return config;
+}
+
+function validateArtifactStorageConfig(config: AppConfig): void {
+  if (config.artifactStorage === 'filesystem' && !config.artifactStorageFilesystemPath) {
+    throw new Error('ARTIFACT_STORAGE_FILESYSTEM_PATH is required when ARTIFACT_STORAGE_PROVIDER=filesystem');
+  }
+
+  if (config.artifactStorage !== 's3') return;
+  if (!config.artifactStorageS3Bucket) {
+    throw new Error('ARTIFACT_STORAGE_S3_BUCKET is required when ARTIFACT_STORAGE_PROVIDER=s3');
+  }
+  if (!config.artifactStorageS3AccessKeyId || !config.artifactStorageS3SecretAccessKey) {
+    throw new Error(
+      'ARTIFACT_STORAGE_S3_ACCESS_KEY_ID and ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY are required when ARTIFACT_STORAGE_PROVIDER=s3',
+    );
+  }
 }
 
 function validateProductAuthConfig(config: AppConfig): void {

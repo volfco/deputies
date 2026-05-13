@@ -43,5 +43,14 @@ services:
       timeout: 5s
       retries: 10
 
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.97
+    command: ['server', '-s3', '-s3.port=8333', '-dir=/data']
+    ports:
+      - '8333:8333'
+    volumes:
+      - seaweedfs-data:/data
+
 volumes:
   postgres-data:
+  seaweedfs-data:

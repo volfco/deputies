@@ -15,7 +15,18 @@ export type RunnerInput = {
 
 export type RunnerResult = {
   text: string;
-  artifacts?: Array<{ type: string; url?: string; payload?: Record<string, unknown> }>;
+  artifacts?: RunnerArtifact[];
+};
+
+export type RunnerArtifact = {
+  type: string;
+  title?: string;
+  url?: string;
+  payload?: Record<string, unknown>;
+  content?: string | Uint8Array;
+  contentBase64?: string;
+  contentType?: string;
+  fileName?: string;
 };
 
 export interface Runner {

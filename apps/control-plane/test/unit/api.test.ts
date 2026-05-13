@@ -1,4 +1,9 @@
 import type { Server } from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { ArtifactService } from '../../src/artifacts/service.js';
+import { FilesystemArtifactObjectStorage, type ArtifactObjectStorage } from '../../src/artifacts/storage.js';
 import { createServer, createServices, type AppServices } from '../../src/app/server.js';
 import { loadConfig } from '../../src/config/index.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
@@ -20,6 +25,7 @@ describe('core API', () => {
   let baseUrl: string;
   let store: MemoryStore;
   let services: AppServices;
+  let artifactTempDir: string | undefined;
 
   beforeEach(async () => {
     store = new MemoryStore();
@@ -30,7 +36,18 @@ describe('core API', () => {
 
   afterEach(async () => {
     await closeServer(server);
+    if (artifactTempDir) await rm(artifactTempDir, { recursive: true, force: true });
+    artifactTempDir = undefined;
   });
+
+  async function restartWithFilesystemArtifacts(): Promise<void> {
+    await closeServer(server);
+    artifactTempDir = await mkdtemp(path.join(os.tmpdir(), 'deputies-artifacts-'));
+    store = new MemoryStore();
+    services = createServices(store, { artifactObjectStorage: new FilesystemArtifactObjectStorage(artifactTempDir) });
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), services);
+    baseUrl = await listen(server);
+  }
 
   it('reports health', async () => {
     const response = await fetch(`${baseUrl}/health`);
@@ -705,6 +722,238 @@ describe('core API', () => {
     });
     expect(validAuth.status).toBe(200);
     expectArtifactsResponse(await validAuth.json());
+  });
+
+  it('downloads stored blob artifacts through the product API', async () => {
+    await restartWithFilesystemArtifacts();
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stored artifact' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+
+    const [artifact] = await services.artifacts.recordRunArtifacts({
+      sessionId: session.id,
+      runId: '00000000-0000-4000-8000-000000000911',
+      messageId: '00000000-0000-4000-8000-000000000912',
+      result: {
+        text: 'created artifact',
+        artifacts: [
+          {
+            type: 'log',
+            title: 'Debug log',
+            content: 'hello artifact storage',
+            contentType: 'text/plain',
+            fileName: 'debug.log',
+          },
+        ],
+      },
+    });
+
+    const listResponse = await fetch(`${baseUrl}/sessions/${session.id}/artifacts`);
+    expect(listResponse.status).toBe(200);
+    const listBody = (await listResponse.json()) as { artifacts: unknown[] };
+    expect(listBody.artifacts).toMatchObject([
+      {
+        id: artifact!.id,
+        type: 'log',
+        title: 'Debug log',
+        storageKey: expect.any(String),
+        payload: {
+          storage: 'internal',
+          contentType: 'text/plain',
+          fileName: 'debug.log',
+          sizeBytes: 22,
+          checksumSha256: expect.any(String),
+        },
+      },
+    ]);
+
+    const download = await fetch(`${baseUrl}/sessions/${session.id}/artifacts/${artifact!.id}/download`);
+    expect(download.status).toBe(200);
+    expect(download.headers.get('content-type')).toContain('text/plain');
+    expect(download.headers.get('content-disposition')).toContain('debug.log');
+    await expect(download.text()).resolves.toBe('hello artifact storage');
+
+    const preview = await fetch(`${baseUrl}/sessions/${session.id}/artifacts/${artifact!.id}/preview`);
+    expect(preview.status).toBe(200);
+    await expect(preview.json()).resolves.toMatchObject({
+      preview: { text: 'hello artifact storage', contentType: 'text/plain', truncated: false, sizeBytes: 22 },
+    });
+  });
+
+  it('derives artifact titles from filenames when no title is provided', async () => {
+    await restartWithFilesystemArtifacts();
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stored artifact' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+
+    const [artifact] = await services.artifacts.recordRunArtifacts({
+      sessionId: session.id,
+      runId: '00000000-0000-4000-8000-000000000913',
+      messageId: '00000000-0000-4000-8000-000000000914',
+      result: {
+        text: 'created artifact',
+        artifacts: [{ type: 'file', content: 'sample', contentType: 'text/plain', fileName: 'another-artifact-sample.txt' }],
+      },
+    });
+
+    expect(artifact).toMatchObject({ title: 'Another Artifact Sample' });
+  });
+
+  it('uses ranged object reads for text artifact previews', async () => {
+    await closeServer(server);
+    const ranges: Array<{ key: string; start: number; endInclusive: number }> = [];
+    const storage: ArtifactObjectStorage = {
+      async put() {},
+      async get() {
+        throw new Error('Expected preview to use getRange');
+      },
+      async getRange(key, start, endInclusive) {
+        ranges.push({ key, start, endInclusive });
+        return { body: new TextEncoder().encode('preview'), contentType: 'text/plain', contentLength: 7 };
+      },
+    };
+    store = new MemoryStore();
+    services = createServices(store, { artifactObjectStorage: storage });
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), services);
+    baseUrl = await listen(server);
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Preview session' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    await store.createArtifact({
+      id: '00000000-0000-4000-8000-000000000951',
+      sessionId: session.id,
+      type: 'log',
+      storageKey: 'logs/run.log',
+      payload: { contentType: 'text/plain', fileName: 'run.log', sizeBytes: 40_000 },
+      createdAt: new Date(),
+    });
+
+    const response = await fetch(
+      `${baseUrl}/sessions/${session.id}/artifacts/00000000-0000-4000-8000-000000000951/preview`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(ranges).toEqual([{ key: 'logs/run.log', start: 0, endInclusive: 32 * 1024 - 1 }]);
+    await expect(response.json()).resolves.toMatchObject({
+      preview: { text: 'preview', contentType: 'text/plain', truncated: true, sizeBytes: 40_000 },
+    });
+  });
+
+  it('rejects text previews when content type and filename extension disagree', async () => {
+    await restartWithFilesystemArtifacts();
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Preview session' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    const [artifact] = await services.artifacts.recordRunArtifacts({
+      sessionId: session.id,
+      runId: '00000000-0000-4000-8000-000000000915',
+      messageId: '00000000-0000-4000-8000-000000000916',
+      result: {
+        text: 'created artifact',
+        artifacts: [{ type: 'file', content: 'not really png', contentType: 'text/plain', fileName: 'not-text.png' }],
+      },
+    });
+
+    const response = await fetch(`${baseUrl}/sessions/${session.id}/artifacts/${artifact!.id}/preview`);
+
+    expect(response.status).toBe(415);
+    await expect(response.json()).resolves.toMatchObject({ error: 'unsupported_preview' });
+  });
+
+  it('best-effort deletes stored objects when artifact metadata creation fails', async () => {
+    const deletedKeys: string[] = [];
+    const storage: ArtifactObjectStorage = {
+      async put() {},
+      async get() {
+        return null;
+      },
+      async delete(key) {
+        deletedKeys.push(key);
+      },
+    };
+    const events = services.events;
+    const failingStore = {
+      async createArtifact() {
+        throw new Error('metadata insert failed');
+      },
+    };
+    const artifactService = new ArtifactService(failingStore, events, storage);
+
+    await expect(
+      artifactService.createStoredArtifact({
+        sessionId: '00000000-0000-4000-8000-000000000001',
+        runId: '00000000-0000-4000-8000-000000000002',
+        messageId: '00000000-0000-4000-8000-000000000003',
+        type: 'file',
+        body: new TextEncoder().encode('orphan'),
+        fileName: 'orphan.txt',
+      }),
+    ).rejects.toThrow('metadata insert failed');
+    expect(deletedKeys).toHaveLength(1);
+    expect(deletedKeys[0]).toContain('/artifacts/');
+  });
+
+  it('protects stored artifact downloads with product auth', async () => {
+    await closeServer(server);
+    artifactTempDir = await mkdtemp(path.join(os.tmpdir(), 'deputies-artifacts-'));
+    store = new MemoryStore();
+    services = createServices(store, { artifactObjectStorage: new FilesystemArtifactObjectStorage(artifactTempDir) });
+    server = createServer(loadConfig({ API_AUTH_MODE: 'bearer', API_BEARER_TOKEN: 'secret' }), services);
+    baseUrl = await listen(server);
+
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Private artifact' }, 'secret');
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    const [artifact] = await services.artifacts.recordRunArtifacts({
+      sessionId: session.id,
+      runId: '00000000-0000-4000-8000-000000000921',
+      messageId: '00000000-0000-4000-8000-000000000922',
+      result: { text: 'private', artifacts: [{ type: 'file', content: 'secret file', fileName: 'secret.txt' }] },
+    });
+
+    const missingAuth = await fetch(`${baseUrl}/sessions/${session.id}/artifacts/${artifact!.id}/download`);
+    expect(missingAuth.status).toBe(401);
+
+    const validAuth = await fetch(`${baseUrl}/sessions/${session.id}/artifacts/${artifact!.id}/download`, {
+      headers: { authorization: 'Bearer secret' },
+    });
+    expect(validAuth.status).toBe(200);
+    await expect(validAuth.text()).resolves.toBe('secret file');
+  });
+
+  it('does not download artifacts through the wrong session', async () => {
+    await restartWithFilesystemArtifacts();
+    const firstSessionResponse = await postJson(`${baseUrl}/sessions`, { title: 'First' });
+    const secondSessionResponse = await postJson(`${baseUrl}/sessions`, { title: 'Second' });
+    const { session: firstSession } = (await firstSessionResponse.json()) as { session: { id: string } };
+    const { session: secondSession } = (await secondSessionResponse.json()) as { session: { id: string } };
+    const [artifact] = await services.artifacts.recordRunArtifacts({
+      sessionId: firstSession.id,
+      runId: '00000000-0000-4000-8000-000000000931',
+      messageId: '00000000-0000-4000-8000-000000000932',
+      result: { text: 'file', artifacts: [{ type: 'file', content: 'first session' }] },
+    });
+
+    const response = await fetch(`${baseUrl}/sessions/${secondSession.id}/artifacts/${artifact!.id}/download`);
+    expect(response.status).toBe(404);
+  });
+
+  it('returns a stable 404 when artifact metadata points to a missing object', async () => {
+    await restartWithFilesystemArtifacts();
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Missing object' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    await store.createArtifact({
+      id: '00000000-0000-4000-8000-000000000941',
+      sessionId: session.id,
+      type: 'file',
+      storageKey: 'missing/object.txt',
+      payload: { storage: 'internal', fileName: 'object.txt' },
+      createdAt: new Date(),
+    });
+
+    const listResponse = await fetch(`${baseUrl}/sessions/${session.id}/artifacts`);
+    expect(listResponse.status).toBe(200);
+
+    const download = await fetch(
+      `${baseUrl}/sessions/${session.id}/artifacts/00000000-0000-4000-8000-000000000941/download`,
+    );
+    expect(download.status).toBe(404);
+    await expect(download.json()).resolves.toMatchObject({ error: 'not_found' });
   });
 
   it('returns stable errors for invalid JSON bodies', async () => {

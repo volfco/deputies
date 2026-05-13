@@ -1,11 +1,13 @@
 import type { FlueEvent } from '@flue/sdk';
 import type { NormalizedEvent } from '../events/types.js';
+import type { ArtifactService } from '../artifacts/service.js';
 import {
   prepareRepositoryShellSetup,
   type RepositoryAccessProvider,
   type RepositoryShellSetup,
 } from '../repositories/setup.js';
 import type { Runner, RunnerInput, RunnerResult } from '../runner/types.js';
+import { createArtifactTool } from './artifact-tool.js';
 import { createGitTool, type AgentRef } from './git-tool.js';
 import { createGitHubCliTool } from './github-cli-tool.js';
 import { createRepositoryTool, type RepositoryToolServices, type RepositoryToolState } from './repository-tool.js';
@@ -15,6 +17,8 @@ export type FlueRunnerOptions = {
   repositoryAccess?: {
     github?: RepositoryAccessProvider;
   };
+  artifacts?: ArtifactService;
+  artifactToolMaxBytes?: number;
 };
 
 export class FlueRunner implements Runner {
@@ -52,18 +56,33 @@ export class FlueRunner implements Runner {
           ...(input.updateSessionContext ? { updateSessionContext: input.updateSessionContext } : {}),
         } satisfies RepositoryToolServices)
       : null;
+    const tools = [];
+    if (this.options.artifacts) {
+      tools.push(
+        createArtifactTool({
+          artifacts: this.options.artifacts,
+          sandbox: input.sandbox,
+          sessionId: input.sessionId,
+          runId: input.runId,
+          messageId: input.messageId,
+          maxBytes: this.options.artifactToolMaxBytes ?? 25 * 1024 * 1024,
+        }),
+      );
+    }
+    if (repositoryServices) {
+      tools.push(
+        createRepositoryTool(repositoryServices),
+        createGitHubCliTool(repositoryServices),
+        createGitTool({ agentRef, repository: repositoryServices }),
+      );
+    }
+
     const agent = await this.agentFactory.create({
       agentId: input.sessionId,
       sessionId: input.sessionId,
       sandbox: input.sandbox,
       cwd: repositorySetup?.workspacePath ?? input.sandbox.workspacePath,
-      tools: repositoryServices
-        ? [
-            createRepositoryTool(repositoryServices),
-            createGitHubCliTool(repositoryServices),
-            createGitTool({ agentRef, repository: repositoryServices }),
-          ]
-        : [],
+      tools,
       onEvent: (event) => {
         if (input.signal?.aborted) return;
         const normalized = normalizeFlueEvent(event, input);

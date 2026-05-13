@@ -4,7 +4,8 @@ import { createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
-import { ArtifactService } from '../artifacts/service.js';
+import { ArtifactService, ArtifactServiceError } from '../artifacts/service.js';
+import type { ArtifactObjectStorage } from '../artifacts/storage.js';
 import { FetchGitHubOAuthClient, type GitHubOAuthClient } from '../auth/github.js';
 import { apiAuthMiddleware } from '../auth/middleware.js';
 import {
@@ -72,7 +73,7 @@ export type AppServices = {
 
 export function createServices(
   store: AppStore = new MemoryStore(),
-  options: { sandboxProvider?: SandboxProvider } = {},
+  options: { sandboxProvider?: SandboxProvider; artifactObjectStorage?: ArtifactObjectStorage } = {},
 ): AppServices {
   const events = new EventService(store);
   const sessions = new SessionService(store, events);
@@ -82,7 +83,7 @@ export function createServices(
     events,
     sessions,
     messages,
-    artifacts: new ArtifactService(store, events),
+    artifacts: new ArtifactService(store, events, options.artifactObjectStorage),
     genericWebhooks: new GenericWebhookService(store, sessions, messages),
     callbacks: new CallbackService(store, events),
   };
@@ -562,6 +563,56 @@ export function createApp(config: AppConfig, services = createServices()) {
     return c.json({ artifacts });
   });
 
+  app.get('/sessions/:sessionId/artifacts/:artifactId/download', async (c) => {
+    const sessionId = c.req.param('sessionId');
+    const session = await services.sessions.get(sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+
+    try {
+      const download = await services.artifacts.getDownload({ sessionId, artifactId: c.req.param('artifactId') });
+      return new Response(download.body, {
+        headers: {
+          'content-type': download.contentType,
+          'content-length': String(download.body.byteLength),
+          'content-disposition': contentDisposition(download.fileName),
+        },
+      });
+    } catch (error) {
+      if (error instanceof ArtifactServiceError && error.code === 'not_found')
+        return writeError(c, 404, 'not_found', error.message);
+      if (error instanceof ArtifactServiceError && error.code === 'storage_disabled')
+        return writeError(c, 409, 'storage_disabled', error.message);
+      throw error;
+    }
+  });
+
+  app.get('/sessions/:sessionId/artifacts/:artifactId/preview', async (c) => {
+    const sessionId = c.req.param('sessionId');
+    const session = await services.sessions.get(sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+
+    try {
+      const preview = await services.artifacts.getPreview({ sessionId, artifactId: c.req.param('artifactId') });
+      return c.json({
+        artifact: preview.artifact,
+        preview: {
+          text: preview.text,
+          contentType: preview.contentType,
+          truncated: preview.truncated,
+          sizeBytes: preview.sizeBytes,
+        },
+      });
+    } catch (error) {
+      if (error instanceof ArtifactServiceError && error.code === 'not_found')
+        return writeError(c, 404, 'not_found', error.message);
+      if (error instanceof ArtifactServiceError && error.code === 'storage_disabled')
+        return writeError(c, 409, 'storage_disabled', error.message);
+      if (error instanceof ArtifactServiceError && error.code === 'unsupported_preview')
+        return writeError(c, 415, 'unsupported_preview', error.message);
+      throw error;
+    }
+  });
+
   app.get('/sessions/:sessionId/callbacks', async (c) => {
     const sessionId = c.req.param('sessionId');
     const session = await services.sessions.get(sessionId);
@@ -601,6 +652,16 @@ export function createApp(config: AppConfig, services = createServices()) {
 
 export function createServer(config: AppConfig, services = createServices()) {
   return createAdaptorServer({ fetch: createApp(config, services).fetch }) as Server;
+}
+
+function contentDisposition(fileName: string): string {
+  const fallback = fileName
+    .replace(/[\\/\r\n\t\0]/g, '_')
+    .replace(/[";]/g, '')
+    .trim()
+    .slice(0, 120);
+  const safeFallback = fallback || 'artifact';
+  return `attachment; filename="${safeFallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 function requestIdMiddleware(): MiddlewareHandler<{ Variables: AppVariables }> {

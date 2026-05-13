@@ -1,5 +1,6 @@
 import { AppLifecycle, installProcessShutdownHandlers, type CloseableResource } from './app/lifecycle.js';
 import { createServer, createServices } from './app/server.js';
+import { createArtifactObjectStorage } from './artifacts/storage.js';
 import { HttpCompletionCallbackSender, type CompletionCallbackSender } from './callbacks/service.js';
 import {
   loadConfig,
@@ -37,7 +38,8 @@ import { startWorkerLoop, WorkerService, type WorkerLoopHandle } from './worker/
 const config = loadConfig(process.env);
 const store = config.appStore === 'postgres' ? new PostgresStore(requireDatabaseUrl(config)) : new MemoryStore();
 const sandboxProvider = createSandboxProvider();
-const services = createServices(store, { sandboxProvider });
+const artifactObjectStorage = config.artifactStorage === 'disabled' ? undefined : createArtifactObjectStorage(config);
+const services = createServices(store, { sandboxProvider, ...(artifactObjectStorage ? { artifactObjectStorage } : {}) });
 const githubClient =
   config.githubAppId || config.githubAppPrivateKey ? new GitHubClient({ apiBaseUrl: config.githubApiBaseUrl }) : null;
 const githubRepositoryAccess = githubClient ? createGitHubRepositoryAccess(githubClient) : null;
@@ -224,5 +226,9 @@ async function createRunner(): Promise<Runner> {
     options.sessionStore = sessionStore;
   }
 
-  return new FlueRunner(new RealFlueAgentFactory(options), { repositoryAccess: createRepositoryAccess() });
+  return new FlueRunner(new RealFlueAgentFactory(options), {
+    repositoryAccess: createRepositoryAccess(),
+    ...(artifactObjectStorage ? { artifacts: services.artifacts } : {}),
+    artifactToolMaxBytes: config.artifactToolMaxBytes,
+  });
 }

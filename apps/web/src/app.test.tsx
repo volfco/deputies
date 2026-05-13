@@ -22,6 +22,9 @@ type MockApiOptions = {
   messages?: unknown[];
   messagesBySession?: Record<string, unknown[]>;
   events?: unknown[];
+  artifacts?: unknown[];
+  artifactPreview?: unknown;
+  artifactPreviewStatus?: number;
   sessions?: unknown[];
   callbacks?: unknown[];
   sessionOverride?: Partial<typeof session>;
@@ -550,6 +553,175 @@ it('keeps a cancelled middle message inline with its surrounding batch', async (
   expect(screen.getAllByText(/Activity/)).toHaveLength(1);
 });
 
+it('renders stored image artifacts inline and in the artifacts pane', async () => {
+  mockApi({
+    messages: [
+      messageFixture({
+        id: '00000000-0000-4000-8000-000000000120',
+        sequence: 1,
+        status: 'completed',
+        prompt: 'make an image',
+      }),
+    ],
+    events: [
+      eventFixture({
+        sequence: 1,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000120',
+        payload: { text: 'Here is the image.' },
+      }),
+      eventFixture({
+        sequence: 2,
+        type: 'artifact_created',
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000120',
+        payload: { artifact: { id: 'artifact-1' } },
+      }),
+    ],
+    artifacts: [
+      {
+        id: 'artifact-1',
+        sessionId: session.id,
+        runId: '00000000-0000-4000-8000-000000000220',
+        messageId: '00000000-0000-4000-8000-000000000120',
+        type: 'image',
+        title: 'Generated image',
+        storageKey: 'sessions/session/artifacts/artifact-1',
+        payload: { contentType: 'image/png', fileName: 'generated.png', sizeBytes: 1234 },
+        createdAt: '2026-05-05T12:02:00.000Z',
+      },
+    ],
+  });
+  render(<App />);
+
+  expect(await screen.findByText('Here is the image.')).toBeInTheDocument();
+  const images = await screen.findAllByRole('img', { name: 'Generated image' });
+  expect(images[0]).toHaveAttribute('src', `${window.location.origin}/sessions/${session.id}/artifacts/artifact-1/download`);
+  expect(screen.getAllByText('image · Generated image').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Open image')).toHaveLength(1);
+});
+
+it('skips large inline image autoload and lazy-loads text previews', async () => {
+  mockApi({
+    messages: [
+      messageFixture({ id: '00000000-0000-4000-8000-000000000121', sequence: 1, status: 'completed', prompt: 'logs' }),
+    ],
+    events: [
+      eventFixture({
+        sequence: 1,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        payload: { text: 'Artifacts created.' },
+      }),
+    ],
+    artifacts: [
+      {
+        id: 'large-image',
+        sessionId: session.id,
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        type: 'image',
+        title: 'Large image',
+        storageKey: 'large-image-key',
+        payload: { contentType: 'image/png', fileName: 'large.png', sizeBytes: 2_000_000 },
+        createdAt: '2026-05-05T12:02:00.000Z',
+      },
+      {
+        id: 'log-artifact',
+        sessionId: session.id,
+        runId: '00000000-0000-4000-8000-000000000221',
+        messageId: '00000000-0000-4000-8000-000000000121',
+        type: 'log',
+        title: 'Run log',
+        storageKey: 'log-key',
+        payload: { contentType: 'text/plain', fileName: 'run.log', sizeBytes: 100 },
+        createdAt: '2026-05-05T12:02:00.000Z',
+      },
+    ],
+    artifactPreview: { text: 'hello from log', contentType: 'text/plain', truncated: true, sizeBytes: 100 },
+  });
+  render(<App />);
+
+  expect((await screen.findAllByText('Large image')).length).toBeGreaterThan(0);
+  expect(screen.getByText('Large image preview skipped. Open the image to view it.')).toBeInTheDocument();
+  expect(screen.queryByRole('img', { name: 'Large image' })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('Preview Run log'));
+  expect(await screen.findByText('hello from log')).toBeInTheDocument();
+  expect(screen.getByText('Preview truncated.')).toBeInTheDocument();
+});
+
+it('shows text preview load failures inline', async () => {
+  mockApi({
+    messages: [
+      messageFixture({ id: '00000000-0000-4000-8000-000000000122', sequence: 1, status: 'completed', prompt: 'logs' }),
+    ],
+    events: [
+      eventFixture({
+        sequence: 1,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000222',
+        messageId: '00000000-0000-4000-8000-000000000122',
+        payload: { text: 'Log created.' },
+      }),
+    ],
+    artifacts: [
+      {
+        id: 'missing-log',
+        sessionId: session.id,
+        runId: '00000000-0000-4000-8000-000000000222',
+        messageId: '00000000-0000-4000-8000-000000000122',
+        type: 'log',
+        title: 'Missing log',
+        storageKey: 'missing-log-key',
+        payload: { contentType: 'text/plain', fileName: 'missing.log', sizeBytes: 100 },
+        createdAt: '2026-05-05T12:02:00.000Z',
+      },
+    ],
+    artifactPreviewStatus: 404,
+  });
+  render(<App />);
+
+  fireEvent.click(await screen.findByText('Preview Missing log'));
+  expect(await screen.findByText('Request failed with 404')).toBeInTheDocument();
+});
+
+it('does not offer text preview for text MIME with binary-looking extension', async () => {
+  mockApi({
+    messages: [
+      messageFixture({ id: '00000000-0000-4000-8000-000000000123', sequence: 1, status: 'completed', prompt: 'file' }),
+    ],
+    events: [
+      eventFixture({
+        sequence: 1,
+        type: 'agent_text_delta',
+        runId: '00000000-0000-4000-8000-000000000223',
+        messageId: '00000000-0000-4000-8000-000000000123',
+        payload: { text: 'File created.' },
+      }),
+    ],
+    artifacts: [
+      {
+        id: 'wrong-extension',
+        sessionId: session.id,
+        runId: '00000000-0000-4000-8000-000000000223',
+        messageId: '00000000-0000-4000-8000-000000000123',
+        type: 'file',
+        title: 'Wrong extension',
+        storageKey: 'wrong-extension-key',
+        payload: { contentType: 'text/plain', fileName: 'wrong-extension.png', sizeBytes: 100 },
+        createdAt: '2026-05-05T12:02:00.000Z',
+      },
+    ],
+  });
+  render(<App />);
+
+  expect((await screen.findAllByText('file · Wrong extension')).length).toBeGreaterThan(0);
+  expect(screen.queryByText('Preview Wrong extension')).not.toBeInTheDocument();
+});
+
 it('shows a jump control instead of autoscrolling after the user scrolls up', async () => {
   let pushGlobalEvent: StreamEventPusher = () => undefined;
   let globalStreamOpen = false;
@@ -622,7 +794,7 @@ it('pauses autoscroll while the message composer has focus', async () => {
     scrollHeight: 2000,
     scrollTop: 1500,
   });
-  const composer = screen.getByPlaceholderText('Ask your deputy to investigate, change code, or follow up...');
+  const composer = await screen.findByPlaceholderText('Ask your deputy to investigate, change code, or follow up...');
   act(() => composer.focus());
   expect(document.activeElement).toBe(composer);
   scrollIntoView.mockClear();
@@ -972,8 +1144,8 @@ it('renders tool diagnostics as readable activity with raw details collapsed', a
   await screen.findByText('I ran the tests.');
   fireEvent.click(screen.getByText(/Activity · 3 events/));
 
-  expect(screen.getByText('Command failed: pnpm test')).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByText('pnpm test')).toBeInTheDocument());
+  expect(await screen.findByText('Command failed: pnpm test')).toBeInTheDocument();
+  expect(await screen.findByText(codeTextMatcher('pnpm test'))).toBeInTheDocument();
   expect(screen.getByText('Tests failed')).toBeInTheDocument();
   expect(screen.getAllByText('Debug details')).toHaveLength(2);
 });
@@ -1566,7 +1738,19 @@ function mockApi(options: MockApiOptions = {}) {
     }
 
     if (url.pathname.match(/^\/sessions\/[^/]+\/artifacts$/)) {
-      return jsonResponse({ artifacts: [] });
+      return jsonResponse({ artifacts: options.artifacts ?? [] });
+    }
+
+    if (url.pathname.match(/^\/sessions\/[^/]+\/artifacts\/[^/]+\/preview$/)) {
+      if (options.artifactPreviewStatus) return jsonResponse({ error: 'not_found', message: 'Request failed with 404' }, options.artifactPreviewStatus);
+      return jsonResponse({
+        preview: options.artifactPreview ?? {
+          text: 'preview text',
+          contentType: 'text/plain',
+          truncated: false,
+          sizeBytes: 12,
+        },
+      });
     }
 
     if (url.pathname.match(/^\/sessions\/[^/]+\/callbacks$/) && method === 'GET') {
@@ -1693,6 +1877,10 @@ function filterEventsAfter(events: unknown[], after: string | null): unknown[] {
     const eventCursor = typeof record.id === 'number' ? record.id : record.sequence;
     return typeof eventCursor !== 'number' || eventCursor > cursor;
   });
+}
+
+function codeTextMatcher(text: string): (_: string, element: Element | null) => boolean {
+  return (_, element) => element?.tagName.toLowerCase() === 'code' && element.textContent === text;
 }
 
 function callbackFixture(input: {

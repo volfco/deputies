@@ -43,6 +43,11 @@ describe('loadConfig', () => {
       githubAllowedUsers: [],
       githubAllowedOrganizations: [],
       githubTriggerPhrases: [],
+      artifactStorage: 'disabled',
+      artifactStorageS3Region: 'us-east-1',
+      artifactStorageS3ForcePathStyle: true,
+      artifactStorageS3CreateBucket: false,
+      artifactToolMaxBytes: 26_214_400,
     });
   });
 
@@ -113,6 +118,15 @@ describe('loadConfig', () => {
         GITHUB_ALLOWED_USERS: 'octocat,hubot',
         GITHUB_ALLOWED_ORGANIZATIONS: 'acme,octo',
         GITHUB_TRIGGER_PHRASES: '/deputies, deputies:, @acme/deputies',
+        ARTIFACT_STORAGE_PROVIDER: 's3',
+        ARTIFACT_STORAGE_S3_ENDPOINT: 'http://seaweedfs:8333',
+        ARTIFACT_STORAGE_S3_REGION: 'local',
+        ARTIFACT_STORAGE_S3_BUCKET: 'deputies-artifacts',
+        ARTIFACT_STORAGE_S3_ACCESS_KEY_ID: 'seaweed',
+        ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY: 'seaweed-secret',
+        ARTIFACT_STORAGE_S3_FORCE_PATH_STYLE: 'false',
+        ARTIFACT_STORAGE_S3_CREATE_BUCKET: 'true',
+        ARTIFACT_TOOL_MAX_BYTES: '1024',
       }),
     ).toMatchObject({
       port: 4000,
@@ -180,7 +194,32 @@ describe('loadConfig', () => {
       githubAllowedUsers: ['octocat', 'hubot'],
       githubAllowedOrganizations: ['acme', 'octo'],
       githubTriggerPhrases: ['/deputies', 'deputies:', '@acme/deputies'],
+      artifactStorage: 's3',
+      artifactStorageS3Endpoint: 'http://seaweedfs:8333',
+      artifactStorageS3Region: 'local',
+      artifactStorageS3Bucket: 'deputies-artifacts',
+      artifactStorageS3AccessKeyId: 'seaweed',
+      artifactStorageS3SecretAccessKey: 'seaweed-secret',
+      artifactStorageS3ForcePathStyle: false,
+      artifactStorageS3CreateBucket: true,
+      artifactToolMaxBytes: 1024,
     });
+  });
+
+  it('validates artifact storage provider requirements', () => {
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', ARTIFACT_STORAGE_PROVIDER: 'filesystem' })).toThrow(
+      'ARTIFACT_STORAGE_FILESYSTEM_PATH is required',
+    );
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', ARTIFACT_STORAGE_PROVIDER: 's3' })).toThrow(
+      'ARTIFACT_STORAGE_S3_BUCKET is required',
+    );
+    expect(() =>
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        ARTIFACT_STORAGE_PROVIDER: 's3',
+        ARTIFACT_STORAGE_S3_BUCKET: 'artifacts',
+      }),
+    ).toThrow('ARTIFACT_STORAGE_S3_ACCESS_KEY_ID and ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY are required');
   });
 
   it('requires Slack allowlists unless unsafe allow-all is explicit', () => {

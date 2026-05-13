@@ -55,6 +55,16 @@ export type Artifact = {
   createdAt: string;
   title?: string;
   url?: string;
+  storageKey?: string;
+  runId?: string;
+  messageId?: string;
+};
+
+export type ArtifactPreview = {
+  text: string;
+  contentType: string;
+  truncated: boolean;
+  sizeBytes: number;
 };
 
 export type CallbackDelivery = {
@@ -261,6 +271,18 @@ export async function listEvents(sessionId: string, token: string, after?: numbe
 export async function listArtifacts(sessionId: string, token: string): Promise<Artifact[]> {
   const body = await request<{ artifacts: Artifact[] }>(`/sessions/${sessionId}/artifacts`, { token });
   return body.artifacts;
+}
+
+export async function getArtifactPreview(input: {
+  sessionId: string;
+  artifactId: string;
+  token: string;
+}): Promise<ArtifactPreview> {
+  const body = await request<{ preview: ArtifactPreview }>(
+    `/sessions/${input.sessionId}/artifacts/${input.artifactId}/preview`,
+    { token: input.token },
+  );
+  return body.preview;
 }
 
 export async function listCallbacks(sessionId: string, token: string): Promise<CallbackDelivery[]> {

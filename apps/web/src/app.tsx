@@ -15,6 +15,7 @@ import {
   createSession,
   enqueueMessage,
   getCurrentUser,
+  getArtifactPreview,
   getHealth,
   login,
   listArtifacts,
@@ -1023,6 +1024,7 @@ export function App() {
                                   onReplayCallback={handleReplayCallback}
                                 />
                                 <ChatPanel
+                                  artifacts={artifacts}
                                   editingMessageId={editingMessageId}
                                   events={events}
                                   messageDraft={messageDraft}
@@ -1035,6 +1037,9 @@ export function App() {
                                   onMessageDraftChange={setMessageDraft}
                                   onRetryFailedMessages={retryFailedMessages}
                                   onSaveEdit={saveMessageEdit}
+                                  onLoadArtifactPreview={(artifact) =>
+                                    getArtifactPreview({ sessionId: artifact.sessionId, artifactId: artifact.id, token })
+                                  }
                                 />
                               </>
                             )}

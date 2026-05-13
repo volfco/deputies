@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, RotateCcw, X, ChevronDown } from 'lucide-react';
+import type { ToggleEvent } from 'react';
+import { Check, ChevronDown, Copy, RotateCcw, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { AgentEvent, Artifact, CallbackDelivery, Message } from '../../api.js';
+import type { AgentEvent, Artifact, ArtifactPreview, CallbackDelivery, Message } from '../../api.js';
+import { getApiBaseUrl } from '../../api.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { Card } from '../ui/card.js';
@@ -10,6 +12,7 @@ import { Textarea } from '../ui/textarea.js';
 import { cn } from '../../lib/utils.js';
 
 export function ChatPanel(props: {
+  artifacts: Artifact[];
   canRetryMessages: boolean;
   editingMessageId: string;
   events: AgentEvent[];
@@ -22,6 +25,7 @@ export function ChatPanel(props: {
   onMessageDraftChange: (value: string) => void;
   onRetryFailedMessages: (messageIds: string[]) => void;
   onSaveEdit: () => void;
+  onLoadArtifactPreview: (artifact: Artifact) => Promise<ArtifactPreview>;
 }) {
   const assistantText = buildAssistantText(props.events);
   const diagnostics = groupDiagnosticsByRun(props.events);
@@ -31,6 +35,7 @@ export function ChatPanel(props: {
     <section className="grid gap-3">
       {groups.map((group) => {
         const response = assistantText[group.responseMessageId];
+        const inlineArtifacts = artifactsForGroup(props.artifacts, group);
         const groupDiagnostics = diagnostics[group.runId ?? group.responseMessageId] ?? [];
         const activeRun = isActiveRunGroup(group.messages);
         const cancellingRun = isCancellingRunGroup(group.messages);
@@ -82,12 +87,25 @@ export function ChatPanel(props: {
                 <MarkdownText text={formatAssistantDisplayText(response)} />
               </Card>
             ) : null}
+            {inlineArtifacts.length ? (
+              <InlineArtifacts artifacts={inlineArtifacts} onLoadArtifactPreview={props.onLoadArtifactPreview} />
+            ) : null}
             <Diagnostics events={groupDiagnostics} />
           </div>
         );
       })}
       {!props.messages.length ? <p className="text-sm text-muted-foreground">No messages yet.</p> : null}
     </section>
+  );
+}
+
+function InlineArtifacts(props: { artifacts: Artifact[]; onLoadArtifactPreview: (artifact: Artifact) => Promise<ArtifactPreview> }) {
+  return (
+    <div className="grid gap-2" aria-label="Inline artifacts">
+      {props.artifacts.map((artifact) => (
+        <ArtifactPreviewCard artifact={artifact} compact key={artifact.id} onLoadArtifactPreview={props.onLoadArtifactPreview} />
+      ))}
+    </div>
   );
 }
 
@@ -808,20 +826,7 @@ function ContextPanelContent(props: {
       </div>
       <div className="mt-3 grid gap-2">
         {props.artifacts.map((artifact) => (
-          <Card className="p-3" key={artifact.id}>
-            <span className="text-xs text-muted-foreground">
-              {artifact.type} · {formatDate(artifact.createdAt)}
-            </span>
-            <strong className="mt-1 block text-sm font-medium">{artifact.title || artifact.url || artifact.id}</strong>
-            {artifact.url ? (
-              <a className="mt-1 block text-sm text-primary" href={artifact.url} target="_blank" rel="noreferrer">
-                Open artifact
-              </a>
-            ) : null}
-            <div className="max-h-44 min-w-0 overflow-auto text-xs [&_figure]:my-2 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
-              <JsonPayload value={artifact.payload} />
-            </div>
-          </Card>
+          <ArtifactPreviewCard artifact={artifact} key={artifact.id} />
         ))}
         {!props.artifacts.length ? <p className="text-sm text-muted-foreground">No artifacts yet.</p> : null}
       </div>
@@ -876,6 +881,156 @@ function ContextPanelContent(props: {
         {!props.callbacks.length ? <p className="text-sm text-muted-foreground">No callbacks yet.</p> : null}
       </div>
     </div>
+  );
+}
+
+const inlineImageMaxBytes = 1_000_000;
+
+type ArtifactPreviewCardProps = {
+  artifact: Artifact;
+  compact?: boolean;
+  onLoadArtifactPreview?: (artifact: Artifact) => Promise<ArtifactPreview>;
+};
+
+function ArtifactPreviewCard(props: ArtifactPreviewCardProps) {
+  const { artifact } = props;
+  const name = artifactName(artifact);
+  const downloadUrl = artifactDownloadUrl(artifact);
+  const openUrl = downloadUrl ?? artifact.url;
+  const image = isImageArtifact(artifact);
+  const sizeBytes = artifactSizeBytes(artifact);
+  const largeImage = image && (!sizeBytes || sizeBytes > inlineImageMaxBytes);
+  const textPreviewable = isTextPreviewableArtifact(artifact);
+  if (!props.compact) {
+    return (
+      <details className="group rounded-md border border-border bg-card/70 text-xs text-muted-foreground">
+        <summary
+          aria-label={`${artifact.type} artifact ${name}`}
+          className="grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden"
+        >
+          <ChevronDown
+            className="h-3.5 w-3.5 -rotate-90 text-muted-foreground transition-transform group-open:rotate-0"
+            aria-hidden="true"
+          />
+          <span className="min-w-0 truncate text-muted-foreground">
+            {artifact.type} · {name}
+          </span>
+          {openUrl ? (
+            <a
+              className="text-primary hover:text-primary/80"
+              href={openUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
+            >
+              Open
+            </a>
+          ) : null}
+        </summary>
+        <div className="border-t border-border px-3 py-2">
+          <dl className="mb-2 grid gap-1">
+            <div>Created: {formatDate(artifact.createdAt)}</div>
+            <div className="truncate">ID: {artifact.id}</div>
+          </dl>
+          <div className="mt-2 max-h-44 min-w-0 overflow-auto text-xs [&_figure]:my-2 [&_figure]:shadow-none [&_.highlighted-code]:text-xs">
+            <JsonPayload value={artifact.payload} />
+          </div>
+        </div>
+      </details>
+    );
+  }
+
+  return (
+    <Card className="min-w-0 overflow-hidden border-primary/30 bg-primary/5 p-3">
+      <span className="text-xs text-muted-foreground">
+        {artifact.type} · {formatDate(artifact.createdAt)}
+      </span>
+      <strong className="mt-1 block break-words text-sm font-medium">
+        {openUrl ? (
+          <a
+            className="text-primary hover:text-primary/80"
+            href={openUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {name}
+          </a>
+        ) : (
+          name
+        )}
+      </strong>
+      {image && downloadUrl && !largeImage ? (
+        <a className="mt-3 block" href={downloadUrl} target="_blank" rel="noreferrer" aria-label="Open image artifact">
+          <img
+            className="max-h-80 w-full rounded-md border border-border object-contain shadow-sm"
+            src={downloadUrl}
+            alt={name}
+            loading="lazy"
+          />
+        </a>
+      ) : null}
+      {largeImage ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          Large image preview skipped. Open the image to view it.
+        </p>
+      ) : null}
+      {textPreviewable && props.onLoadArtifactPreview ? (
+        <TextArtifactPreview artifact={artifact} onLoadArtifactPreview={props.onLoadArtifactPreview} />
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {downloadUrl ? (
+          <a className="text-sm font-medium text-primary hover:text-primary/80" href={downloadUrl} target="_blank" rel="noreferrer">
+            {image ? 'Open image' : 'Download artifact'}
+          </a>
+        ) : null}
+        {artifact.url ? (
+          <a className="text-sm font-medium text-primary hover:text-primary/80" href={artifact.url} target="_blank" rel="noreferrer">
+            Open external link
+          </a>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+type TextArtifactPreviewProps = {
+  artifact: Artifact;
+  onLoadArtifactPreview: (artifact: Artifact) => Promise<ArtifactPreview>;
+};
+
+function TextArtifactPreview(props: TextArtifactPreviewProps) {
+  const [preview, setPreview] = useState<ArtifactPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const name = artifactName(props.artifact);
+
+  async function handleToggle(event: ToggleEvent<HTMLDetailsElement>) {
+    if (!event.currentTarget.open || preview || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      setPreview(await props.onLoadArtifactPreview(props.artifact));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load preview');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <details className="mt-3 min-w-0" onToggle={handleToggle}>
+      <summary className="cursor-pointer text-sm font-medium text-primary">Preview {name}</summary>
+      <div className="mt-2 max-h-80 min-w-0 overflow-auto rounded-md border border-border bg-muted/30 p-2 text-xs">
+        {loading ? <p className="text-muted-foreground">Loading preview...</p> : null}
+        {error ? <p className="text-destructive">{error}</p> : null}
+        {preview ? (
+          <>
+            <pre className="whitespace-pre-wrap break-words font-mono text-foreground">{preview.text}</pre>
+            {preview.truncated ? <p className="mt-2 text-muted-foreground">Preview truncated.</p> : null}
+          </>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -962,6 +1117,76 @@ function groupMessagesByRun(messages: Message[], events: AgentEvent[]): MessageG
   }
 
   return groups;
+}
+
+function artifactsForGroup(artifacts: Artifact[], group: MessageGroup): Artifact[] {
+  const messageIds = new Set(group.messages.map((message) => message.id));
+  return artifacts.filter((artifact) => {
+    if (!isImageArtifact(artifact) && !isTextPreviewableArtifact(artifact)) return false;
+    if (group.runId && artifact.runId === group.runId) return true;
+    return Boolean(artifact.messageId && messageIds.has(artifact.messageId));
+  });
+}
+
+function artifactDownloadUrl(artifact: Artifact): string | undefined {
+  if (!artifact.storageKey) return undefined;
+  return `${getApiBaseUrl()}/sessions/${artifact.sessionId}/artifacts/${artifact.id}/download`;
+}
+
+function artifactName(artifact: Artifact): string {
+  return artifact.title || stringPayloadValue(artifact.payload.fileName) || artifact.url || artifact.id;
+}
+
+function isImageArtifact(artifact: Artifact): boolean {
+  const contentType = stringPayloadValue(artifact.payload.contentType);
+  return artifact.type === 'image' || artifact.type === 'screenshot' || Boolean(contentType?.startsWith('image/'));
+}
+
+function isTextPreviewableArtifact(artifact: Artifact): boolean {
+  if (!artifact.storageKey) return false;
+  const contentType = stringPayloadValue(artifact.payload.contentType)?.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!isTextContentType(contentType)) return false;
+  if (artifact.type === 'log' || artifact.type === 'report') return true;
+  return previewableTextExtensions.has(fileExtension(stringPayloadValue(artifact.payload.fileName) ?? artifactName(artifact)));
+}
+
+function isTextContentType(contentType: string): boolean {
+  if (contentType.startsWith('text/')) return true;
+  return ['application/json', 'application/xml', 'application/yaml', 'application/x-yaml', 'application/javascript'].includes(
+    contentType,
+  );
+}
+
+const previewableTextExtensions = new Set([
+  '.txt',
+  '.log',
+  '.md',
+  '.markdown',
+  '.json',
+  '.xml',
+  '.yaml',
+  '.yml',
+  '.csv',
+  '.tsv',
+  '.html',
+  '.css',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.sh',
+]);
+
+function fileExtension(fileName: string): string {
+  return fileName.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? '';
+}
+
+function artifactSizeBytes(artifact: Artifact): number | undefined {
+  return typeof artifact.payload.sizeBytes === 'number' ? artifact.payload.sizeBytes : undefined;
+}
+
+function stringPayloadValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 function isActiveRunGroup(messages: Message[]): boolean {

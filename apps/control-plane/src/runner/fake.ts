@@ -35,7 +35,18 @@ export class FakeRunner implements Runner {
       const type = 'type' in artifact && typeof artifact.type === 'string' ? artifact.type : 'external_link';
       const url = 'url' in artifact && typeof artifact.url === 'string' ? artifact.url : undefined;
       const payload = 'payload' in artifact && isRecord(artifact.payload) ? artifact.payload : {};
-      result.artifacts = [url ? { type, url, payload } : { type, payload }];
+      const runnerArtifact = { type, payload };
+      if (url) Object.assign(runnerArtifact, { url });
+      if ('title' in artifact && typeof artifact.title === 'string') Object.assign(runnerArtifact, { title: artifact.title });
+      if ('content' in artifact && typeof artifact.content === 'string')
+        Object.assign(runnerArtifact, { content: artifact.content });
+      if ('contentBase64' in artifact && typeof artifact.contentBase64 === 'string')
+        Object.assign(runnerArtifact, { contentBase64: artifact.contentBase64 });
+      if ('contentType' in artifact && typeof artifact.contentType === 'string')
+        Object.assign(runnerArtifact, { contentType: artifact.contentType });
+      if ('fileName' in artifact && typeof artifact.fileName === 'string')
+        Object.assign(runnerArtifact, { fileName: artifact.fileName });
+      result.artifacts = [runnerArtifact];
     }
 
     return result;

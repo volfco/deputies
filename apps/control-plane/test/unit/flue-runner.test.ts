@@ -2,9 +2,17 @@ import { FlueRunner } from '../../src/runner-flue/runner.js';
 import { RealFlueAgentFactory } from '../../src/runner-flue/agent-factory.js';
 import type { FlueAgentFactory } from '../../src/runner-flue/types.js';
 import type { SessionData, SessionStore } from '@flue/sdk';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { ArtifactService } from '../../src/artifacts/service.js';
+import { FilesystemArtifactObjectStorage } from '../../src/artifacts/storage.js';
+import { EventService } from '../../src/events/service.js';
 import type { NormalizedEvent } from '../../src/events/types.js';
 import type { RepositoryAccessProvider } from '../../src/repositories/setup.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
+import type { SandboxFileSystem, SandboxHandle } from '../../src/sandbox/types.js';
+import { MemoryStore } from '../../src/store/memory.js';
 
 describe('FlueRunner', () => {
   it('uses stable product session IDs for Flue agent and session identity', async () => {
@@ -186,6 +194,74 @@ describe('FlueRunner', () => {
     expect(eventsJson).not.toContain('ghs_secret_token');
   });
 
+  it('registers artifact_create and stores sandbox files as product artifacts', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'deputies-artifact-tool-'));
+    try {
+      const store = new MemoryStore();
+      const eventsService = new EventService(store);
+      const artifacts = new ArtifactService(store, eventsService, new FilesystemArtifactObjectStorage(tempDir));
+      const sandbox = createFilesystemSandbox('session-1');
+      await sandbox.fs!.writeFile('/workspace/report.txt', 'tool artifact');
+      const events: NormalizedEvent[] = [];
+      const factory: FlueAgentFactory = {
+        async create(input) {
+          expect(input.tools?.map((tool) => tool.name)).toEqual(['artifact_create']);
+          return {
+            async session() {
+              return {
+                async prompt() {
+                  const tool = input.tools?.find((candidate) => candidate.name === 'artifact_create');
+                  const result = JSON.parse(
+                    await tool!.execute({
+                    path: '/workspace/report.txt',
+                    type: 'report',
+                    title: 'Report',
+                    contentType: 'text/plain',
+                    }),
+                  ) as { artifactId: string; downloadUrl: string };
+                  return { text: `Created ${result.downloadUrl}` };
+                },
+                abort() {},
+              };
+            },
+          };
+        },
+      };
+
+      const result = await new FlueRunner(factory, { artifacts, artifactToolMaxBytes: 1024 }).run({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        messageId: 'message-1',
+        prompt: 'publish report',
+        context: {},
+        sandbox,
+        emit: async (event) => {
+          events.push(event);
+        },
+      });
+
+      const records = await store.getArtifacts('session-1');
+      expect(records).toMatchObject([
+        {
+          type: 'report',
+          title: 'Report',
+          storageKey: expect.any(String),
+          payload: {
+            sourcePath: '/workspace/report.txt',
+            storage: 'internal',
+            contentType: 'text/plain',
+            fileName: 'report.txt',
+          },
+        },
+      ]);
+      expect(result.text).toContain(`/sessions/session-1/artifacts/${records[0]!.id}/download`);
+      expect(events.map((event) => event.type)).toEqual(['run_started', 'agent_text_delta', 'run_completed']);
+      await expect(store.getEvents('session-1')).resolves.toMatchObject([{ type: 'artifact_created' }]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('restores persisted Flue session state after abort', async () => {
     const previousSession = {
       version: 3 as const,
@@ -337,6 +413,61 @@ describe('FlueRunner', () => {
     ]);
   });
 });
+
+function createFilesystemSandbox(sessionId: string): SandboxHandle {
+  const files = new Map<string, Uint8Array>();
+  const fs: SandboxFileSystem = {
+    async readFile(filePath) {
+      return Buffer.from(await this.readFileBuffer(filePath)).toString('utf8');
+    },
+    async readFileBuffer(filePath) {
+      const file = files.get(filePath);
+      if (!file) throw new Error(`File not found: ${filePath}`);
+      return file;
+    },
+    async writeFile(filePath, content) {
+      files.set(filePath, typeof content === 'string' ? Buffer.from(content) : content);
+    },
+    async stat(filePath) {
+      const file = files.get(filePath);
+      if (!file) throw new Error(`File not found: ${filePath}`);
+      return { isFile: true, isDirectory: false, isSymbolicLink: false, size: file.byteLength, mtime: new Date() };
+    },
+    async readdir() {
+      return [];
+    },
+    async exists(filePath) {
+      return files.has(filePath);
+    },
+    async mkdir() {},
+    async rm(filePath) {
+      files.delete(filePath);
+    },
+  };
+
+  return {
+    provider: 'fake-fs',
+    providerSandboxId: `fake-fs-${sessionId}`,
+    sessionId,
+    workspacePath: '/workspace',
+    metadata: {},
+    capabilities: {
+      persistentFilesystem: true,
+      snapshots: false,
+      stopStart: false,
+      exec: true,
+      filesystem: true,
+      streamingLogs: false,
+      portForwarding: false,
+      objectStorageArtifacts: false,
+    },
+    fs,
+    async exec(command) {
+      const now = new Date();
+      return { exitCode: 0, stdout: `fake exec: ${command.command}`, stderr: '', startedAt: now, completedAt: now };
+    },
+  };
+}
 
 class StaticGitHubAccessProvider implements RepositoryAccessProvider {
   constructor(private readonly token: string) {}
