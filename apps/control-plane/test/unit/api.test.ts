@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import { createServer as createHttpServer, type Server } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,7 @@ import { FilesystemArtifactObjectStorage, type ArtifactObjectStorage } from '../
 import { createServer, createServices, type AppServices } from '../../src/app/server.js';
 import { loadConfig } from '../../src/config/index.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
+import type { SandboxPreviewUrlInput } from '../../src/sandbox/types.js';
 import { MemoryStore } from '../../src/store/memory.js';
 import {
   expectArtifactsResponse,
@@ -583,6 +584,98 @@ describe('core API', () => {
     ]);
   });
 
+  it('proxies preview HTML and rewrites root-relative Vite asset paths', async () => {
+    const upstream = createPreviewUpstream();
+    const upstreamBaseUrl = await listen(upstream);
+    await closeServer(server);
+    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', WEB_BASE_URL: 'https://deputies.localhost' }),
+      createServices(store, { sandboxProvider: provider }),
+    );
+    baseUrl = await listen(server);
+
+    try {
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Preview rewrite' });
+      const { session } = (await createSession.json()) as { session: { id: string } };
+      const sandbox = await provider.create({ sessionId: session.id });
+      const storedSession = await store.getSession(session.id);
+      if (!storedSession) throw new Error('Expected session');
+      await store.updateSession({
+        ...storedSession,
+        context: { previews: [{ port: 3000, label: 'Vite app', path: '/' }] },
+      });
+      const now = new Date();
+      await store.createSandbox({
+        id: '00000000-0000-4000-8000-000000000502',
+        sessionId: session.id,
+        provider: provider.name,
+        providerSandboxId: sandbox.providerSandboxId,
+        status: 'ready',
+        workspacePath: '/workspace',
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const previewRoot = `${baseUrl}/sessions/${session.id}/previews/3000/`;
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews`)).json()).resolves.toMatchObject({
+        previews: [
+          {
+            port: 3000,
+            label: 'Vite app',
+            path: '/',
+            url: `https://p-3000-${session.id}.deputies.localhost/`,
+          },
+        ],
+      });
+      const html = await (await fetch(previewRoot)).text();
+
+      expect(html).toContain(`/sessions/${session.id}/previews/3000/@vite/client`);
+      expect(html).toContain(`/sessions/${session.id}/previews/3000/src/main.tsx`);
+      await expect((await fetch(`${previewRoot}@vite/client`)).text()).resolves.toBe('vite client');
+      await expect((await fetch(`${previewRoot}src/main.tsx`)).text()).resolves.toBe('main');
+    } finally {
+      await closeServer(upstream);
+    }
+  });
+
+  it('does not list a default preview when none has been published', async () => {
+    const upstream = createPreviewUpstream();
+    const upstreamBaseUrl = await listen(upstream);
+    await closeServer(server);
+    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store, { sandboxProvider: provider }));
+    baseUrl = await listen(server);
+
+    try {
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'No preview' });
+      const { session } = (await createSession.json()) as { session: { id: string } };
+      const sandbox = await provider.create({ sessionId: session.id });
+      const now = new Date();
+      await store.createSandbox({
+        id: '00000000-0000-4000-8000-000000000503',
+        sessionId: session.id,
+        provider: provider.name,
+        providerSandboxId: sandbox.providerSandboxId,
+        status: 'ready',
+        workspacePath: '/workspace',
+        metadata: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews`)).json()).resolves.toEqual({
+        previews: [],
+      });
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews?port=3000`)).json()).resolves.toMatchObject({
+        previews: [{ port: 3000 }],
+      });
+    } finally {
+      await closeServer(upstream);
+    }
+  });
+
   it('unarchives a session', async () => {
     const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Restore me' });
     const { session } = (await createSession.json()) as { session: { id: string } };
@@ -1013,6 +1106,54 @@ async function listen(server: Server): Promise<string> {
     throw new Error('Expected TCP server address');
   }
   return `http://${address.address}:${address.port}`;
+}
+
+class PreviewSandboxProvider extends FakeSandboxProvider {
+  override readonly capabilities = {
+    persistentFilesystem: true,
+    snapshots: false,
+    stopStart: false,
+    exec: true,
+    filesystem: false,
+    streamingLogs: false,
+    portForwarding: false,
+    previewUrls: true,
+    objectStorageArtifacts: false,
+  };
+
+  constructor(private readonly upstreamBaseUrl: string) {
+    super();
+  }
+
+  async getPreviewUrl(input: SandboxPreviewUrlInput) {
+    return { port: input.port, targetUrl: this.upstreamBaseUrl };
+  }
+}
+
+function createPreviewUpstream(): Server {
+  return createHttpServer((request, response) => {
+    if (request.url === '/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(`<!doctype html>
+        <html>
+          <head><script type="module" src="/@vite/client"></script></head>
+          <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+        </html>`);
+      return;
+    }
+    if (request.url === '/@vite/client') {
+      response.writeHead(200, { 'content-type': 'application/javascript' });
+      response.end('vite client');
+      return;
+    }
+    if (request.url === '/src/main.tsx') {
+      response.writeHead(200, { 'content-type': 'application/javascript' });
+      response.end('main');
+      return;
+    }
+    response.writeHead(404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error: 'not_found' }));
+  });
 }
 
 async function closeServer(server: Server): Promise<void> {

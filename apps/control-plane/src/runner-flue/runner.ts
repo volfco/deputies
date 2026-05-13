@@ -10,6 +10,7 @@ import type { Runner, RunnerInput, RunnerResult } from '../runner/types.js';
 import { createArtifactTool } from './artifact-tool.js';
 import { createGitTool, type AgentRef } from './git-tool.js';
 import { createGitHubCliTool } from './github-cli-tool.js';
+import { createPreviewTool } from './preview-tool.js';
 import { createRepositoryTool, type RepositoryToolServices, type RepositoryToolState } from './repository-tool.js';
 import type { FlueAgentFactory, FlueSessionPort } from './types.js';
 
@@ -38,6 +39,7 @@ export class FlueRunner implements Runner {
     const repositorySetup = await prepareRepositoryShellSetup(repositorySetupInput);
     const agentRef: AgentRef = {};
     const repositoryState: RepositoryToolState = { context: structuredClone(input.context) };
+    const previewState = { context: structuredClone(input.context) };
     if (repositorySetup) {
       repositoryState.prepared = {
         repository: { provider: 'github', owner: repositorySetup.access.owner, repo: repositorySetup.access.repo },
@@ -74,6 +76,19 @@ export class FlueRunner implements Runner {
         createRepositoryTool(repositoryServices),
         createGitHubCliTool(repositoryServices),
         createGitTool({ agentRef, repository: repositoryServices }),
+      );
+    }
+    if (input.updateSessionContext) {
+      tools.push(
+        createPreviewTool({
+          sessionId: input.sessionId,
+          updateSessionContext: input.updateSessionContext,
+          getContext: () => previewState.context,
+          setContext: (context) => {
+            previewState.context = context;
+            repositoryState.context = context;
+          },
+        }),
       );
     }
 
@@ -115,7 +130,7 @@ export class FlueRunner implements Runner {
       if (input.signal?.aborted) throw new Error('Operation aborted');
       let response;
       try {
-        response = await session.prompt(repositoryServices ? withRepositoryGuidance(input.prompt) : input.prompt);
+        response = await session.prompt(withToolGuidance(input.prompt, Boolean(repositoryServices)));
       } finally {
         if (input.signal?.aborted) await this.restoreSessionSnapshot(input.sessionId, sessionSnapshot);
       }
@@ -194,8 +209,17 @@ export class FlueRunner implements Runner {
   }
 }
 
-function withRepositoryGuidance(prompt: string): string {
-  return [
+function withToolGuidance(prompt: string, includeRepository: boolean): string {
+  const lines = [
+    'Preview tool guidance:',
+    '- If you start or identify a web server the user should open, call preview({ action: "publish", port, label, path }) after confirming the server is running.',
+    '- Use preview({ action: "list" }) to inspect published previews and preview({ action: "unpublish", port }) to remove stale links.',
+    '- Do not publish ports that are not serving an app or useful HTTP endpoint.',
+    '- For Vite dev servers published as previews, do not hard-code server.hmr.host, server.hmr.clientPort, or server.hmr.protocol to localhost; let Vite infer the browser preview URL unless the user specifically asks otherwise.',
+    '',
+  ];
+  if (includeRepository) {
+    lines.push(
     'Repository tool guidance:',
     '- Before doing repository-specific work, use repository({ action: "status" }) to inspect the active repo.',
     '- If a repository is already active and the user did not ask to switch, use it.',
@@ -204,10 +228,10 @@ function withRepositoryGuidance(prompt: string): string {
     '- If the repo is unclear, use repository({ action: "list" }) and ask the user to choose instead of guessing.',
     '- Use repository({ action: "prepare" }) before reading or editing files in the repo.',
     '- Use normal file and shell tools for local code changes and commits, git for authenticated remote git operations, and gh for GitHub issues, comments, and pull requests.',
-    '',
-    'User request:',
-    prompt,
-  ].join('\n');
+    '');
+  }
+  lines.push('User request:', prompt);
+  return lines.join('\n');
 }
 
 function normalizeFlueEvent(event: FlueEvent, input: RunnerInput): NormalizedEvent | null {

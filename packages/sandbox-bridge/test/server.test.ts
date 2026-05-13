@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
-import type { Server } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { createSandboxBridgeServer } from '../src/server.js';
 
 describe('sandbox bridge server', () => {
@@ -108,6 +109,63 @@ describe('sandbox bridge server', () => {
     });
   });
 
+  it('proxies preview traffic to localhost and strips auth cookies', async () => {
+    const upstream = createServer((request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          url: request.url,
+          authorization: request.headers.authorization ?? null,
+          cookie: request.headers.cookie ?? null,
+        }),
+      );
+    });
+    upstream.listen(0, '127.0.0.1');
+    await once(upstream, 'listening');
+    const address = upstream.address();
+    if (typeof address !== 'object' || !address) throw new Error('Expected upstream address');
+
+    try {
+      const response = await bridgeFetch(`/preview/${address.port}/nested/path?x=1`, {
+        headers: { cookie: 'secret=value' },
+      });
+
+      await expect(response.json()).resolves.toEqual({
+        url: '/nested/path?x=1',
+        authorization: null,
+        cookie: null,
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        upstream.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  it('proxies preview websocket upgrades to localhost', async () => {
+    const upstream = createServer();
+    upstream.on('upgrade', (request, socket) => {
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nX-Upstream-Path: ' +
+          request.url +
+          '\r\n\r\n',
+      );
+      socket.end();
+    });
+    upstream.listen(0, '127.0.0.1');
+    await once(upstream, 'listening');
+    const address = upstream.address();
+    if (typeof address !== 'object' || !address) throw new Error('Expected upstream address');
+
+    try {
+      await expect(rawUpgrade(`/preview/${address.port}/socket?x=1`)).resolves.toContain('X-Upstream-Path: /socket?x=1');
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        upstream.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
   function bridgeFetch(path: string, init: RequestInit = {}): Promise<Response> {
     return fetch(`${baseUrl}${path}`, {
       ...init,
@@ -115,6 +173,25 @@ describe('sandbox bridge server', () => {
         authorization: `Bearer ${token}`,
         ...init.headers,
       },
+    });
+  }
+
+  function rawUpgrade(path: string): Promise<string> {
+    const url = new URL(baseUrl);
+    return new Promise((resolve, reject) => {
+      const socket = net.connect({ host: url.hostname, port: Number(url.port) });
+      let response = '';
+      socket.setEncoding('utf-8');
+      socket.once('connect', () => {
+        socket.write(
+          `GET ${path} HTTP/1.1\r\nHost: ${url.host}\r\nAuthorization: Bearer ${token}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`,
+        );
+      });
+      socket.on('data', (chunk) => {
+        response += chunk;
+      });
+      socket.once('end', () => resolve(response));
+      socket.once('error', reject);
     });
   }
 });

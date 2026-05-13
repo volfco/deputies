@@ -76,6 +76,7 @@ function createSandboxHandle(): SandboxHandle {
       filesystem: true,
       streamingLogs: false,
       portForwarding: false,
+      previewUrls: false,
       objectStorageArtifacts: false,
     },
     fs: {

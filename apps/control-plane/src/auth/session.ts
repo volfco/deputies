@@ -10,11 +10,11 @@ export function createSessionId(): string {
 }
 
 export function createSessionCookie(config: AppConfig, sessionId: string): string {
-  return `${sessionCookieName}=${sessionId}; Path=/; Max-Age=${sessionMaxAgeSeconds}; HttpOnly; SameSite=${formatSameSite(config)}${config.authCookieSecure ? '; Secure' : ''}`;
+  return `${sessionCookieName}=${sessionId}; Path=/; Max-Age=${sessionMaxAgeSeconds}; HttpOnly; SameSite=${formatSameSite(config)}${formatDomain(config)}${config.authCookieSecure ? '; Secure' : ''}`;
 }
 
 export function clearSessionCookie(config: AppConfig): string {
-  return `${sessionCookieName}=; Path=/; Max-Age=0; HttpOnly; SameSite=${formatSameSite(config)}${config.authCookieSecure ? '; Secure' : ''}`;
+  return `${sessionCookieName}=; Path=/; Max-Age=0; HttpOnly; SameSite=${formatSameSite(config)}${formatDomain(config)}${config.authCookieSecure ? '; Secure' : ''}`;
 }
 
 export function readSessionId(c: Context): string | null {
@@ -60,6 +60,10 @@ function parseCookies(header: string): Record<string, string> {
 
 function formatSameSite(config: AppConfig): 'Lax' | 'None' {
   return config.authCookieSameSite === 'none' ? 'None' : 'Lax';
+}
+
+function formatDomain(config: AppConfig): string {
+  return config.authCookieDomain ? `; Domain=${config.authCookieDomain}` : '';
 }
 
 function safeEqual(a: string, b: string): boolean {

@@ -211,7 +211,9 @@ export class WorkerService {
       },
     });
     try {
-      let runContext = buildBatchContext(claimed.messages);
+      const session = await this.options.store.getSession(primary.sessionId);
+      if (!session) throw new Error(`Session not found: ${primary.sessionId}`);
+      let runContext = { ...(session.context ?? {}), ...buildBatchContext(claimed.messages) };
       const result = await this.options.runner.run({
         sessionId: primary.sessionId,
         runId: claimed.run.id,

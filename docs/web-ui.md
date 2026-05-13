@@ -22,6 +22,48 @@ The web app uses same-origin API requests by default. In Vite dev mode, `apps/we
 VITE_API_PROXY_TARGET=http://localhost:3583 pnpm web:dev
 ```
 
+### Local HTTPS and Sandbox Previews
+
+Use `portless` when developing session-cookie auth and sandbox previews locally. It provides trusted HTTPS and wildcard `.localhost` hosts, so previews can use production-like subdomains such as `https://p-3000-<session-id>.deputies.localhost`.
+
+Start the wildcard proxy in one terminal:
+
+```sh
+pnpm portless:start
+# or: mise run portless-start
+```
+
+Register the web UI alias once, or after resetting portless aliases:
+
+```sh
+pnpm portless:alias:web
+# or: mise run portless-alias-web
+```
+
+Run the API and web dev server as usual:
+
+```sh
+set -a; . ./.env.local; set +a; pnpm control-plane:dev
+pnpm web:dev
+```
+
+Open the app at `https://deputies.localhost`. Published previews are listed from `GET /sessions/:sessionId/previews`; no preview is shown until the agent publishes one with the preview tool.
+
+The Deputies web dev server moves its own Vite HMR socket to `/__deputies_vite_hmr` so preview app WebSocket upgrades on `/` can pass through the preview proxy. For Vite apps running inside a sandbox, avoid hard-coding `server.hmr.host`, `server.hmr.clientPort`, or `server.hmr.protocol` to `localhost`; let Vite infer the preview browser URL.
+
+For portless local development, use these `.env.local` values:
+
+```sh
+VITE_API_BASE_URL=
+WEB_BASE_URL=https://deputies.localhost
+AUTH_SUCCESS_REDIRECT_URL=https://deputies.localhost
+AUTH_COOKIE_DOMAIN=.deputies.localhost
+AUTH_COOKIE_SECURE=true
+PREVIEW_BASE_DOMAIN=deputies.localhost
+```
+
+If you keep using plain Vite without portless, keep `AUTH_COOKIE_SECURE=false` and use an HTTP `WEB_BASE_URL`/`AUTH_SUCCESS_REDIRECT_URL` instead.
+
 ## Auth
 
 The UI supports all product API auth modes exposed by `/health`:

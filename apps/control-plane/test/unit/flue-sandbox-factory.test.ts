@@ -19,6 +19,7 @@ describe('sandboxHandleToFlueFactory', () => {
         filesystem: true,
         streamingLogs: false,
         portForwarding: false,
+        previewUrls: false,
         objectStorageArtifacts: false,
       },
       fs: {

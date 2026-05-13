@@ -16,6 +16,7 @@ const capabilities: SandboxCapabilities = {
   filesystem: false,
   streamingLogs: false,
   portForwarding: false,
+  previewUrls: false,
   objectStorageArtifacts: false,
 };
 

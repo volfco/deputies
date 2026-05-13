@@ -1,5 +1,8 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import type { Server } from 'node:http';
+import net from 'node:net';
+import tls from 'node:tls';
+import type { IncomingMessage, Server } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -13,6 +16,7 @@ import {
   createSessionCookie,
   createSessionId,
   readSessionId,
+  sessionCookieName,
   sessionMaxAgeSeconds,
   signOAuthState,
   verifyOAuthState,
@@ -20,6 +24,7 @@ import {
 import { CallbackService, CallbackServiceError } from '../callbacks/service.js';
 import {
   requireAuthSessionSecret,
+  requireApiBearerToken,
   requireGitHubOAuthCredentials,
   requireSlackSigningSecret,
   requireStaticCredentials,
@@ -37,8 +42,9 @@ import { verifySlackSignature } from '../integrations/slack/auth.js';
 import { SlackIntegrationError, SlackIntegrationService } from '../integrations/slack/service.js';
 import type { SlackEventEnvelope } from '../integrations/slack/types.js';
 import { MessageService, MessageServiceError } from '../messages/service.js';
+import { readPreviews } from '../runner-flue/preview-tool.js';
 import { SandboxCleanupService } from '../sandbox/service.js';
-import type { SandboxProvider } from '../sandbox/types.js';
+import type { SandboxPreviewUrl, SandboxProvider } from '../sandbox/types.js';
 import { SessionService, SessionServiceError } from '../sessions/service.js';
 import { MemoryStore } from '../store/memory.js';
 import type { AppStore, AuthUserRecord } from '../store/types.js';
@@ -64,6 +70,7 @@ export type AppServices = {
   artifacts: ArtifactService;
   genericWebhooks: GenericWebhookService;
   callbacks: CallbackService;
+  sandboxProvider?: SandboxProvider;
   sandboxCleanup?: SandboxCleanupService;
   githubReactionSender?: Pick<GitHubReactionSender, 'addEyes'>;
   githubIssueContextFetcher?: Pick<GitHubIssueContextFetcher, 'listIssueComments'>;
@@ -87,6 +94,8 @@ export function createServices(
     genericWebhooks: new GenericWebhookService(store, sessions, messages),
     callbacks: new CallbackService(store, events),
   };
+  if (options.sandboxProvider)
+    services.sandboxProvider = options.sandboxProvider;
   if (options.sandboxProvider)
     services.sandboxCleanup = new SandboxCleanupService(store, events, options.sandboxProvider);
   return services;
@@ -239,6 +248,25 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.use('/sessions', apiAuthMiddleware(config, services.store));
   app.use('/events/*', apiAuthMiddleware(config, services.store));
   app.use('/events', apiAuthMiddleware(config, services.store));
+
+  app.use('*', async (c, next) => {
+    const previewHost = parsePreviewHostFromHeaders(
+      c.req.header('x-forwarded-host'),
+      c.req.header('x-original-host'),
+      c.req.header('host'),
+    );
+    if (!previewHost) {
+      await next();
+      return;
+    }
+    if (!(await isAuthorizedRequest(config, services.store, c)))
+      return writeError(c, 401, 'unauthorized', 'Missing or invalid session');
+    const session = await services.sessions.get(previewHost.sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+    const preview = await getSessionPreview(services, previewHost.sessionId, previewHost.port);
+    if (!preview) return writeError(c, 404, 'not_found', 'Preview URL is not available for this sandbox');
+    return proxyPreview(c, previewHost.sessionId, previewHost.port, preview);
+  });
 
   app.post('/sessions', async (c) => {
     const body = await readJsonBody(c, config.maxJsonBodyBytes);
@@ -613,6 +641,38 @@ export function createApp(config: AppConfig, services = createServices()) {
     }
   });
 
+  app.get('/sessions/:sessionId/previews', async (c) => {
+    const sessionId = c.req.param('sessionId');
+    const session = await services.sessions.get(sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+
+    const requestedPort = parsePreviewPort(c.req.query('port'));
+    const published = readPreviews(session.context ?? {});
+    const requested = requestedPort ? [{ port: requestedPort }] : published;
+    const previews = [];
+    for (const item of requested) {
+      const preview = await getSessionPreview(services, sessionId, item.port);
+      if (preview) previews.push(serializePreview(c, config, sessionId, preview, item));
+    }
+    return c.json({ previews });
+  });
+
+  const handlePreviewProxy = async (c: Context) => {
+    const sessionId = c.req.param('sessionId');
+    if (!sessionId) return writeError(c, 400, 'invalid_request', 'Missing session ID');
+    const session = await services.sessions.get(sessionId);
+    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
+
+    const port = parsePreviewPort(c.req.param('port'));
+    if (!port) return writeError(c, 400, 'invalid_request', 'Invalid preview port');
+    const preview = await getSessionPreview(services, sessionId, port);
+    if (!preview) return writeError(c, 404, 'not_found', 'Preview URL is not available for this sandbox');
+    return proxyPreview(c, sessionId, port, preview);
+  };
+
+  app.all('/sessions/:sessionId/previews/:port', handlePreviewProxy);
+  app.all('/sessions/:sessionId/previews/:port/*', handlePreviewProxy);
+
   app.get('/sessions/:sessionId/callbacks', async (c) => {
     const sessionId = c.req.param('sessionId');
     const session = await services.sessions.get(sessionId);
@@ -651,7 +711,11 @@ export function createApp(config: AppConfig, services = createServices()) {
 }
 
 export function createServer(config: AppConfig, services = createServices()) {
-  return createAdaptorServer({ fetch: createApp(config, services).fetch }) as Server;
+  const server = createAdaptorServer({ fetch: createApp(config, services).fetch }) as Server;
+  server.on('upgrade', (request, socket, head) => {
+    handlePreviewUpgrade(config, services, request, socket, head).catch(() => socket.destroy());
+  });
+  return server;
 }
 
 function contentDisposition(fileName: string): string {
@@ -679,6 +743,365 @@ function allowedCorsOrigin(config: AppConfig): (origin: string) => string | unde
 
 function writeError(c: Context, statusCode: number, error: string, message: string) {
   return c.json({ error, message }, statusCode as never);
+}
+
+async function getSessionPreview(services: AppServices, sessionId: string, port: number): Promise<SandboxPreviewUrl | null> {
+  const provider = services.sandboxProvider;
+  if (!provider?.getPreviewUrl || !provider.capabilities.previewUrls) return null;
+  const sandbox = await services.store.getActiveSandbox(sessionId, provider.name);
+  if (!sandbox) return null;
+  const health = await provider.health(sandbox);
+  if (health.status !== 'ready') return null;
+  return provider.getPreviewUrl({
+    providerSandboxId: sandbox.providerSandboxId,
+    sessionId,
+    port,
+  });
+}
+
+function serializePreview(
+  c: Context,
+  config: AppConfig,
+  sessionId: string,
+  preview: SandboxPreviewUrl,
+  metadata: { label?: string; path?: string } = {},
+) {
+  const url = previewUrl(c, config, sessionId, preview.port, metadata.path);
+  return {
+    port: preview.port,
+    url,
+    ...(metadata.label ? { label: metadata.label } : {}),
+    ...(metadata.path ? { path: metadata.path } : {}),
+  };
+}
+
+async function proxyPreview(
+  c: Context,
+  sessionId: string,
+  port: number,
+  preview: SandboxPreviewUrl,
+): Promise<Response> {
+  const target = previewTargetUrl(c, sessionId, port, preview.targetUrl);
+  const request = c.req.raw;
+  const response = await fetch(target, {
+    method: request.method,
+    headers: previewRequestHeaders(request.headers, preview.targetHeaders),
+    body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' });
+  const headers = previewResponseHeaders(response.headers, sessionId, port);
+  if (!parsePreviewHostFromHeaders(c.req.header('x-forwarded-host'), c.req.header('x-original-host'), c.req.header('host')) && isHtmlResponse(headers)) {
+    const text = rewritePreviewHtml(await response.text(), previewBasePath(sessionId, port));
+    return new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function previewTargetUrl(c: Context, sessionId: string, port: number, targetUrl: string): string {
+  return previewTargetUrlFromUrl(new URL(c.req.url), previewRequestHost(c), sessionId, port, targetUrl);
+}
+
+function previewTargetUrlFromUrl(
+  incoming: URL,
+  host: string | undefined,
+  sessionId: string,
+  port: number,
+  targetUrl: string,
+): string {
+  const prefix = `/sessions/${sessionId}/previews/${port}`;
+  const hostPreview = parsePreviewHost(host) ?? parsePreviewHost(incoming.host);
+  const suffix = hostPreview
+    ? incoming.pathname || '/'
+    : incoming.pathname.startsWith(prefix)
+      ? incoming.pathname.slice(prefix.length) || '/'
+      : '/';
+  const target = new URL(targetUrl);
+  target.pathname = joinUrlPath(target.pathname, suffix);
+  target.search = incoming.search;
+  return target.toString();
+}
+
+function previewUrl(c: Context, config: AppConfig, sessionId: string, port: number, path = '/'): string {
+  const baseUrl = config.webBaseUrl ? new URL(config.webBaseUrl) : null;
+  const requestUrl = new URL(c.req.url);
+  const requestHost = baseUrl?.host ?? c.req.header('x-forwarded-host') ?? c.req.header('host') ?? requestUrl.host;
+  const protocol = baseUrl?.protocol.replace(/:$/, '') ?? c.req.header('x-forwarded-proto') ?? requestUrl.protocol.replace(/:$/, '');
+  const domain = config.previewBaseDomain ?? previewDomainFromHost(requestHost);
+  const suffix = path.startsWith('/') ? path.slice(1) : path;
+  if (!domain) return `${previewBasePath(sessionId, port)}${suffix}`;
+  return `${protocol}://${previewHostLabel(sessionId, port)}.${domain}/${suffix}`;
+}
+
+function previewDomainFromHost(host: string): string | null {
+  const hostname = host.split(':')[0] ?? '';
+  const port = host.includes(':') ? `:${host.split(':').pop()}` : '';
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return `127.0.0.1.sslip.io${port}`;
+  if (hostname === 'deputies.localhost' || hostname.endsWith('.deputies.localhost')) return `${hostname}${port}`;
+  if (hostname.startsWith('deputies.') && hostname.endsWith('.sslip.io')) return `${hostname}${port}`;
+  if (hostname.endsWith('.sslip.io')) return `${hostname}${port}`;
+  return null;
+}
+
+function previewHostLabel(sessionId: string, port: number): string {
+  return `p-${port}-${sessionId}`;
+}
+
+function parsePreviewHost(host: string | undefined): { sessionId: string; port: number } | null {
+  const label = host?.split(':')[0]?.split('.')[0];
+  const match = label?.match(/^p-(\d+)-(.+)$/);
+  if (!match) return null;
+  const port = parsePreviewPort(match[1]);
+  if (!port) return null;
+  return { port, sessionId: match[2]! };
+}
+
+function parsePreviewHostFromHeaders(...values: Array<string | string[] | undefined>): { sessionId: string; port: number } | null {
+  for (const host of previewHeaderHosts(values)) {
+    const parsed = parsePreviewHost(host);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function previewRequestHost(c: Context): string | undefined {
+  return previewHeaderHosts([c.req.header('x-forwarded-host'), c.req.header('x-original-host'), c.req.header('host')])[0];
+}
+
+function previewNodeRequestHost(request: IncomingMessage): string | undefined {
+  return previewHeaderHosts([request.headers['x-forwarded-host'], request.headers['x-original-host'], request.headers.host])[0];
+}
+
+function previewHeaderHosts(values: Array<string | string[] | undefined>): string[] {
+  return values.flatMap((value) => {
+    const items = Array.isArray(value) ? value : value ? [value] : [];
+    return items.flatMap((item) => item.split(',').map((host) => host.trim()).filter(Boolean));
+  });
+}
+
+async function handlePreviewUpgrade(
+  config: AppConfig,
+  services: AppServices,
+  request: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+): Promise<void> {
+  const incoming = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+  const requestHost = previewNodeRequestHost(request);
+  const hostPreview = parsePreviewHostFromHeaders(
+    request.headers['x-forwarded-host'],
+    request.headers['x-original-host'],
+    request.headers.host,
+  );
+  const pathMatch = incoming.pathname.match(/^\/sessions\/([^/]+)\/previews\/(\d+)(?:\/.*)?$/);
+  if (!hostPreview && !pathMatch) {
+    socket.destroy();
+    return;
+  }
+
+  const sessionId = hostPreview?.sessionId ?? decodeURIComponent(pathMatch?.[1] ?? '');
+  const port = hostPreview?.port ?? parsePreviewPort(pathMatch?.[2]);
+  if (!port || !(await isAuthorizedUpgrade(config, services, request))) {
+    socket.destroy();
+    return;
+  }
+  const session = await services.sessions.get(sessionId);
+  if (!session) {
+    socket.destroy();
+    return;
+  }
+  const preview = await getSessionPreview(services, sessionId, port);
+  if (!preview) {
+    socket.destroy();
+    return;
+  }
+
+  const upgradeInput: {
+    request: IncomingMessage;
+    socket: Duplex;
+    head: Buffer;
+    targetUrl: string;
+    targetHeaders?: Record<string, string>;
+    preserveOrigin: boolean;
+  } = {
+    request,
+    socket,
+    head,
+    targetUrl: previewTargetUrlFromUrl(incoming, requestHost, sessionId, port, preview.targetUrl),
+    preserveOrigin: Boolean(hostPreview),
+  };
+  if (preview.targetHeaders) upgradeInput.targetHeaders = preview.targetHeaders;
+  proxyPreviewUpgrade(upgradeInput);
+}
+
+async function isAuthorizedUpgrade(
+  config: AppConfig,
+  services: AppServices,
+  request: IncomingMessage,
+): Promise<boolean> {
+  if (config.apiAuthMode === 'none') return true;
+  if (config.apiAuthMode === 'bearer') return request.headers.authorization === `Bearer ${requireApiBearerToken(config)}`;
+  const authSessionId = parseCookieHeader(request.headers.cookie ?? '')[sessionCookieName];
+  return Boolean(authSessionId && (await services.store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() })));
+}
+
+async function isAuthorizedRequest(config: AppConfig, store: AppStore, c: Context): Promise<boolean> {
+  if (config.apiAuthMode === 'none') return true;
+  if (config.apiAuthMode === 'bearer') return c.req.header('authorization') === `Bearer ${requireApiBearerToken(config)}`;
+  const authSessionId = readSessionId(c);
+  return Boolean(authSessionId && (await store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() })));
+}
+
+function proxyPreviewUpgrade(input: {
+  request: IncomingMessage;
+  socket: Duplex;
+  head: Buffer;
+  targetUrl: string;
+  targetHeaders?: Record<string, string>;
+  preserveOrigin: boolean;
+}): void {
+  const target = new URL(input.targetUrl);
+  const secure = target.protocol === 'https:' || target.protocol === 'wss:';
+  const port = Number(target.port || (secure ? 443 : 80));
+  const upstream = secure
+    ? tls.connect({ host: target.hostname, port, servername: target.hostname })
+    : net.connect({ host: target.hostname, port });
+  let connected = false;
+  const start = () => {
+    if (connected) return;
+    connected = true;
+    upstream.write(upgradeRequestHead(input.request, target, input.targetHeaders, input.preserveOrigin));
+    if (input.head.length) upstream.write(input.head);
+    upstream.pipe(input.socket);
+    input.socket.pipe(upstream);
+  };
+  const close = () => {
+    upstream.destroy();
+    input.socket.destroy();
+  };
+  if (secure) upstream.once('secureConnect', start);
+  else upstream.once('connect', start);
+  upstream.once('error', close);
+  input.socket.once('error', close);
+}
+
+function upgradeRequestHead(
+  request: IncomingMessage,
+  target: URL,
+  injected: Record<string, string> = {},
+  preserveOrigin = false,
+): string {
+  const headers = previewUpgradeHeaders(request, target, injected, preserveOrigin);
+  const path = `${target.pathname || '/'}${target.search}`;
+  return [`${request.method ?? 'GET'} ${path} HTTP/1.1`, ...headers.map(([key, value]) => `${key}: ${value}`), '', ''].join(
+    '\r\n',
+  );
+}
+
+function previewUpgradeHeaders(
+  request: IncomingMessage,
+  target: URL,
+  injected: Record<string, string>,
+  preserveOrigin: boolean,
+): Array<[string, string]> {
+  const headers: Array<[string, string]> = [['host', target.host]];
+  for (const [key, value] of Object.entries(request.headers)) {
+    const lower = key.toLowerCase();
+    if (['authorization', 'cookie', 'host', 'content-length'].includes(lower)) continue;
+    if (lower === 'origin' && !preserveOrigin) continue;
+    if (Array.isArray(value)) for (const item of value) headers.push([key, item]);
+    else if (value !== undefined) headers.push([key, value]);
+  }
+  const origin = previewUpstreamOrigin(target);
+  if (!preserveOrigin && origin) headers.push(['origin', origin]);
+  for (const [key, value] of Object.entries(injected)) headers.push([key, value]);
+  return headers;
+}
+
+function previewUpstreamOrigin(target: URL): string | null {
+  if (target.protocol === 'http:' || target.protocol === 'https:') return target.origin;
+  if (target.protocol === 'ws:') return `http://${target.host}`;
+  if (target.protocol === 'wss:') return `https://${target.host}`;
+  return null;
+}
+
+function parseCookieHeader(header: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  for (const part of header.split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (!name || !rest.length) continue;
+    cookies[name] = rest.join('=');
+  }
+  return cookies;
+}
+
+function joinUrlPath(basePath: string, suffix: string): string {
+  const base = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
+  const rest = suffix.startsWith('/') ? suffix : `/${suffix}`;
+  return `${base}${rest}` || '/';
+}
+
+function previewRequestHeaders(input: Headers, injected: Record<string, string> = {}): Headers {
+  const headers = new Headers();
+  for (const [key, value] of input.entries()) {
+    const lower = key.toLowerCase();
+    if (['authorization', 'cookie', 'host', 'connection', 'content-length'].includes(lower)) continue;
+    headers.set(key, value);
+  }
+  for (const [key, value] of Object.entries(injected)) headers.set(key, value);
+  return headers;
+}
+
+function previewResponseHeaders(input: Headers, sessionId: string, port: number): Headers {
+  const headers = new Headers();
+  for (const [key, value] of input.entries()) {
+    const lower = key.toLowerCase();
+    if (['connection', 'content-encoding', 'content-length', 'set-cookie', 'transfer-encoding'].includes(lower)) continue;
+    headers.set(key, lower === 'location' ? rewritePreviewLocation(value, sessionId, port) : value);
+  }
+  return headers;
+}
+
+function isHtmlResponse(headers: Headers): boolean {
+  return headers.get('content-type')?.toLowerCase().includes('text/html') ?? false;
+}
+
+function rewritePreviewHtml(html: string, basePath: string): string {
+  return html
+    .replace(/(\s(?:src|href|action)=['"])\/(?!\/)/gi, `$1${basePath}`)
+    .replace(/(\s(?:srcset)=['"])([^'"]*)(['"])/gi, (_match, prefix: string, value: string, suffix: string) => {
+      return `${prefix}${rewriteSrcSet(value, basePath)}${suffix}`;
+    })
+    .replace(/([\s(['"])(\/(?!\/)[^\s)'"<]+)/g, `$1${basePath}$2`);
+}
+
+function rewriteSrcSet(value: string, basePath: string): string {
+  return value
+    .split(',')
+    .map((part) => part.trimStart().replace(/^\/(?!\/)/, basePath))
+    .join(', ');
+}
+
+function rewritePreviewLocation(location: string, sessionId: string, port: number): string {
+  if (!location.startsWith('/')) return location;
+  return `${previewBasePath(sessionId, port)}${location.replace(/^\//, '')}`;
+}
+
+function previewBasePath(sessionId: string, port: number): string {
+  return `/sessions/${sessionId}/previews/${port}/`;
+}
+
+function parsePreviewPort(value: string | undefined): number | null {
+  if (!value) return null;
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
 }
 
 async function setAuthSessionCookie(c: Context, config: AppConfig, store: AppStore, userId: string): Promise<void> {

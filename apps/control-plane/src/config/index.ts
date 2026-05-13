@@ -38,8 +38,10 @@ export type AppConfig = {
   authSessionSecret?: string;
   authCookieSecure: boolean;
   authCookieSameSite: AuthCookieSameSite;
+  authCookieDomain?: string;
   authSuccessRedirectUrl?: string;
   webBaseUrl?: string;
+  previewBaseDomain?: string;
   githubAppClientId?: string;
   githubAppClientSecret?: string;
   githubAppCallbackUrl?: string;
@@ -161,8 +163,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.AUTH_STATIC_USERNAME) config.authStaticUsername = env.AUTH_STATIC_USERNAME;
   if (env.AUTH_STATIC_PASSWORD) config.authStaticPassword = env.AUTH_STATIC_PASSWORD;
   if (env.AUTH_SESSION_SECRET) config.authSessionSecret = env.AUTH_SESSION_SECRET;
+  if (env.AUTH_COOKIE_DOMAIN) config.authCookieDomain = env.AUTH_COOKIE_DOMAIN;
   if (env.AUTH_SUCCESS_REDIRECT_URL) config.authSuccessRedirectUrl = env.AUTH_SUCCESS_REDIRECT_URL;
   if (env.WEB_BASE_URL) config.webBaseUrl = env.WEB_BASE_URL;
+  if (env.PREVIEW_BASE_DOMAIN) config.previewBaseDomain = env.PREVIEW_BASE_DOMAIN;
   if (env.GITHUB_APP_CLIENT_ID) config.githubAppClientId = env.GITHUB_APP_CLIENT_ID;
   if (env.GITHUB_APP_CLIENT_SECRET) config.githubAppClientSecret = env.GITHUB_APP_CLIENT_SECRET;
   if (env.GITHUB_APP_CALLBACK_URL) config.githubAppCallbackUrl = env.GITHUB_APP_CALLBACK_URL;

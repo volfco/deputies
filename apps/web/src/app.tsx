@@ -6,6 +6,7 @@ import {
   Artifact,
   CallbackDelivery,
   Message,
+  SandboxPreview,
   Session,
   apiConnectionDelayedEvent,
   apiConnectionOkEvent,
@@ -22,6 +23,7 @@ import {
   listCallbacks,
   listEvents,
   listMessages,
+  listPreviews,
   listSessions,
   logout,
   pauseQueue,
@@ -92,6 +94,7 @@ export function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [previews, setPreviews] = useState<SandboxPreview[]>([]);
   const [callbacks, setCallbacks] = useState<CallbackDelivery[]>([]);
   const [newThreadPrompt, setNewThreadPrompt] = useState('');
   const [newThreadRepository, setNewThreadRepository] = useState('');
@@ -419,10 +422,11 @@ export function App() {
   async function refreshSessionDetail(sessionId: string) {
     setError('');
     try {
-      const [nextMessages, nextEvents, nextArtifacts, nextCallbacks] = await Promise.all([
+      const [nextMessages, nextEvents, nextArtifacts, nextPreviews, nextCallbacks] = await Promise.all([
         listMessages(sessionId, token),
         listEvents(sessionId, token),
         listArtifacts(sessionId, token),
+        listPreviews(sessionId, token),
         listCallbacks(sessionId, token),
       ]);
       if (selectedSessionIdRef.current !== sessionId) return;
@@ -430,6 +434,7 @@ export function App() {
       setMessages(nextMessages);
       setEvents(nextEvents);
       setArtifacts(nextArtifacts);
+      setPreviews(nextPreviews);
       setCallbacks(nextCallbacks);
       setDetailLoadedSessionId(sessionId);
     } catch (err) {
@@ -445,14 +450,16 @@ export function App() {
 
     detailRefreshInFlightRef.current = sessionId;
     try {
-      const [nextMessages, nextArtifacts, nextCallbacks] = await Promise.all([
+      const [nextMessages, nextArtifacts, nextPreviews, nextCallbacks] = await Promise.all([
         listMessages(sessionId, token),
         listArtifacts(sessionId, token),
+        listPreviews(sessionId, token),
         listCallbacks(sessionId, token),
       ]);
       if (selectedSessionIdRef.current === sessionId) {
         setMessages(nextMessages);
         setArtifacts(nextArtifacts);
+        setPreviews(nextPreviews);
         setCallbacks(nextCallbacks);
       }
     } finally {
@@ -492,6 +499,7 @@ export function App() {
       setMessages([message]);
       setEvents([]);
       setArtifacts([]);
+      setPreviews([]);
       setCallbacks([]);
       eventCursor.current = 0;
       setIsCreatingThread(false);
@@ -696,6 +704,7 @@ export function App() {
     setMessages([]);
     setEvents([]);
     setArtifacts([]);
+    setPreviews([]);
     setCallbacks([]);
   }
 
@@ -710,6 +719,7 @@ export function App() {
     setMessages([]);
     setEvents([]);
     setArtifacts([]);
+    setPreviews([]);
     setCallbacks([]);
     eventCursor.current = 0;
   }
@@ -772,6 +782,7 @@ export function App() {
 
   type SessionStatusRollback = {
     artifacts: Artifact[];
+    previews: SandboxPreview[];
     callbacks: CallbackDelivery[];
     events: AgentEvent[];
     isCreatingThread: boolean;
@@ -785,6 +796,7 @@ export function App() {
     if (!session) return null;
     const rollback = {
       artifacts,
+      previews,
       callbacks,
       events,
       isCreatingThread,
@@ -809,6 +821,7 @@ export function App() {
       setMessages(rollback.messages);
       setEvents(rollback.events);
       setArtifacts(rollback.artifacts);
+      setPreviews(rollback.previews);
       setCallbacks(rollback.callbacks);
     }
   }
@@ -818,6 +831,7 @@ export function App() {
     if (!session) return null;
     const rollback = {
       artifacts,
+      previews,
       callbacks,
       events,
       isCreatingThread,
@@ -842,6 +856,7 @@ export function App() {
       setMessages([]);
       setEvents([]);
       setArtifacts([]);
+      setPreviews([]);
       setCallbacks([]);
       eventCursor.current = 0;
     }
@@ -1020,11 +1035,13 @@ export function App() {
                                 <MobileContextPanel
                                   repository={selectedRepository}
                                   artifacts={artifacts}
+                                  previews={previews}
                                   callbacks={callbacks}
                                   onReplayCallback={handleReplayCallback}
                                 />
                                 <ChatPanel
                                   artifacts={artifacts}
+                                  previews={previews}
                                   editingMessageId={editingMessageId}
                                   events={events}
                                   messageDraft={messageDraft}
@@ -1071,6 +1088,7 @@ export function App() {
                         <DesktopContextPanel
                           repository={selectedRepository}
                           artifacts={artifacts}
+                          previews={previews}
                           callbacks={callbacks}
                           onReplayCallback={handleReplayCallback}
                         />

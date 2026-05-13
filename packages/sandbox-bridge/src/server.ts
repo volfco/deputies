@@ -3,6 +3,8 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import net from 'node:net';
+import type { Duplex } from 'node:stream';
 import { dirname, isAbsolute, resolve, sep } from 'node:path';
 
 const defaultPort = 3584;
@@ -37,7 +39,7 @@ export function createSandboxBridgeServer(options: SandboxBridgeOptions): Server
   const maxBodyBytes = options.maxBodyBytes ?? defaultMaxBodyBytes;
   const maxOutputBytes = options.maxOutputBytes ?? defaultMaxOutputBytes;
 
-  return createServer(async (request, response) => {
+  const server = createServer(async (request, response) => {
     try {
       if (!isAuthorized(request, options.token)) {
         writeJson(response, 401, { error: 'unauthorized' });
@@ -118,6 +120,12 @@ export function createSandboxBridgeServer(options: SandboxBridgeOptions): Server
         return;
       }
 
+      const previewMatch = url.pathname.match(/^\/preview\/(\d+)(?:\/(.*))?$/);
+      if (previewMatch) {
+        await proxyPreviewRequest(request, response, previewMatch, url);
+        return;
+      }
+
       writeJson(response, 404, { error: 'not_found' });
     } catch (error) {
       writeJson(response, statusCodeForError(error), {
@@ -125,6 +133,110 @@ export function createSandboxBridgeServer(options: SandboxBridgeOptions): Server
       });
     }
   });
+  server.on('upgrade', (request, socket, head) => {
+    handlePreviewUpgrade(request, socket, head, options.token);
+  });
+  return server;
+}
+
+function handlePreviewUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, token: string): void {
+  if (!isAuthorized(request, token)) {
+    socket.destroy();
+    return;
+  }
+  const url = new URL(request.url ?? '/', 'http://sandbox-bridge.local');
+  const match = url.pathname.match(/^\/preview\/(\d+)(?:\/(.*))?$/);
+  if (!match) {
+    socket.destroy();
+    return;
+  }
+  const port = Number(match[1]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    socket.destroy();
+    return;
+  }
+  const path = match[2] ? `/${match[2]}` : '/';
+  const target = new URL(`http://127.0.0.1:${port}${path}`);
+  target.search = url.search;
+  proxyPreviewUpgrade(request, socket, head, target);
+}
+
+function proxyPreviewUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, target: URL): void {
+  const upstream = net.connect({ host: target.hostname, port: Number(target.port) });
+  const close = () => {
+    upstream.destroy();
+    socket.destroy();
+  };
+  upstream.once('connect', () => {
+    upstream.write(upgradeRequestHead(request, target));
+    if (head.length) upstream.write(head);
+    upstream.pipe(socket);
+    socket.pipe(upstream);
+  });
+  upstream.once('error', close);
+  socket.once('error', close);
+}
+
+function upgradeRequestHead(request: IncomingMessage, target: URL): string {
+  const headers: Array<[string, string]> = [['host', target.host]];
+  for (const [key, value] of Object.entries(request.headers)) {
+    const lower = key.toLowerCase();
+    if (lower === 'authorization' || lower === 'cookie' || lower === 'host' || lower === 'content-length' || lower === 'origin') continue;
+    if (Array.isArray(value)) for (const item of value) headers.push([key, item]);
+    else if (value !== undefined) headers.push([key, value]);
+  }
+  headers.push(['origin', target.origin]);
+  return [
+    `${request.method ?? 'GET'} ${target.pathname || '/'}${target.search} HTTP/1.1`,
+    ...headers.map(([key, value]) => `${key}: ${value}`),
+    '',
+    '',
+  ].join('\r\n');
+}
+
+async function proxyPreviewRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  match: RegExpMatchArray,
+  requestUrl: URL,
+): Promise<void> {
+  const port = Number(match[1]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new BridgeHttpError(400, 'Invalid preview port');
+  const path = match[2] ? `/${match[2]}` : '/';
+  const target = new URL(`http://127.0.0.1:${port}${path}`);
+  target.search = requestUrl.search;
+  const headers = previewHeaders(request.headers);
+  const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request;
+  const upstream = await fetch(target, { method: request.method, headers, body, duplex: 'half' } as RequestInit & {
+    duplex: 'half';
+  });
+  response.writeHead(upstream.status, Object.fromEntries(upstream.headers.entries()));
+  if (!upstream.body) {
+    response.end();
+    return;
+  }
+  const reader = upstream.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      response.write(Buffer.from(value));
+    }
+    response.end();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function previewHeaders(input: IncomingMessage['headers']): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(input)) {
+    const lower = key.toLowerCase();
+    if (lower === 'authorization' || lower === 'cookie' || lower === 'host' || lower === 'connection') continue;
+    if (Array.isArray(value)) for (const item of value) headers.append(key, item);
+    else if (value !== undefined) headers.set(key, value);
+  }
+  return headers;
 }
 
 async function execCommand(workspacePath: string, input: ParsedExecRequest, maxOutputBytes: number) {

@@ -2,9 +2,22 @@
 	root * /usr/share/caddy
 	encode zstd gzip
 
+	@preview expression `{host}.startsWith("p-")`
+	handle @preview {
+		reverse_proxy {$API_UPSTREAM:http://control-plane:3583} {
+			header_up X-Original-Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
 	@api path /health /auth* /sessions* /events* /webhooks*
 	handle @api {
-		reverse_proxy {$API_UPSTREAM:http://control-plane:3583}
+		reverse_proxy {$API_UPSTREAM:http://control-plane:3583} {
+			header_up X-Original-Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
 	}
 
 	@assets path /assets/*

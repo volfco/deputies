@@ -72,6 +72,32 @@ describe('DaytonaSandboxProvider', () => {
     });
     await expect(provider.destroy({ providerSandboxId: 'missing', sessionId: 'session-1' })).resolves.toBeUndefined();
   });
+
+  it('returns Daytona preview URLs with provider auth headers and warning bypass', async () => {
+    const sandbox = createMockDaytonaSandbox();
+    sandbox.getPreviewLink = async (port) => ({ url: `https://${port}-sandbox.daytona.test`, token: 'preview-token' });
+    const provider = new DaytonaSandboxProvider({
+      client: {
+        async create() {
+          return sandbox;
+        },
+        async get() {
+          return sandbox;
+        },
+      },
+    });
+
+    await expect(
+      provider.getPreviewUrl({ providerSandboxId: 'sandbox-1', sessionId: 'session-1', port: 3000 }),
+    ).resolves.toEqual({
+      port: 3000,
+      targetUrl: 'https://3000-sandbox.daytona.test',
+      targetHeaders: {
+        'x-daytona-preview-token': 'preview-token',
+        'x-daytona-skip-preview-warning': 'true',
+      },
+    });
+  });
 });
 
 function createMockDaytonaSandbox(): DaytonaSandboxLike {

@@ -10,6 +10,8 @@ import type {
   SandboxFileSystem,
   SandboxHandle,
   SandboxHealth,
+  SandboxPreviewUrl,
+  SandboxPreviewUrlInput,
   SandboxProvider,
   SandboxRef,
 } from './types.js';
@@ -24,6 +26,7 @@ export const dockerCapabilities: SandboxCapabilities = {
   filesystem: true,
   streamingLogs: false,
   portForwarding: false,
+  previewUrls: true,
   objectStorageArtifacts: false,
 };
 
@@ -63,6 +66,7 @@ export type DockerFileInput = DockerSandboxRef & { path: string };
 export type DockerWriteFileInput = DockerFileInput & { content: string | Uint8Array };
 export type DockerMkdirInput = DockerFileInput & { recursive?: boolean };
 export type DockerRmInput = DockerFileInput & { recursive?: boolean; force?: boolean };
+export type DockerPreviewUrlInput = DockerSandboxRef & { port: number };
 
 export interface DockerOrchestrator {
   create(input: DockerCreateSandboxInput): Promise<DockerSandboxDescriptor>;
@@ -79,6 +83,7 @@ export interface DockerOrchestrator {
   exists(input: DockerFileInput): Promise<boolean>;
   mkdir(input: DockerMkdirInput): Promise<void>;
   rm(input: DockerRmInput): Promise<void>;
+  getPreviewUrl?(input: DockerPreviewUrlInput): Promise<SandboxPreviewUrl | null>;
 }
 
 export class DockerSandboxProvider implements SandboxProvider {
@@ -109,6 +114,10 @@ export class DockerSandboxProvider implements SandboxProvider {
 
   async health(input: SandboxRef): Promise<SandboxHealth> {
     return this.options.orchestrator.health(input);
+  }
+
+  async getPreviewUrl(input: SandboxPreviewUrlInput): Promise<SandboxPreviewUrl | null> {
+    return this.options.orchestrator.getPreviewUrl?.(input) ?? null;
   }
 
   private toHandle(descriptor: DockerSandboxDescriptor): SandboxHandle {
@@ -283,6 +292,15 @@ export class InProcessDockerOrchestrator implements DockerOrchestrator {
     });
   }
 
+  async getPreviewUrl(input: DockerPreviewUrlInput): Promise<SandboxPreviewUrl | null> {
+    const descriptor = await this.connectedDescriptor(input);
+    return {
+      port: input.port,
+      targetUrl: `${descriptor.bridgeUrl}/preview/${input.port}`,
+      targetHeaders: { authorization: `Bearer ${descriptor.bridgeToken}` },
+    };
+  }
+
   private async connectedDescriptor(input: DockerSandboxRef): Promise<DockerSandboxDescriptor> {
     const existing = this.descriptors.get(input.providerSandboxId);
     if (existing) return existing;
@@ -413,6 +431,17 @@ export class HttpDockerOrchestratorClient implements DockerOrchestrator {
     await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/fs/rm`, input);
   }
 
+  async getPreviewUrl(input: DockerPreviewUrlInput): Promise<SandboxPreviewUrl | null> {
+    const body = readObject(await this.post(`/sandboxes/${encodeURIComponent(input.providerSandboxId)}/preview-url`, input));
+    if (body.targetUrl === null) return null;
+    const headers = body.targetHeaders === undefined ? undefined : readStringRecord(body.targetHeaders, 'targetHeaders');
+    return {
+      port: readNumber(body.port, 'port'),
+      targetUrl: readString(body.targetUrl, 'targetUrl'),
+      ...(headers ? { targetHeaders: headers } : {}),
+    };
+  }
+
   private async post(path: string, body: unknown): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: 'POST',
@@ -500,6 +529,11 @@ export function createDockerOrchestratorHttpHandler(
             force: body.force === true,
           });
           return jsonResponse(200, { ok: true });
+        case 'preview-url': {
+          const port = readNumber(body.port, 'port');
+          const preview = (await orchestrator.getPreviewUrl?.({ ...ref, port })) ?? null;
+          return jsonResponse(200, preview ?? { port, targetUrl: null });
+        }
         default:
           return jsonResponse(404, { error: 'not_found' });
       }
@@ -689,6 +723,12 @@ function optionalStringRecord(value: unknown): Record<string, string> | undefine
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const record: Record<string, string> = {};
   for (const [key, item] of Object.entries(value)) if (typeof item === 'string') record[key] = item;
+  return record;
+}
+
+function readStringRecord(value: unknown, name: string): Record<string, string> {
+  const record = optionalStringRecord(value);
+  if (!record) throw new Error(`${name} must be a string record`);
   return record;
 }
 

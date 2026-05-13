@@ -18,6 +18,8 @@
     "control-plane:dev": "pnpm --dir apps/control-plane dev",
     "control-plane:emulate:slack": "pnpm --dir apps/control-plane emulate:slack",
     "control-plane:portless:start": "pnpm --dir apps/control-plane portless:start",
+    "portless:alias:web": "pnpm dlx portless alias deputies 5173 --force",
+    "portless:start": "pnpm dlx portless proxy start --wildcard",
     "control-plane:start": "pnpm --dir apps/control-plane start",
     "control-plane:build": "pnpm --dir apps/control-plane build",
     "control-plane:typecheck": "pnpm --dir apps/control-plane typecheck",

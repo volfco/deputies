@@ -10,6 +10,8 @@ import type {
   SandboxFileSystem,
   SandboxHandle,
   SandboxHealth,
+  SandboxPreviewUrl,
+  SandboxPreviewUrlInput,
   SandboxProvider,
   SandboxRef,
 } from './types.js';
@@ -40,6 +42,14 @@ export type DaytonaSandboxLike = Pick<DaytonaSandbox, 'id' | 'state' | 'errorRea
       timeout?: number,
     ): Promise<{ result?: string; exitCode?: number }>;
   };
+  getPreviewLink?(port: number): Promise<string | DaytonaPreviewLink>;
+  getPreviewUrl?(port: number): Promise<string | DaytonaPreviewLink>;
+  getPublicUrl?(port: number): Promise<string | DaytonaPreviewLink>;
+};
+
+export type DaytonaPreviewLink = {
+  url?: string;
+  token?: string;
 };
 
 export type DaytonaSandboxProviderOptions = {
@@ -64,6 +74,7 @@ export const daytonaCapabilities: SandboxCapabilities = {
   filesystem: true,
   streamingLogs: false,
   portForwarding: true,
+  previewUrls: true,
   objectStorageArtifacts: false,
 };
 
@@ -126,6 +137,12 @@ export class DaytonaSandboxProvider implements SandboxProvider {
     }
   }
 
+  async getPreviewUrl(input: SandboxPreviewUrlInput): Promise<SandboxPreviewUrl | null> {
+    const sandbox = await this.client.get(input.providerSandboxId);
+    const preview = await resolveDaytonaPreviewUrl(sandbox, input.port);
+    return preview ? { port: input.port, ...preview } : null;
+  }
+
   private createParams(input: CreateSandboxInput): Record<string, unknown> {
     const labels = {
       ...this.options.labels,
@@ -169,6 +186,30 @@ function createDaytonaClient(options: DaytonaSandboxProviderOptions): DaytonaCli
   if (options.apiUrl) config.apiUrl = options.apiUrl;
   if (options.target) config.target = options.target;
   return new Daytona(config);
+}
+
+async function resolveDaytonaPreviewUrl(
+  sandbox: DaytonaSandboxLike,
+  port: number,
+): Promise<{ targetUrl: string; targetHeaders?: Record<string, string> } | null> {
+  const preview = sandbox.getPreviewLink
+    ? await sandbox.getPreviewLink(port)
+    : sandbox.getPreviewUrl
+      ? await sandbox.getPreviewUrl(port)
+      : sandbox.getPublicUrl
+        ? await sandbox.getPublicUrl(port)
+        : null;
+  if (typeof preview === 'string') return { targetUrl: preview };
+  if (preview?.url) {
+    return {
+      targetUrl: preview.url,
+      targetHeaders: {
+        'x-daytona-skip-preview-warning': 'true',
+        ...(preview.token ? { 'x-daytona-preview-token': preview.token } : {}),
+      },
+    };
+  }
+  return null;
 }
 
 function createDaytonaFileSystem(sandbox: DaytonaSandboxLike): SandboxFileSystem {

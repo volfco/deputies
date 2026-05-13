@@ -67,6 +67,13 @@ export type ArtifactPreview = {
   sizeBytes: number;
 };
 
+export type SandboxPreview = {
+  port: number;
+  url: string;
+  label?: string;
+  path?: string;
+};
+
 export type CallbackDelivery = {
   id: string;
   sessionId: string;
@@ -283,6 +290,11 @@ export async function getArtifactPreview(input: {
     { token: input.token },
   );
   return body.preview;
+}
+
+export async function listPreviews(sessionId: string, token: string): Promise<SandboxPreview[]> {
+  const body = await request<{ previews: SandboxPreview[] }>(`/sessions/${sessionId}/previews`, { token });
+  return body.previews;
 }
 
 export async function listCallbacks(sessionId: string, token: string): Promise<CallbackDelivery[]> {

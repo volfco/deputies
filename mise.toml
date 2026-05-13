@@ -18,6 +18,14 @@ run = "pnpm typecheck"
 description = "Run typecheck and tests"
 depends = ["typecheck", "test"]
 
+[tasks.portless-start]
+description = "Start the local HTTPS wildcard portless proxy"
+run = "pnpm portless:start"
+
+[tasks.portless-alias-web]
+description = "Route https://deputies.localhost to the Vite web dev server"
+run = "pnpm portless:alias:web"
+
 [tasks.deploy-control-plane]
 description = "Deploy the control-plane service to Railway"
 run = "railway up --service control-plane --detach -m 'deploy control-plane'"

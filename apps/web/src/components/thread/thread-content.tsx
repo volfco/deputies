@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ToggleEvent } from 'react';
-import { Check, ChevronDown, Copy, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, ExternalLink, RotateCcw, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { AgentEvent, Artifact, ArtifactPreview, CallbackDelivery, Message } from '../../api.js';
+import type { AgentEvent, Artifact, ArtifactPreview, CallbackDelivery, Message, SandboxPreview } from '../../api.js';
 import { getApiBaseUrl } from '../../api.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
@@ -13,6 +13,7 @@ import { cn } from '../../lib/utils.js';
 
 export function ChatPanel(props: {
   artifacts: Artifact[];
+  previews: SandboxPreview[];
   canRetryMessages: boolean;
   editingMessageId: string;
   events: AgentEvent[];
@@ -90,12 +91,25 @@ export function ChatPanel(props: {
             {inlineArtifacts.length ? (
               <InlineArtifacts artifacts={inlineArtifacts} onLoadArtifactPreview={props.onLoadArtifactPreview} />
             ) : null}
+            {props.previews.length > 0 && group.key === groups.at(-1)?.key ? (
+              <InlinePreviews previews={props.previews} />
+            ) : null}
             <Diagnostics events={groupDiagnostics} />
           </div>
         );
       })}
       {!props.messages.length ? <p className="text-sm text-muted-foreground">No messages yet.</p> : null}
     </section>
+  );
+}
+
+function InlinePreviews(props: { previews: SandboxPreview[] }) {
+  return (
+    <div className="grid gap-2" aria-label="Inline previews">
+      {props.previews.map((preview) => (
+        <PreviewCard compact key={preview.port} preview={preview} />
+      ))}
+    </div>
   );
 }
 
@@ -783,6 +797,7 @@ function humanizeEventName(value: string): string {
 export function MobileContextPanel(props: {
   repository: string | null;
   artifacts: Artifact[];
+  previews: SandboxPreview[];
   callbacks: CallbackDelivery[];
   onReplayCallback: (callbackId: string) => void;
 }) {
@@ -797,6 +812,7 @@ export function MobileContextPanel(props: {
 export function DesktopContextPanel(props: {
   repository: string | null;
   artifacts: Artifact[];
+  previews: SandboxPreview[];
   callbacks: CallbackDelivery[];
   onReplayCallback: (callbackId: string) => void;
 }) {
@@ -815,6 +831,7 @@ export function DesktopContextPanel(props: {
 function ContextPanelContent(props: {
   repository: string | null;
   artifacts: Artifact[];
+  previews: SandboxPreview[];
   callbacks: CallbackDelivery[];
   onReplayCallback: (callbackId: string) => void;
 }) {
@@ -841,6 +858,16 @@ function ContextPanelContent(props: {
         )}
       </div>
       <div className="mt-3 border-b border-border pb-3 text-sm text-muted-foreground">
+        <strong className="block font-medium text-foreground">Live preview</strong>
+        <span>Authenticated links to apps running inside the sandbox.</span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {props.previews.map((preview) => (
+          <PreviewCard key={preview.port} preview={preview} />
+        ))}
+        {!props.previews.length ? <p className="text-sm text-muted-foreground">No live preview available.</p> : null}
+      </div>
+      <div className="mt-6 border-b border-border pb-3 text-sm text-muted-foreground">
         <strong className="block font-medium text-foreground">Artifacts</strong>
         <span>Outputs and links created by the deputy appear here.</span>
       </div>
@@ -911,6 +938,30 @@ type ArtifactPreviewCardProps = {
   compact?: boolean;
   onLoadArtifactPreview?: (artifact: Artifact) => Promise<ArtifactPreview>;
 };
+
+function PreviewCard(props: { preview: SandboxPreview; compact?: boolean }) {
+  return (
+    <Card className={cn('min-w-0 p-3', props.compact ? 'bg-card/80' : 'bg-card/70')}>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <strong className="text-sm text-foreground">{props.preview.label ?? 'Live app preview'}</strong>
+            <Badge>:{props.preview.port}</Badge>
+          </div>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            Authenticated sandbox preview{props.preview.path ? ` · ${props.preview.path}` : ''}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">If it fails to load, the server may still be starting.</p>
+        </div>
+        <Button asChild size="sm" variant="secondary">
+          <a href={props.preview.url} target="_blank" rel="noreferrer">
+            <ExternalLink className="h-3.5 w-3.5" /> Open
+          </a>
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 function ArtifactPreviewCard(props: ArtifactPreviewCardProps) {
   const { artifact } = props;

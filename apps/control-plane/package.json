@@ -10,7 +10,7 @@
     "docker-orchestrator:start": "node dist/sandbox/docker-orchestrator-server.js",
     "dev": "tsx watch src/index.ts",
     "emulate:slack": "emulate start --service slack --portless",
-    "portless:start": "pnpm dlx portless proxy start",
+    "portless:start": "pnpm dlx portless proxy start --wildcard",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",

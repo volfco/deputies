@@ -6,6 +6,7 @@ export type SandboxCapabilities = {
   filesystem: boolean;
   streamingLogs: boolean;
   portForwarding: boolean;
+  previewUrls: boolean;
   objectStorageArtifacts: boolean;
 };
 
@@ -47,6 +48,16 @@ export type SandboxExecResult = {
   completedAt: Date;
 };
 
+export type SandboxPreviewUrlInput = SandboxRef & {
+  port: number;
+};
+
+export type SandboxPreviewUrl = {
+  port: number;
+  targetUrl: string;
+  targetHeaders?: Record<string, string>;
+};
+
 export type SandboxFileSystem = {
   readFile(path: string): Promise<string>;
   readFileBuffer(path: string): Promise<Uint8Array>;
@@ -84,4 +95,5 @@ export interface SandboxProvider {
   stop?(input: SandboxRef): Promise<void>;
   destroy(input: SandboxRef): Promise<void>;
   health(input: SandboxRef): Promise<SandboxHealth>;
+  getPreviewUrl?(input: SandboxPreviewUrlInput): Promise<SandboxPreviewUrl | null>;
 }

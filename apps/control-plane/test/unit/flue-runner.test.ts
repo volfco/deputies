@@ -17,6 +17,7 @@ import { MemoryStore } from '../../src/store/memory.js';
 describe('FlueRunner', () => {
   it('uses stable product session IDs for Flue agent and session identity', async () => {
     const calls: Parameters<FlueAgentFactory['create']>[0][] = [];
+    const prompts: string[] = [];
     const factory: FlueAgentFactory = {
       async create(input) {
         calls.push(input);
@@ -25,7 +26,8 @@ describe('FlueRunner', () => {
             expect(id).toBe('session-1');
             return {
               async prompt(text) {
-                return { text: `flue: ${text}` };
+                prompts.push(text);
+                return { text: 'flue: ok' };
               },
               abort() {},
             };
@@ -50,7 +52,9 @@ describe('FlueRunner', () => {
 
     expect(calls).toMatchObject([{ agentId: 'session-1', sessionId: 'session-1', sandbox, cwd: '/workspace' }]);
     expect(calls[0]?.onEvent).toEqual(expect.any(Function));
-    expect(result.text).toBe('flue: hello');
+    expect(prompts[0]).toContain('Preview tool guidance:');
+    expect(prompts[0]).toContain('User request:\nhello');
+    expect(result.text).toBe('flue: ok');
     expect(events.map((event) => event.type)).toEqual(['run_started', 'agent_text_delta', 'run_completed']);
   });
 
@@ -460,6 +464,7 @@ function createFilesystemSandbox(sessionId: string): SandboxHandle {
       filesystem: true,
       streamingLogs: false,
       portForwarding: false,
+      previewUrls: false,
       objectStorageArtifacts: false,
     },
     fs,
