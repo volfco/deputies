@@ -27,6 +27,7 @@ describe('loadConfig', () => {
       authProvider: 'static',
       authCookieSecure: false,
       authCookieSameSite: 'lax',
+      previewTrustForwardedHosts: false,
       githubOAuthBaseUrl: 'https://github.com',
       authGithubAllowedUsers: [],
       authGithubAllowedOrganizations: [],

@@ -1,15 +1,12 @@
 import type { ToolDef } from '@flue/sdk';
 import type { RunnerInput } from '../runner/types.js';
-
-const maxLabelLength = 80;
-const maxPathLength = 512;
-
-export type PublishedPreview = {
-  port: number;
-  label?: string;
-  path?: string;
-  providerSandboxId?: string;
-};
+import {
+  isValidPreviewPath,
+  maxPreviewLabelLength,
+  maxPreviewPathLength,
+  type PublishedPreview,
+  readPreviews,
+} from '../sessions/previews.js';
 
 export type PreviewToolServices = {
   sessionId: string;
@@ -31,8 +28,8 @@ export function createPreviewTool(services: PreviewToolServices): ToolDef {
       properties: {
         action: { type: 'string', enum: ['publish', 'unpublish', 'list'], description: 'Preview action to perform.' },
         port: { type: 'number', minimum: 1, maximum: 65535, description: 'TCP port the app listens on.' },
-        label: { type: 'string', maxLength: maxLabelLength, description: 'Human-readable preview label.' },
-        path: { type: 'string', maxLength: maxPathLength, description: 'Optional path to open, for example /docs.' },
+        label: { type: 'string', maxLength: maxPreviewLabelLength, description: 'Human-readable preview label.' },
+        path: { type: 'string', maxLength: maxPreviewPathLength, description: 'Optional path to open, for example /docs.' },
       },
     },
     async execute(params) {
@@ -50,26 +47,9 @@ export function createPreviewTool(services: PreviewToolServices): ToolDef {
   };
 }
 
-export function readPreviews(context: Record<string, unknown>): PublishedPreview[] {
-  const value = context.previews;
-  if (!Array.isArray(value)) return [];
-  const previews: PublishedPreview[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue;
-    const record = item as Record<string, unknown>;
-    if (!isValidPort(record.port)) continue;
-    const preview: PublishedPreview = { port: record.port };
-    if (typeof record.label === 'string' && record.label.trim()) preview.label = record.label.slice(0, maxLabelLength);
-    if (typeof record.path === 'string' && isValidPath(record.path)) preview.path = record.path.slice(0, maxPathLength);
-    if (typeof record.providerSandboxId === 'string' && record.providerSandboxId.trim()) preview.providerSandboxId = record.providerSandboxId;
-    previews.push(preview);
-  }
-  return previews;
-}
-
 function publishPreview(current: PublishedPreview[], params: Record<string, unknown>, port: number, providerSandboxId: string): PublishedPreview[] {
   const preview: PublishedPreview = { port, providerSandboxId };
-  const label = readOptionalString(params.label, 'label', maxLabelLength);
+  const label = readOptionalString(params.label, 'label', maxPreviewLabelLength);
   const path = readOptionalPath(params.path);
   if (label) preview.label = label;
   if (path) preview.path = path;
@@ -102,12 +82,8 @@ function readOptionalString(value: unknown, name: string, maxLength: number): st
 }
 
 function readOptionalPath(value: unknown): string | undefined {
-  const path = readOptionalString(value, 'path', maxPathLength);
+  const path = readOptionalString(value, 'path', maxPreviewPathLength);
   if (path === undefined) return undefined;
-  if (!isValidPath(path)) throw new Error('preview path must start with / and cannot contain whitespace');
+  if (!isValidPreviewPath(path)) throw new Error('preview path must start with / and cannot contain whitespace');
   return path;
-}
-
-function isValidPath(value: string): boolean {
-  return value.startsWith('/') && !/\s/.test(value);
 }
