@@ -966,7 +966,7 @@ export function App() {
             ) : (
               <aside
                 className={cn(
-                  'fixed left-2 top-2 z-40 hidden h-[calc(100vh-1rem)] min-h-0 w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-card p-3 shadow-2xl md:static md:z-auto md:block md:h-full md:w-auto md:rounded-none md:border-y-0 md:border-l-0 md:shadow-none',
+                  'fixed left-2 top-2 z-40 hidden h-[calc(100dvh_-_1rem_-_env(safe-area-inset-bottom))] max-h-[calc(100dvh_-_1rem_-_env(safe-area-inset-bottom))] min-h-0 w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-card p-3 shadow-2xl md:static md:z-auto md:block md:h-full md:max-h-none md:w-auto md:rounded-none md:border-y-0 md:border-l-0 md:shadow-none',
                   sidebarOpen && 'block',
                 )}
               >

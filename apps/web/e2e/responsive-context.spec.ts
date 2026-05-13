@@ -32,6 +32,28 @@ test('keeps context collapsed around tablet and small desktop widths', async ({ 
   await expect(page.getByRole('heading', { name: 'Context' })).not.toBeVisible();
 });
 
+test('keeps the mobile sessions modal footer reachable on short screens', async ({ page }) => {
+  await page.route('http://localhost:3583/health', async (route) => {
+    await route.fulfill({ json: { status: 'ok', runMode: 'all', apiAuthMode: 'session', authProvider: 'static' } });
+  });
+  await page.route('http://localhost:3583/auth/me', async (route) => {
+    await route.fulfill({ json: { user: { id: 'operator', username: 'operator', displayName: 'Operator' } } });
+  });
+  await page.route('http://localhost:3583/auth/logout', async (route) => {
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.setViewportSize({ width: 360, height: 480 });
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Open sessions' }).click();
+  const signOut = page.getByRole('button', { name: 'Sign out' });
+  await expect(signOut).toBeVisible();
+
+  const box = await signOut.boundingBox();
+  expect(box).not.toBeNull();
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(480);
+});
+
 test('shows context as a sidebar on wide screens', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto('/');
@@ -71,6 +93,11 @@ async function mockApi(page: Page): Promise<void> {
 
     if (url.pathname === `/sessions/${sessionId}/artifacts`) {
       await route.fulfill({ json: { artifacts: [] } });
+      return;
+    }
+
+    if (url.pathname === `/sessions/${sessionId}/previews`) {
+      await route.fulfill({ json: { previews: [] } });
       return;
     }
 
