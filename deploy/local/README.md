@@ -3,6 +3,7 @@
 These Compose stacks run the production-style containers locally. Both variants include these common services:
 
 - `postgres`: local Postgres database
+- `seaweedfs`: local S3-compatible object storage for stored artifacts
 - `control-plane-migrate`: one-shot database migration job
 - `web`: built Vite app served by Caddy, with API routes proxied to the API service
 
@@ -59,12 +60,37 @@ The services are available at:
 - Web: `http://localhost:5173`
 - API direct: `http://localhost:3583`
 - Postgres: `localhost:5432`
+- SeaweedFS S3 API: `http://localhost:8333`
 
 Check proxied API health:
 
 ```sh
 curl http://localhost:5173/health
 ```
+
+## Artifact Storage
+
+The local Compose stacks enable stored artifacts by default with SeaweedFS' S3-compatible API:
+
+```txt
+ARTIFACT_STORAGE_PROVIDER=s3
+ARTIFACT_STORAGE_S3_ENDPOINT=http://seaweedfs:8333
+ARTIFACT_STORAGE_S3_BUCKET=deputies-artifacts
+ARTIFACT_STORAGE_S3_ACCESS_KEY_ID=seaweed
+ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY=seaweed
+ARTIFACT_STORAGE_S3_CREATE_BUCKET=true
+```
+
+Agents can publish sandbox files through the Flue `artifact({ action: "create" })` tool. Stored artifacts appear in the session UI, use authenticated product API download URLs, and support text previews for text-like files.
+
+For no-service local development outside Compose, use the filesystem adapter instead:
+
+```sh
+ARTIFACT_STORAGE_PROVIDER=filesystem
+ARTIFACT_STORAGE_FILESYSTEM_PATH=.artifacts
+```
+
+Filesystem storage is intended for local/single-process use only. Production-like deployments should use S3-compatible storage.
 
 ## Restart
 

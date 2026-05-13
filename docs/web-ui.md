@@ -81,8 +81,25 @@ The SSE client uses `fetch()` streaming instead of native `EventSource` because 
 - Request cancellation of an active run.
 - Archive and restore sessions. Archived sessions are read-only until restored.
 - Replay and stream session events internally, rendering assistant text in the transcript and non-text run/message events as collapsible diagnostics.
-- List session artifacts.
+- List session artifacts in the context panel.
+- Render run-created image and text artifacts inline with the relevant transcript group when they are safe to preview.
+- Open stored image artifacts through authenticated download URLs, skip automatic loading for large images, and lazy-load text previews from the artifact preview API.
+- Download stored artifacts and open external-link artifacts.
 - Show HTTP, Slack, and GitHub completion callback delivery status in the context panel and manually replay failed callbacks.
+
+## Artifacts
+
+The UI reads artifact metadata from `GET /sessions/:sessionId/artifacts`. Stored artifacts use API URLs rather than bucket URLs:
+
+- `GET /sessions/:sessionId/artifacts/:artifactId/download` returns the stored object with `content-type`, `content-length`, and `content-disposition` headers.
+- `GET /sessions/:sessionId/artifacts/:artifactId/preview` returns capped text preview data for supported text-like artifacts.
+
+Inline artifact rendering is intentionally conservative:
+
+- Browser-safe image artifacts are shown inline only when `payload.sizeBytes` is present and below the current autoload threshold.
+- Large or unknown-size images show an “Open image” action instead of loading automatically.
+- Text-like artifacts load previews only after the user opens the preview control; truncated previews show a `Preview truncated.` note.
+- External-link artifacts keep using their `url` and do not require object storage.
 
 ## Deployment
 

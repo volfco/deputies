@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Implemented for the current product path.
 
 ## Problem
 
@@ -39,13 +39,13 @@ The system also needs to remain easy to run locally. Local development should no
 
 - Artifact metadata remains stored in Postgres using the existing `artifacts` table, with `storage_key`, `url`, `type`, `title`, and `payload` identifying how to retrieve and display the artifact.
 - Blob storage is optional. If object storage is not configured, existing external-link artifacts continue to work and blob-producing features should fail clearly or use an explicitly configured local fallback.
-- The storage adapter should expose provider-neutral operations for `put`, `get`, `delete` when needed, and short-lived signed read URLs.
+- The storage adapter exposes provider-neutral `put`, `get`, optional byte-range `getRange`, and optional `delete` operations. Downloads and previews currently proxy through the authenticated product API rather than exposing signed bucket URLs.
 - Artifact reads through the product API remain protected by the same session auth as `GET /sessions/:sessionId/artifacts`.
 - The browser should not need direct permanent bucket credentials.
 - Artifacts should include content metadata when available: file name, content type, byte size, checksum, previewability, and retention hint.
 - Image artifacts should be previewable in the session UI when the content type is browser-safe.
-- Large text/log artifacts should be downloadable in the first version; inline preview can be capped or deferred.
-- Local development should provide one documented path for object storage via `docker-compose` and one no-service fallback if practical.
+- Large text/log artifacts should be downloadable and previewable through a capped API preview.
+- Local development should provide one documented path for object storage via `docker-compose` and one no-service filesystem fallback.
 
 ## Local Development Storage Options
 
@@ -58,32 +58,45 @@ The system also needs to remain easy to run locally. Local development should no
 ## Product Behavior
 
 - Session artifacts list shows artifact title, type, creation time, source run/message, size when known, and an action to view or download.
-- Image-like artifacts open inline or in a preview panel.
-- File, report, archive, and log artifacts expose download links generated on demand.
+- Image-like artifacts are shown inline for browser-safe stored images up to the UI autoload limit; large images expose an open/download link instead.
+- File, report, archive, and log artifacts expose authenticated download links.
+- Text-like artifacts expose lazy-loaded inline previews through `GET /sessions/:sessionId/artifacts/:artifactId/preview`; previews are capped server-side and report whether they were truncated.
 - External-link artifacts keep their current behavior and are visually distinguished from internally stored blobs.
 - If a stored artifact is unavailable, the UI shows a clear unavailable state rather than a broken link.
 - Completion callbacks may include artifact metadata and API URLs, but should avoid long-lived public signed URLs unless explicitly configured.
 
+## Implemented Shape
+
+- `ARTIFACT_STORAGE_PROVIDER=disabled|filesystem|s3`, default `disabled`.
+- Filesystem storage requires `ARTIFACT_STORAGE_FILESYSTEM_PATH` and is intended for local/single-process use.
+- S3-compatible storage requires `ARTIFACT_STORAGE_S3_BUCKET`, `ARTIFACT_STORAGE_S3_ACCESS_KEY_ID`, and `ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY`; `ARTIFACT_STORAGE_S3_ENDPOINT`, `ARTIFACT_STORAGE_S3_REGION`, `ARTIFACT_STORAGE_S3_FORCE_PATH_STYLE`, and `ARTIFACT_STORAGE_S3_CREATE_BUCKET` configure compatible local or hosted stores.
+- Local Compose runs SeaweedFS S3 and configures both all-in-one and split stacks to use it.
+- Flue runs receive an `artifact` tool. The current `create` action publishes a file from the sandbox as a durable artifact; supported types are `file`, `log`, `screenshot`, `report`, and `image`.
+- The artifact tool enforces `ARTIFACT_TOOL_MAX_BYTES`, default 25 MiB, before reading the sandbox file.
+- Stored artifact metadata includes `storage: "internal"`, `sizeBytes`, `checksumSha256`, optional `contentType`, optional `fileName`, and `sourcePath` for tool-created artifacts.
+- Stored artifact objects are keyed as `sessions/:sessionId/runs/:runId/artifacts/:artifactId[-fileName]`.
+- Product API routes are `GET /sessions/:sessionId/artifacts`, `GET /sessions/:sessionId/artifacts/:artifactId/download`, and `GET /sessions/:sessionId/artifacts/:artifactId/preview`.
+
 ## Future Work
 
 - Add archive-aware artifact retention cleanup. Archiving a session should not immediately delete artifact blobs, but a later cleanup job can delete stored blobs after a configurable retention window, preserve artifact metadata, mark expired artifacts as unavailable, and have download/preview routes return a stable expired response.
+- Signed URL redirects are not implemented yet; API proxying is the current access path.
+- Image previews currently use authenticated download URLs; dedicated image thumbnail generation is future work.
 
 ## Acceptance Criteria
 
 - With object storage disabled, existing artifact listing and external-link artifacts continue to work.
-- With local object storage enabled, a run can create a blob artifact, store it outside Postgres, list it through the session artifacts API, and download it through an authenticated API flow.
-- Local development documentation includes a working `docker-compose` object storage service and required environment variables.
+- With local object storage enabled, a run can create a blob artifact through `artifact({ action: "create" })`, store it outside Postgres, list it through the session artifacts API, preview supported text artifacts, and download it through an authenticated API flow.
+- Local development documentation includes a working `docker-compose` SeaweedFS object storage service and required environment variables.
 - No permanent object storage credentials are exposed to the browser, event payloads, callbacks, or logs.
 - Artifact metadata in Postgres is sufficient to render artifact lists even if object storage is temporarily unavailable.
 - The session UI can preview at least browser-safe image artifacts and download all stored artifact types.
 - Tests cover disabled storage, successful upload/download, auth-protected reads, and missing-object behavior.
 
-## Open Questions
+## Remaining Questions
 
-- Should the first implementation include filesystem storage, or should local development always use an S3-compatible service?
-- Should internally stored artifact downloads proxy through the API, redirect to short-lived signed URLs, or support both by configuration?
 - What retention policy should apply to artifacts by default?
-- Should logs be captured continuously as artifacts during a run, or only emitted by the runner at completion?
+- Should logs be captured continuously as artifacts during a run, or only emitted by the runner/tool at completion?
 - Do callbacks need durable API download URLs, short-lived signed URLs, or only artifact IDs?
 
 ## Links

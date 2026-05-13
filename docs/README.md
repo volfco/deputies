@@ -78,7 +78,7 @@ The current scaffold has implemented the portable control-plane foundation:
 
 - TypeScript Node service with `RUN_MODE=all|api|worker`.
 - Core session/message/event HTTP loop.
-- Docker Compose Postgres for local development.
+- Docker Compose Postgres and SeaweedFS object storage for local development.
 - Raw SQL migration runner.
 - Postgres-backed `AppStore` for `sessions`, `messages`, `events`, `runs`, leases, webhook sources, external threads, and delivery dedupe.
 - Durable worker loop with fake runner execution, run leases, heartbeat renewal, and stale lease recovery.
@@ -90,11 +90,12 @@ The current scaffold has implemented the portable control-plane foundation:
 - Sandbox lifecycle persistence with reconnect/reuse semantics for follow-up messages.
 - Daytona sandbox auto-stop configuration and stopped-sandbox restart/reuse.
 - Flue live event normalization for text deltas, tools, commands, and tasks.
-- Artifact persistence, session artifact reads, and generic HTTP completion callbacks.
+- Artifact persistence, optional filesystem/S3-compatible blob storage, session artifact list/download/preview APIs, and generic HTTP completion callbacks.
 - Separate Vite React operator UI scaffold.
 - Opt-in real local Flue and real Daytona/Flue UAT paths with credentials.
 - Slack and GitHub webhook integrations with external thread reuse, callback delivery, and archived-session recovery.
 - GitHub App repository access with guarded `repository`, `gh`, and authenticated `git` tools.
+- Flue `artifact({ action: "create" })` tool for publishing sandbox files as downloadable/previewable product artifacts.
 
 The following MVP pieces are still planned:
 

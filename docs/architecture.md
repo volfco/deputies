@@ -63,6 +63,7 @@ Postgres
   external thread mappings
 
 Object storage, optional at first
+  stored artifact blobs
   logs
   screenshots
   large artifacts
@@ -163,7 +164,7 @@ flowchart LR
   Client <-->|HTTP + SSE| API
   Integration <-->|webhooks + callbacks| API
   API <-->|sessions + events| Postgres
-  API -->|artifact metadata| ObjectStorage
+  API -->|artifact downloads + previews| ObjectStorage
   Workers <-->|queue + leases + events| Postgres
   Workers -->|artifact blobs| ObjectStorage
   Workers <-->|lifecycle requests| FirstPartyControl
@@ -389,6 +390,8 @@ Product session routes support `API_AUTH_MODE=none|bearer|session`; the mode is 
 Current session-cookie auth is an API access gate only. Product sessions remain multiplayer/shared by default: authenticated users can list and open the same global session set, and sessions are not currently owned by or filtered to the authenticated user.
 
 Session-scoped product state is exposed through the product API. Artifact reads use `GET /sessions/:sessionId/artifacts` and are protected by the same product session auth as session, message, and event routes.
+
+Stored artifact blobs are optional and live behind the `artifacts` service. Postgres remains the source of truth for artifact metadata. When `ARTIFACT_STORAGE_PROVIDER=filesystem|s3` is configured, workers can store artifact bytes in object storage and the API proxies authenticated downloads and text previews through `GET /sessions/:sessionId/artifacts/:artifactId/download` and `GET /sessions/:sessionId/artifacts/:artifactId/preview`. When storage is disabled, external-link artifacts still work and blob-producing paths fail clearly.
 
 JSON request bodies are capped by `MAX_JSON_BODY_BYTES` and malformed/non-object bodies produce stable JSON error envelopes. This prevents transport parsing failures from leaking as generic internal errors.
 

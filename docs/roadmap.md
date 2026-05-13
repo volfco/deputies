@@ -9,7 +9,7 @@ Implemented so far:
 - Product API auth modes: `none`, bearer token, and AppStore-backed session cookie login for the operator UI with static and GitHub App providers.
 - Stable JSON parse/body-limit errors for API routes.
 - Core session/message/event modules.
-- HTTP routes for creating/listing/updating/archiving/restoring sessions, enqueueing/editing/cancelling queued messages, cancelling active runs, listing artifacts, and replaying events.
+- HTTP routes for creating/listing/updating/archiving/restoring sessions, enqueueing/editing/cancelling queued messages, cancelling active runs, listing/downloading/previewing artifacts, and replaying events.
 - SSE event streaming with cursor replay.
 - Memory-backed `AppStore` for deterministic unit tests.
 - Docker Compose local Postgres.
@@ -25,8 +25,8 @@ Implemented so far:
 - Opt-in real Daytona/Flue built-artifact UAT scaffold.
 - Flue live event normalization for text deltas, tools, commands, and tasks.
 - Built-artifact E2E coverage for API auth, sandbox reuse, webhook auth separation, and real Daytona/Flue follow-up persistence.
-- Artifact persistence and generic HTTP completion callbacks.
-- Session artifact read API.
+- Artifact persistence, optional filesystem/S3-compatible object storage, and generic HTTP completion callbacks.
+- Session artifact list/download/preview API.
 - Graceful shutdown for HTTP server, worker loop, and Postgres-backed resources.
 - Postgres integration test path.
 - App-level Postgres worker integration test.
@@ -35,12 +35,13 @@ Implemented so far:
 - GitHub App runtime access for allowlisted repositories, including real GitHub token minting, Flue-runner repository refresh, and opt-in real GitHub + Daytona clone UAT coverage.
 - GitHub webhook ingress for issue, PR, PR review comment, and PR review events with signature verification, delivery dedupe, repository/user/repository-owner allowlists, required trigger-phrase gating when webhooks are enabled, session mapping, bounded context fetching, received reactions, and completion comments through the callback dispatcher.
 - Agent runtime GitHub repository tooling for repository selection/preparation, authenticated `gh`, and authenticated guarded `git` operations inside prepared sandbox repositories.
+- Agent-created stored artifacts through the Flue `artifact({ action: "create" })` tool, with SeaweedFS-backed local Compose storage and web UI image/text previews.
 
 Still open from the early phases:
 
 - Contract schemas for public API responses and events.
 
-The next implementation phase should focus on operational polish and the remaining GitHub integration gaps: collaborator permission checks, label-based triggers, provider-owned branch/PR helpers, richer UI observability for sandbox cleanup, release/migration commands, Railway/ECS/Kubernetes guidance, and contract schemas for public API/events.
+The next implementation phase should focus on operational polish and the remaining GitHub/artifact integration gaps: collaborator permission checks, label-based triggers, provider-owned branch/PR helpers, artifact retention cleanup, richer UI observability for sandbox cleanup, release/migration commands, Railway/ECS/Kubernetes guidance, and contract schemas for public API/events.
 
 ## Phase 0: Repository And Agent Context
 

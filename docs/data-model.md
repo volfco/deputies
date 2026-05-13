@@ -400,6 +400,7 @@ Types:
 pull_request
 branch
 commit
+image
 screenshot
 log
 report
@@ -411,12 +412,19 @@ Rules:
 
 - PR artifacts should include repo, PR number, branch, title, and URL.
 - Artifacts should be referenced from events with `artifact_created`.
+- Postgres remains the source of truth for artifact metadata; large/binary content is stored outside Postgres when `storage_key` is set.
+- Stored artifacts should include retrieval/display metadata in `payload`: `storage`, `sizeBytes`, `checksumSha256`, `contentType`, and `fileName` when known.
+- External-link artifacts use `url` without `storage_key`; internally stored artifacts use `storage_key` and are read through authenticated API routes.
 
 Current implementation:
 
 - `008_artifacts_callbacks.sql` creates `artifacts` and `callback_deliveries`.
 - Runner-returned artifacts are persisted after successful runs and emitted as `artifact_created` events.
+- Stored artifact content can be created by runner-returned artifact bytes or by the Flue `artifact({ action: "create" })` tool, which copies a sandbox file into configured object storage.
+- Object storage is optional and selected with `ARTIFACT_STORAGE_PROVIDER=disabled|filesystem|s3`; stored blob artifacts fail clearly when storage is disabled.
 - Session artifacts are readable through `GET /sessions/:sessionId/artifacts`.
+- Stored artifacts are downloadable through `GET /sessions/:sessionId/artifacts/:artifactId/download`.
+- Text-like stored artifacts are previewable through `GET /sessions/:sessionId/artifacts/:artifactId/preview`; unsupported previews return `415 unsupported_preview`.
 - Generic webhook HTTP callbacks, Slack completion replies, and GitHub completion comments are recorded in `callback_deliveries` with `pending`, `sending`, `sent`, or `failed` status.
 
 ## Flue Sessions
