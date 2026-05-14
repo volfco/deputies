@@ -67,6 +67,11 @@ export type ArtifactPreview = {
   sizeBytes: number;
 };
 
+export type ArtifactPreviewResponse = {
+  artifact: Artifact;
+  preview: ArtifactPreview;
+};
+
 export type SandboxPreview = {
   port: number;
   url: string;
@@ -298,7 +303,7 @@ export async function getArtifactPreview(input: {
   artifactId: string;
   token: string;
 }): Promise<ArtifactPreview> {
-  const body = await request<{ preview: ArtifactPreview }>(
+  const body = await request<ArtifactPreviewResponse>(
     `/sessions/${input.sessionId}/artifacts/${input.artifactId}/preview`,
     { token: input.token },
   );

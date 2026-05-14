@@ -4,6 +4,7 @@ export type PublicApiResponseField =
   | 'null'
   | 'number'
   | 'object'
+  | 'optional:object'
   | 'record'
   | 'string'
   | 'optional:string';
@@ -73,10 +74,6 @@ export const publicApiResponseSchemas = {
     fields: {
       artifact: 'object',
       preview: 'object',
-      text: 'string',
-      contentType: 'string',
-      truncated: 'boolean',
-      sizeBytes: 'number',
     },
   },
   callbacks: {
@@ -89,7 +86,7 @@ export const publicApiResponseSchemas = {
   },
   genericWebhook: {
     description: 'Generic webhook acceptance result.',
-    fields: { accepted: 'boolean', duplicate: 'boolean', session: 'object', message: 'object' },
+    fields: { accepted: 'boolean', duplicate: 'boolean', session: 'optional:object', message: 'optional:object' },
   },
   slackChallenge: {
     description: 'Slack URL verification challenge response.',

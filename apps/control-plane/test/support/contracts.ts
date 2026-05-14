@@ -1,4 +1,8 @@
-import { publicApiResponseSchemas, type PublicApiResponseSchemaName } from '../../src/app/response-schemas.js';
+import {
+  publicApiResponseSchemas,
+  type PublicApiResponseField,
+  type PublicApiResponseSchemaName,
+} from '../../src/app/response-schemas.js';
 
 const eventTypes = new Set([
   'session_created',
@@ -120,6 +124,26 @@ export function expectArtifactsResponse(
   }
 }
 
+export function expectArtifactPreviewResponse(value: unknown): asserts value is {
+  artifact: { id: string; type: string; payload: Record<string, unknown> };
+  preview: { text: string; contentType: string; truncated: boolean; sizeBytes: number };
+} {
+  expectResponseSchemaField('artifactPreview', 'artifact');
+  expectResponseSchemaField('artifactPreview', 'preview');
+  expect(isRecord(value)).toBe(true);
+  if (!isRecord(value)) return;
+  expect(isRecord(value.artifact)).toBe(true);
+  expect(isRecord(value.preview)).toBe(true);
+  if (!isRecord(value.artifact) || !isRecord(value.preview)) return;
+  expect(typeof value.artifact.id).toBe('string');
+  expect(typeof value.artifact.type).toBe('string');
+  expect(isRecord(value.artifact.payload)).toBe(true);
+  expect(typeof value.preview.text).toBe('string');
+  expect(typeof value.preview.contentType).toBe('string');
+  expect(typeof value.preview.truncated).toBe('boolean');
+  expect(typeof value.preview.sizeBytes).toBe('number');
+}
+
 export function expectGenericWebhookResponse(value: unknown): asserts value is {
   accepted: boolean;
   duplicate: boolean;
@@ -128,6 +152,8 @@ export function expectGenericWebhookResponse(value: unknown): asserts value is {
 } {
   expectResponseSchemaField('genericWebhook', 'accepted');
   expectResponseSchemaField('genericWebhook', 'duplicate');
+  expectResponseSchemaField('genericWebhook', 'session', 'optional:object');
+  expectResponseSchemaField('genericWebhook', 'message', 'optional:object');
   expect(isRecord(value)).toBe(true);
   if (!isRecord(value)) return;
   expect(typeof value.accepted).toBe('boolean');
@@ -224,6 +250,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function expectResponseSchemaField(schemaName: PublicApiResponseSchemaName, field: string): void {
-  expect(publicApiResponseSchemas[schemaName].fields).toHaveProperty(field);
+function expectResponseSchemaField(
+  schemaName: PublicApiResponseSchemaName,
+  field: string,
+  expectedType?: PublicApiResponseField,
+): void {
+  const fields: Record<string, PublicApiResponseField> = publicApiResponseSchemas[schemaName].fields;
+  expect(fields).toHaveProperty(field);
+  if (expectedType) expect(fields[field]).toBe(expectedType);
 }

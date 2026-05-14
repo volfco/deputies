@@ -142,6 +142,8 @@ describe('architecture boundaries', () => {
         'sessions',
       ]),
     );
+    expect(publicApiResponseSchemas.genericWebhook.fields.session).toBe('optional:object');
+    expect(publicApiResponseSchemas.genericWebhook.fields.message).toBe('optional:object');
   });
 });
 
@@ -178,11 +180,65 @@ function normalizeInternalImport(file: string, specifier: string): string {
 
 function jsonResponseEnvelopeFields(text: string): Set<string> {
   const fields = new Set<string>();
-  for (const match of text.matchAll(/c\.json\(\s*\{([\s\S]*?)\}\s*(?:,|\))/g)) {
-    const body = match[1] ?? '';
-    for (const field of body.matchAll(/(?:^|[,\n])\s*([A-Za-z_$][\w$]*)\s*(?::|[,\n]|$)/g)) {
-      fields.add(field[1]!);
+  for (const match of text.matchAll(/c\.json\(\s*\{/g)) {
+    const objectStart = match.index + match[0].length - 1;
+    const objectEnd = matchingBraceIndex(text, objectStart);
+    if (objectEnd === -1) continue;
+    for (const field of topLevelObjectFields(text.slice(objectStart + 1, objectEnd))) fields.add(field);
+  }
+  return fields;
+}
+
+function matchingBraceIndex(text: string, openIndex: number): number {
+  let depth = 0;
+  let quote: string | null = null;
+
+  for (let index = openIndex; index < text.length; index += 1) {
+    const char = text[index]!;
+    const previous = text[index - 1];
+    if (quote) {
+      if (char === quote && previous !== '\\') quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return index;
     }
   }
+
+  return -1;
+}
+
+function topLevelObjectFields(body: string): string[] {
+  const fields: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let fieldStart = 0;
+
+  for (let index = 0; index <= body.length; index += 1) {
+    const char = body[index] ?? ',';
+    const previous = body[index - 1];
+    if (quote) {
+      if (char === quote && previous !== '\\') quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '{' || char === '[' || char === '(') depth += 1;
+    if (char === '}' || char === ']' || char === ')') depth -= 1;
+    if (char !== ',' || depth !== 0) continue;
+
+    const field = body.slice(fieldStart, index).match(/^\s*([A-Za-z_$][\w$]*)\s*(?::|$)/)?.[1];
+    if (field) fields.push(field);
+    fieldStart = index + 1;
+  }
+
   return fields;
 }

@@ -10,6 +10,7 @@ import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 import type { SandboxPreviewUrlInput } from '../../src/sandbox/types.js';
 import { MemoryStore } from '../../src/store/memory.js';
 import {
+  expectArtifactPreviewResponse,
   expectArtifactsResponse,
   expectCallbackResponse,
   expectCallbacksResponse,
@@ -931,7 +932,9 @@ describe('core API', () => {
 
     const preview = await fetch(`${baseUrl}/sessions/${session.id}/artifacts/${artifact!.id}/preview`);
     expect(preview.status).toBe(200);
-    await expect(preview.json()).resolves.toMatchObject({
+    const previewBody = await preview.json();
+    expectArtifactPreviewResponse(previewBody);
+    expect(previewBody).toMatchObject({
       preview: { text: 'hello artifact storage', contentType: 'text/plain', truncated: false, sizeBytes: 22 },
     });
   });
@@ -1011,7 +1014,9 @@ describe('core API', () => {
 
     expect(response.status).toBe(200);
     expect(ranges).toEqual([{ key: 'logs/run.log', start: 0, endInclusive: 32 * 1024 - 1 }]);
-    await expect(response.json()).resolves.toMatchObject({
+    const body = await response.json();
+    expectArtifactPreviewResponse(body);
+    expect(body).toMatchObject({
       preview: { text: 'preview', contentType: 'text/plain', truncated: true, sizeBytes: 40_000 },
     });
   });
