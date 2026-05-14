@@ -83,6 +83,7 @@ export class ArtifactService {
   }): Promise<ArtifactRecord> {
     const id = randomUUID();
     const artifact = input.artifact;
+    const createdAt = new Date();
     const create: CreateArtifactRecord = {
       id,
       sessionId: input.sessionId,
@@ -90,7 +91,7 @@ export class ArtifactService {
       messageId: input.messageId,
       type: artifact.type,
       payload: artifact.payload ? { ...artifact.payload } : {},
-      createdAt: new Date(),
+      createdAt,
     };
     const title = artifact.title ?? titleFromFileName(artifact.fileName);
     if (title) create.title = title;
@@ -100,7 +101,7 @@ export class ArtifactService {
     if (content) {
       if (!this.objectStorage)
         throw new ArtifactServiceError('storage_disabled', 'Artifact object storage is disabled');
-      const storageKey = buildStorageKey(input.sessionId, input.runId, id, artifact.fileName);
+      const storageKey = buildStorageKey(createdAt, input.sessionId, input.runId, id, artifact.fileName);
       await this.objectStorage.put({
         key: storageKey,
         body: content,
@@ -253,9 +254,23 @@ function artifactContentBytes(artifact: RunnerArtifact): Uint8Array | null {
   return null;
 }
 
-function buildStorageKey(sessionId: string, runId: string, artifactId: string, fileName?: string): string {
-  const suffix = fileName ? `-${fileName.replace(/[^A-Za-z0-9._-]/g, '_')}` : '';
-  return `sessions/${sessionId}/runs/${runId}/artifacts/${artifactId}${suffix}`;
+function buildStorageKey(
+  createdAt: Date,
+  sessionId: string,
+  runId: string,
+  artifactId: string,
+  fileName?: string,
+): string {
+  const suffix = fileName ? `-${sanitizeStorageFileName(fileName)}` : '';
+  return `artifacts/${formatStorageTimestamp(createdAt)}/sessions/${sessionId}/runs/${runId}/${artifactId}${suffix}`;
+}
+
+function sanitizeStorageFileName(fileName: string): string {
+  return fileName.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
+}
+
+function formatStorageTimestamp(date: Date): string {
+  return date.toISOString().replace(/[-:.]/g, '');
 }
 
 function titleFromFileName(fileName?: string): string | undefined {

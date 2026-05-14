@@ -905,7 +905,9 @@ describe('core API', () => {
         id: artifact!.id,
         type: 'log',
         title: 'Debug log',
-        storageKey: expect.any(String),
+        storageKey: expect.stringMatching(
+          /^artifacts\/\d{8}T\d{9}Z\/sessions\/.*\/runs\/00000000-0000-4000-8000-000000000911\/.*-debug\.log$/,
+        ),
         payload: {
           storage: 'internal',
           contentType: 'text/plain',
@@ -947,6 +949,27 @@ describe('core API', () => {
     });
 
     expect(artifact).toMatchObject({ title: 'Another Artifact Sample' });
+  });
+
+  it('caps long artifact filenames in storage keys', async () => {
+    await restartWithFilesystemArtifacts();
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Long artifact filename' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+    const longFileName = `${'a'.repeat(180)}.txt`;
+
+    const [artifact] = await services.artifacts.recordRunArtifacts({
+      sessionId: session.id,
+      runId: '00000000-0000-4000-8000-000000000917',
+      messageId: '00000000-0000-4000-8000-000000000918',
+      result: {
+        text: 'created artifact',
+        artifacts: [{ type: 'file', content: 'sample', contentType: 'text/plain', fileName: longFileName }],
+      },
+    });
+
+    const suffix = artifact!.storageKey!.split('/').at(-1)!;
+    expect(suffix).toHaveLength(`${artifact!.id}-`.length + 120);
+    expect(suffix).toBe(`${artifact!.id}-${'a'.repeat(120)}`);
   });
 
   it('uses ranged object reads for text artifact previews', async () => {
@@ -1038,7 +1061,9 @@ describe('core API', () => {
       }),
     ).rejects.toThrow('metadata insert failed');
     expect(deletedKeys).toHaveLength(1);
-    expect(deletedKeys[0]).toContain('/artifacts/');
+    expect(deletedKeys[0]).toMatch(
+      /^artifacts\/\d{8}T\d{9}Z\/sessions\/00000000-0000-4000-8000-000000000001\/runs\/00000000-0000-4000-8000-000000000002\/.*-orphan\.txt$/,
+    );
   });
 
   it('protects stored artifact downloads with product auth', async () => {
