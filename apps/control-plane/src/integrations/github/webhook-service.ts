@@ -158,12 +158,12 @@ export class GitHubWebhookService {
       },
     });
     if (!received) return { ok: true, type: 'duplicate' };
+    const delivery = { id: received.id, source: 'github', dedupeKey: accepted.deliveryId };
 
     const authorizationFailure = this.authorizationFailure(accepted);
     if (authorizationFailure) {
       await markIntegrationDeliveryFailed(this.store, {
-        source: 'github',
-        dedupeKey: accepted.deliveryId,
+        ...delivery,
         error: authorizationFailure,
       });
       return { ok: true, type: 'ignored', reason: authorizationFailure };
@@ -172,8 +172,7 @@ export class GitHubWebhookService {
     const triggerFailure = this.triggerFailure(accepted);
     if (triggerFailure) {
       await markIntegrationDeliveryFailed(this.store, {
-        source: 'github',
-        dedupeKey: accepted.deliveryId,
+        ...delivery,
         error: triggerFailure,
       });
       return { ok: true, type: 'ignored', reason: triggerFailure };
@@ -191,18 +190,18 @@ export class GitHubWebhookService {
         );
         if (archivedMessages.length) {
           const message = await this.enqueueArchivedRecoveryWork(session, accepted, archivedMessages);
-          await markIntegrationDeliveryProcessed(this.store, { source: 'github', dedupeKey: accepted.deliveryId });
+          await markIntegrationDeliveryProcessed(this.store, delivery);
           return { ok: true, type: 'accepted', session, message };
         }
         if (isArchivedSessionRecoveryOnly(currentGitHubMessageText(accepted))) {
           await this.recordRecoveryTranscriptEntries(session.id, accepted);
-          await markIntegrationDeliveryProcessed(this.store, { source: 'github', dedupeKey: accepted.deliveryId });
+          await markIntegrationDeliveryProcessed(this.store, delivery);
           await this.postRecoveryAcknowledgement(accepted);
           return { ok: true, type: 'recovered', session };
         }
       } else {
         await this.recordArchivedTranscriptEntries(session.id, accepted);
-        await markIntegrationDeliveryProcessed(this.store, { source: 'github', dedupeKey: accepted.deliveryId });
+        await markIntegrationDeliveryProcessed(this.store, delivery);
         await this.postArchivedSessionNotice(accepted);
         return { ok: true, type: 'ignored', reason: 'session_archived' };
       }
@@ -244,7 +243,7 @@ export class GitHubWebhookService {
       }),
     });
 
-    await markIntegrationDeliveryProcessed(this.store, { source: 'github', dedupeKey: accepted.deliveryId });
+    await markIntegrationDeliveryProcessed(this.store, delivery);
     return { ok: true, type: 'accepted', session, message };
   }
 

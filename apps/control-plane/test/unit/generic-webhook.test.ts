@@ -1,4 +1,5 @@
 import { createServices } from '../../src/app/server.js';
+import { markIntegrationDeliveryProcessed } from '../../src/integrations/shared-utils.js';
 import { MemoryStore } from '../../src/store/memory.js';
 
 describe('GenericWebhookService', () => {
@@ -69,6 +70,165 @@ describe('GenericWebhookService', () => {
     expect(first.duplicate).toBe(false);
     expect(duplicate).toMatchObject({ accepted: true, duplicate: true });
     await expect(services.messages.list(first.session!.id)).resolves.toHaveLength(1);
+  });
+
+  it('does not reclaim received deliveries and keeps failed retries and processed deliveries idempotent', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const now = new Date();
+    await store.createWebhookSource({
+      id: '00000000-0000-4000-8000-000000000104',
+      key: 'foo',
+      name: 'Foo',
+      enabled: true,
+      bearerToken: 'secret',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await store.createIntegrationDelivery({
+      id: '00000000-0000-4000-8000-000000000111',
+      source: 'foo',
+      dedupeKey: 'received-delivery',
+      receivedAt: new Date(now.getTime() - 16 * 60_000),
+      staleReceivedBefore: new Date(now.getTime() - 15 * 60_000),
+      metadata: {},
+    });
+    const receivedRetry = await services.genericWebhooks.handle({
+      sourceKey: 'foo',
+      authorization: 'Bearer secret',
+      payload: { thread: { externalId: 'thread-1' }, dedupeKey: 'received-delivery', prompt: 'retry received' },
+    });
+
+    const failedDelivery = await store.createIntegrationDelivery({
+      id: '00000000-0000-4000-8000-000000000112',
+      source: 'foo',
+      dedupeKey: 'failed-delivery',
+      receivedAt: now,
+      staleReceivedBefore: new Date(now.getTime() - 15 * 60_000),
+      metadata: {},
+    });
+    await store.markIntegrationDeliveryFailed({
+      id: failedDelivery!.id,
+      source: 'foo',
+      dedupeKey: 'failed-delivery',
+      failedAt: now,
+      error: 'temporary_failure',
+    });
+    const failedRetry = await services.genericWebhooks.handle({
+      sourceKey: 'foo',
+      authorization: 'Bearer secret',
+      payload: { thread: { externalId: 'thread-1' }, dedupeKey: 'failed-delivery', prompt: 'retry failed' },
+    });
+
+    const processed = await services.genericWebhooks.handle({
+      sourceKey: 'foo',
+      authorization: 'Bearer secret',
+      payload: { thread: { externalId: 'thread-1' }, dedupeKey: 'processed-delivery', prompt: 'process once' },
+    });
+    const processedDuplicate = await services.genericWebhooks.handle({
+      sourceKey: 'foo',
+      authorization: 'Bearer secret',
+      payload: { thread: { externalId: 'thread-1' }, dedupeKey: 'processed-delivery', prompt: 'process twice' },
+    });
+
+    expect(receivedRetry).toMatchObject({ accepted: true, duplicate: true });
+    expect(failedRetry.duplicate).toBe(false);
+    expect(processed.duplicate).toBe(false);
+    expect(processedDuplicate).toMatchObject({ accepted: true, duplicate: true });
+    await expect(services.messages.list(failedRetry.session!.id)).resolves.toHaveLength(2);
+  });
+
+  it('surfaces lost integration delivery finalization leases', async () => {
+    const store = new MemoryStore();
+    const now = new Date();
+    const delivery = await store.createIntegrationDelivery({
+      id: '00000000-0000-4000-8000-000000000118',
+      source: 'foo',
+      dedupeKey: 'delivery-1',
+      receivedAt: now,
+      staleReceivedBefore: new Date(now.getTime() - 1),
+      metadata: {},
+    });
+
+    await expect(
+      markIntegrationDeliveryProcessed(store, {
+        id: '00000000-0000-4000-8000-000000000119',
+        source: 'foo',
+        dedupeKey: 'delivery-1',
+      }),
+    ).rejects.toThrow('Integration delivery lease lost before processing completed');
+    await expect(
+      store.markIntegrationDeliveryProcessed({
+        id: delivery!.id,
+        source: 'foo',
+        dedupeKey: 'delivery-1',
+        processedAt: new Date(now.getTime() + 1_000),
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it('does not process concurrent duplicate deliveries twice', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const now = new Date();
+    await store.createWebhookSource({
+      id: '00000000-0000-4000-8000-000000000105',
+      key: 'foo',
+      name: 'Foo',
+      enabled: true,
+      bearerToken: 'secret',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const payload = { thread: { externalId: 'thread-1' }, dedupeKey: 'delivery-1', prompt: 'do work' };
+    const results = await Promise.all([
+      services.genericWebhooks.handle({ sourceKey: 'foo', authorization: 'Bearer secret', payload }),
+      services.genericWebhooks.handle({ sourceKey: 'foo', authorization: 'Bearer secret', payload }),
+    ]);
+
+    expect(results.map((result) => result.duplicate).sort()).toEqual([false, true]);
+    const accepted = results.find((result) => !result.duplicate)!;
+    await expect(services.messages.list(accepted.session!.id)).resolves.toHaveLength(1);
+  });
+
+  it('does not let stale failures regress processed deliveries', async () => {
+    const store = new MemoryStore();
+    const now = new Date();
+    const delivery = await store.createIntegrationDelivery({
+      id: '00000000-0000-4000-8000-000000000106',
+      source: 'foo',
+      dedupeKey: 'delivery-1',
+      receivedAt: now,
+      staleReceivedBefore: new Date(now.getTime() - 1),
+      metadata: {},
+    });
+
+    await store.markIntegrationDeliveryProcessed({
+      id: delivery!.id,
+      source: 'foo',
+      dedupeKey: 'delivery-1',
+      processedAt: new Date(now.getTime() + 1_000),
+    });
+    await store.markIntegrationDeliveryFailed({
+      id: delivery!.id,
+      source: 'foo',
+      dedupeKey: 'delivery-1',
+      failedAt: new Date(now.getTime() + 2_000),
+      error: 'late_failure',
+    });
+
+    await expect(
+      store.createIntegrationDelivery({
+        id: '00000000-0000-4000-8000-000000000107',
+        source: 'foo',
+        dedupeKey: 'delivery-1',
+        receivedAt: new Date(now.getTime() + 3_000),
+        staleReceivedBefore: new Date(now.getTime() + 3_000),
+        metadata: {},
+      }),
+    ).resolves.toBeNull();
   });
 
   it('accepts the shared integration ingress fields', async () => {

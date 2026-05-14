@@ -66,7 +66,11 @@ export class GenericWebhookService {
       context: parsed.context,
     });
 
-    await markIntegrationDeliveryProcessed(this.store, { source: source.key, dedupeKey: parsed.dedupeKey });
+    await markIntegrationDeliveryProcessed(this.store, {
+      id: received.id,
+      source: source.key,
+      dedupeKey: parsed.dedupeKey,
+    });
 
     return { accepted: true, duplicate: false, session, message };
   }

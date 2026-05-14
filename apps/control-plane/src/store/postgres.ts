@@ -1267,13 +1267,21 @@ export class PostgresStore implements AppStore {
     source: string;
     dedupeKey: string;
     receivedAt: Date;
+    staleReceivedBefore: Date;
     metadata: Record<string, unknown>;
   }): Promise<IntegrationDeliveryRecord | null> {
     const result = await this.pool.query<IntegrationDeliveryRow>(
       `INSERT INTO integration_deliveries (id, source, dedupe_key, status, received_at, metadata)
        VALUES ($1, $2, $3, 'received', $4, $5)
-       ON CONFLICT (source, dedupe_key) DO NOTHING
-       RETURNING id, source, dedupe_key, status, received_at, processed_at, error, metadata`,
+        ON CONFLICT (source, dedupe_key) DO UPDATE
+         SET id = EXCLUDED.id,
+             status = 'received',
+             received_at = EXCLUDED.received_at,
+             processed_at = NULL,
+             error = NULL,
+             metadata = EXCLUDED.metadata
+        WHERE integration_deliveries.status = 'failed'
+        RETURNING id, source, dedupe_key, status, received_at, processed_at, error, metadata`,
       [input.id, input.source, input.dedupeKey, input.receivedAt, input.metadata],
     );
 
@@ -1282,30 +1290,34 @@ export class PostgresStore implements AppStore {
   }
 
   async markIntegrationDeliveryProcessed(input: {
+    id: string;
     source: string;
     dedupeKey: string;
     processedAt: Date;
-  }): Promise<void> {
-    await this.pool.query(
+  }): Promise<boolean> {
+    const result = await this.pool.query(
       `UPDATE integration_deliveries
        SET status = 'processed', processed_at = $3
-       WHERE source = $1 AND dedupe_key = $2`,
-      [input.source, input.dedupeKey, input.processedAt],
+       WHERE source = $1 AND dedupe_key = $2 AND id = $4 AND status = 'received'`,
+      [input.source, input.dedupeKey, input.processedAt, input.id],
     );
+    return result.rowCount === 1;
   }
 
   async markIntegrationDeliveryFailed(input: {
+    id: string;
     source: string;
     dedupeKey: string;
     failedAt: Date;
     error: string;
-  }): Promise<void> {
-    await this.pool.query(
+  }): Promise<boolean> {
+    const result = await this.pool.query(
       `UPDATE integration_deliveries
        SET status = 'failed', processed_at = $3, error = $4
-       WHERE source = $1 AND dedupe_key = $2`,
-      [input.source, input.dedupeKey, input.failedAt, input.error],
+       WHERE source = $1 AND dedupe_key = $2 AND id = $5 AND status = 'received'`,
+      [input.source, input.dedupeKey, input.failedAt, input.error, input.id],
     );
+    return result.rowCount === 1;
   }
 
   private async nextSequence(sessionId: string, kind: 'messages' | 'events'): Promise<number> {

@@ -682,10 +682,13 @@ export class MemoryStore implements AppStore {
     source: string;
     dedupeKey: string;
     receivedAt: Date;
+    staleReceivedBefore: Date;
     metadata: Record<string, unknown>;
   }): Promise<IntegrationDeliveryRecord | null> {
     const key = deliveryKey(input.source, input.dedupeKey);
-    if (this.integrationDeliveries.has(key)) return null;
+    const existing = this.integrationDeliveries.get(key);
+    if (existing?.status === 'processed') return null;
+    if (existing?.status === 'received') return null;
 
     const record: IntegrationDeliveryRecord = {
       id: input.id,
@@ -700,31 +703,35 @@ export class MemoryStore implements AppStore {
   }
 
   async markIntegrationDeliveryProcessed(input: {
+    id: string;
     source: string;
     dedupeKey: string;
     processedAt: Date;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const key = deliveryKey(input.source, input.dedupeKey);
     const existing = this.integrationDeliveries.get(key);
-    if (!existing) return;
+    if (!existing || existing.id !== input.id || existing.status !== 'received') return false;
     this.integrationDeliveries.set(key, { ...existing, status: 'processed', processedAt: input.processedAt });
+    return true;
   }
 
   async markIntegrationDeliveryFailed(input: {
+    id: string;
     source: string;
     dedupeKey: string;
     failedAt: Date;
     error: string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const key = deliveryKey(input.source, input.dedupeKey);
     const existing = this.integrationDeliveries.get(key);
-    if (!existing) return;
+    if (!existing || existing.id !== input.id || existing.status !== 'received') return false;
     this.integrationDeliveries.set(key, {
       ...existing,
       status: 'failed',
       processedAt: input.failedAt,
       error: input.error,
     });
+    return true;
   }
 
   private hasActiveRun(sessionId: string, now: Date): boolean {

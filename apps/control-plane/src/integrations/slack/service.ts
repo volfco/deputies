@@ -80,12 +80,12 @@ export class SlackIntegrationService {
       },
     });
     if (!received) return { ok: true, type: 'duplicate' };
+    const delivery = { id: received.id, source: 'slack', dedupeKey: accepted.eventId };
 
     const authorizationFailure = this.authorizationFailure(accepted);
     if (authorizationFailure) {
       await markIntegrationDeliveryFailed(this.store, {
-        source: 'slack',
-        dedupeKey: accepted.eventId,
+        ...delivery,
         error: authorizationFailure,
       });
       return { ok: true, type: 'ignored', reason: authorizationFailure };
@@ -94,8 +94,7 @@ export class SlackIntegrationService {
     const threadId = slackExternalThreadId(accepted);
     if (accepted.type === 'message' && !(await this.store.getExternalThread('slack', threadId))) {
       await markIntegrationDeliveryFailed(this.store, {
-        source: 'slack',
-        dedupeKey: accepted.eventId,
+        ...delivery,
         error: 'unmapped_thread',
       });
       return { ok: true, type: 'ignored', reason: 'unmapped_thread' };
@@ -110,18 +109,18 @@ export class SlackIntegrationService {
         );
         if (archivedMessages.length) {
           const message = await this.enqueueArchivedRecoveryWork(session, accepted, archivedMessages);
-          await markIntegrationDeliveryProcessed(this.store, { source: 'slack', dedupeKey: accepted.eventId });
+          await markIntegrationDeliveryProcessed(this.store, delivery);
           return { ok: true, type: 'accepted', session, message };
         }
         if (isArchivedSessionRecoveryOnly(accepted.text)) {
           await this.recordRecoveryTranscriptEntries(session.id, accepted);
-          await markIntegrationDeliveryProcessed(this.store, { source: 'slack', dedupeKey: accepted.eventId });
+          await markIntegrationDeliveryProcessed(this.store, delivery);
           await this.postRecoveryAcknowledgement(accepted);
           return { ok: true, type: 'recovered', session };
         }
       } else {
         await this.recordArchivedTranscriptEntries(session.id, accepted);
-        await markIntegrationDeliveryProcessed(this.store, { source: 'slack', dedupeKey: accepted.eventId });
+        await markIntegrationDeliveryProcessed(this.store, delivery);
         await this.postArchivedSessionNotice(accepted);
         return { ok: true, type: 'ignored', reason: 'session_archived' };
       }
@@ -169,7 +168,7 @@ export class SlackIntegrationService {
       }),
     });
 
-    await markIntegrationDeliveryProcessed(this.store, { source: 'slack', dedupeKey: accepted.eventId });
+    await markIntegrationDeliveryProcessed(this.store, delivery);
     return { ok: true, type: 'accepted', session, message };
   }
 

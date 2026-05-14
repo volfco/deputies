@@ -148,6 +148,15 @@ export type IntegrationDeliveryRecord = {
   metadata: Record<string, unknown>;
 };
 
+export type IntegrationDeliveryLease = IntegrationDeliveryRef & {
+  id: string;
+};
+
+export type IntegrationDeliveryRef = {
+  source: string;
+  dedupeKey: string;
+};
+
 export type SandboxRecord = {
   id: string;
   sessionId: string;
@@ -439,18 +448,21 @@ export interface AppStore extends SessionStore, MessageStore, RunStore, SandboxS
     metadata: Record<string, unknown>;
     now: Date;
   }): Promise<ExternalThreadRecord>;
+  /** Returns null when the delivery is processed or currently being handled by another attempt. */
   createIntegrationDelivery(input: {
     id: string;
     source: string;
     dedupeKey: string;
     receivedAt: Date;
+    staleReceivedBefore: Date;
     metadata: Record<string, unknown>;
   }): Promise<IntegrationDeliveryRecord | null>;
-  markIntegrationDeliveryProcessed(input: { source: string; dedupeKey: string; processedAt: Date }): Promise<void>;
+  markIntegrationDeliveryProcessed(input: IntegrationDeliveryLease & { processedAt: Date }): Promise<boolean>;
   markIntegrationDeliveryFailed(input: {
+    id: string;
     source: string;
     dedupeKey: string;
     failedAt: Date;
     error: string;
-  }): Promise<void>;
+  }): Promise<boolean>;
 }

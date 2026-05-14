@@ -1,12 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { MessageService } from '../messages/service.js';
 import type { SessionService } from '../sessions/service.js';
-import type { AppStore, MessageRecord, SessionRecord } from '../store/types.js';
+import type { AppStore, IntegrationDeliveryRecord, MessageRecord, SessionRecord } from '../store/types.js';
 
 export type IntegrationDeliveryRef = {
   source: string;
   dedupeKey: string;
 };
+
+export type IntegrationDeliveryLease = IntegrationDeliveryRef & {
+  id: string;
+};
+
+const staleIntegrationDeliveryMs = 15 * 60_000;
 
 export type IntegrationActor = {
   type: 'user' | 'bot' | 'system';
@@ -48,26 +54,34 @@ export type IntegrationIngressResult = {
 export async function receiveIntegrationDelivery(
   store: AppStore,
   input: IntegrationDeliveryRef & { metadata: Record<string, unknown> },
-): Promise<boolean> {
-  const delivery = await store.createIntegrationDelivery({
+): Promise<IntegrationDeliveryRecord | null> {
+  const receivedAt = new Date();
+  return store.createIntegrationDelivery({
     id: randomUUID(),
     source: input.source,
     dedupeKey: input.dedupeKey,
-    receivedAt: new Date(),
+    receivedAt,
+    staleReceivedBefore: new Date(receivedAt.getTime() - staleIntegrationDeliveryMs),
     metadata: input.metadata,
   });
-  return Boolean(delivery);
 }
 
-export async function markIntegrationDeliveryProcessed(store: AppStore, input: IntegrationDeliveryRef): Promise<void> {
-  await store.markIntegrationDeliveryProcessed({ ...input, processedAt: new Date() });
+export async function markIntegrationDeliveryProcessed(
+  store: AppStore,
+  input: IntegrationDeliveryLease,
+): Promise<void> {
+  const finalized = await store.markIntegrationDeliveryProcessed({ ...input, processedAt: new Date() });
+  if (!finalized)
+    throw new Error(`Integration delivery lease lost before processing completed: ${input.source}/${input.dedupeKey}`);
 }
 
 export async function markIntegrationDeliveryFailed(
   store: AppStore,
-  input: IntegrationDeliveryRef & { error: string },
+  input: IntegrationDeliveryLease & { error: string },
 ): Promise<void> {
-  await store.markIntegrationDeliveryFailed({ ...input, failedAt: new Date() });
+  const finalized = await store.markIntegrationDeliveryFailed({ ...input, failedAt: new Date() });
+  if (!finalized)
+    throw new Error(`Integration delivery lease lost before failure completed: ${input.source}/${input.dedupeKey}`);
 }
 
 export async function getOrCreateExternalThreadSession(
