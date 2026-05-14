@@ -79,6 +79,7 @@ if (config.runMode === 'all' || config.runMode === 'worker') {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner,
       runnerType: config.runner,
       sandboxProvider,

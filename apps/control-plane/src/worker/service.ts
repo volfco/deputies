@@ -1,15 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { ArtifactService } from '../artifacts/service.js';
+import type { ArtifactService } from '../artifacts/service.js';
 import { CallbackDispatcher, CallbackService, type CompletionCallbackSender } from '../callbacks/service.js';
 import type { EventService } from '../events/service.js';
 import type { Runner } from '../runner/types.js';
 import { SandboxLifecycleService } from '../sandbox/service.js';
 import type { SandboxProvider } from '../sandbox/types.js';
 import type {
-  ArtifactRecord,
   CallbackStore,
   ClaimedMessageBatch,
-  CreateArtifactRecord,
   MessageRecord,
   RunRecord,
   RunStore,
@@ -18,12 +16,7 @@ import type {
   SessionStore,
 } from '../store/types.js';
 
-type WorkerStore = RunStore &
-  SessionStore &
-  SandboxStore &
-  CallbackStore & {
-    createArtifact(record: CreateArtifactRecord): Promise<ArtifactRecord>;
-  };
+type WorkerStore = RunStore & SessionStore & SandboxStore & CallbackStore;
 
 export type RunProgressNotifier = {
   onRunStarted?(input: { message: MessageRecord; run: RunRecord }): Promise<void>;
@@ -35,6 +28,7 @@ export type RunProgressNotifier = {
 export type WorkerServiceOptions = {
   store: WorkerStore;
   events: EventService;
+  artifacts: Pick<ArtifactService, 'recordRunArtifacts'>;
   runner: Runner;
   runnerType: string;
   sandboxProvider: SandboxProvider;
@@ -52,12 +46,14 @@ export class WorkerService {
   private readonly heartbeatIntervalMs: number;
   private readonly cancellationPollIntervalMs: number;
   private readonly staleRecoveryLimit: number;
+  private readonly artifacts: Pick<ArtifactService, 'recordRunArtifacts'>;
 
   constructor(private readonly options: WorkerServiceOptions) {
     this.leaseDurationMs = options.leaseDurationMs ?? 60_000;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? Math.max(1_000, Math.floor(this.leaseDurationMs / 2));
     this.cancellationPollIntervalMs = options.cancellationPollIntervalMs ?? 1_000;
     this.staleRecoveryLimit = options.staleRecoveryLimit ?? 10;
+    this.artifacts = options.artifacts;
   }
 
   async processNext(): Promise<boolean> {
@@ -261,7 +257,7 @@ export class WorkerService {
         type: 'agent_response_final',
         payload: { text: result.text },
       });
-      await new ArtifactService(this.options.store, this.options.events).recordRunArtifacts({
+      await this.artifacts.recordRunArtifacts({
         sessionId: primary.sessionId,
         runId: claimed.run.id,
         messageId: primary.id,

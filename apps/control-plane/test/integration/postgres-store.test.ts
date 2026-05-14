@@ -495,6 +495,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
       const worker = new WorkerService({
         store,
         events: services.events,
+        artifacts: services.artifacts,
         runner: new FakeRunner(),
         runnerType: 'fake',
         sandboxProvider: new FakeSandboxProvider(),

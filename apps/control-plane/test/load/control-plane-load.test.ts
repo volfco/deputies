@@ -1,6 +1,7 @@
 import { appendFile } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { Pool } from 'pg';
+import { ArtifactService } from '../../src/artifacts/service.js';
 import { EventService } from '../../src/events/service.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { GenericWebhookService } from '../../src/integrations/generic-webhook/service.js';
@@ -301,6 +302,7 @@ function createWorker(input: {
   return new WorkerService({
     store: input.store,
     events: input.events,
+    artifacts: new ArtifactService(input.store, input.events),
     runner: input.runner ?? new FakeRunner(),
     runnerType: 'fake',
     sandboxProvider: input.sandboxProvider,

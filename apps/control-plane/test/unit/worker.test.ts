@@ -1,5 +1,6 @@
 import { CallbackDispatcher } from '../../src/callbacks/service.js';
 import { createServices } from '../../src/app/server.js';
+import type { PutArtifactObjectInput, StoredArtifactObject } from '../../src/artifacts/storage.js';
 import { FakeRunner } from '../../src/runner/fake.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 import type { Runner, RunnerInput, RunnerResult } from '../../src/runner/types.js';
@@ -18,6 +19,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
@@ -54,6 +56,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: provider,
@@ -85,6 +88,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
@@ -156,6 +160,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner,
       runnerType: 'capture',
       sandboxProvider: new FakeSandboxProvider(),
@@ -182,6 +187,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new ContextUpdatingRunner(),
       runnerType: 'context-updating',
       sandboxProvider: new FakeSandboxProvider(),
@@ -218,6 +224,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new TextRunner('final deputy reply'),
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
@@ -267,6 +274,41 @@ describe('WorkerService', () => {
     const events = await services.events.list(session.id);
     expect(events.map((event) => event.type)).toContain('callback_sent');
     expect(events.find((event) => event.type === 'callback_sent')?.payload).toMatchObject({ targetType: 'slack' });
+  });
+
+  it('records content-backed artifacts with the configured artifact service', async () => {
+    const store = new MemoryStore();
+    const storage = new InMemoryArtifactObjectStorage();
+    const services = createServices(store, { artifactObjectStorage: storage });
+    const session = await services.sessions.create({ title: 'Worker artifact' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'produce artifact' });
+
+    const worker = new WorkerService({
+      store,
+      events: services.events,
+      artifacts: services.artifacts,
+      runner: new ArtifactRunner(),
+      runnerType: 'artifact',
+      sandboxProvider: new FakeSandboxProvider(),
+      leaseOwner: 'test-worker',
+    });
+
+    await expect(worker.processNext()).resolves.toBe(true);
+
+    const [artifact] = await store.getArtifacts(session.id);
+    expect(artifact).toMatchObject({
+      type: 'report',
+      title: 'Result',
+      storageKey: expect.any(String),
+      payload: {
+        storage: 'internal',
+        sizeBytes: 15,
+        contentType: 'text/plain',
+        fileName: 'result.txt',
+      },
+    });
+    expect(storage.objects.get(artifact!.storageKey!)?.body).toEqual(Buffer.from('artifact output'));
+    expect((await services.events.list(session.id)).map((event) => event.type)).toContain('artifact_created');
   });
 
   it('retries failed callbacks with backoff before terminal failure', async () => {
@@ -329,6 +371,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
@@ -356,6 +399,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FailingRunner('runner exploded'),
       runnerType: 'failing',
       sandboxProvider: new FakeSandboxProvider(),
@@ -390,6 +434,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner,
       runnerType: 'blocking',
       sandboxProvider: new FakeSandboxProvider(),
@@ -453,6 +498,7 @@ describe('WorkerService', () => {
     const workerA = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: blockingRunner,
       runnerType: 'blocking',
       sandboxProvider: new FakeSandboxProvider(),
@@ -462,6 +508,7 @@ describe('WorkerService', () => {
     const workerB = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
@@ -489,6 +536,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: provider,
@@ -694,6 +742,38 @@ class TextRunner implements Runner {
       createdAt: new Date(),
     });
     return { text: this.text };
+  }
+}
+
+class ArtifactRunner implements Runner {
+  async run(): Promise<RunnerResult> {
+    return {
+      text: 'artifact created',
+      artifacts: [
+        {
+          type: 'report',
+          content: 'artifact output',
+          contentType: 'text/plain',
+          fileName: 'result.txt',
+        },
+      ],
+    };
+  }
+}
+
+class InMemoryArtifactObjectStorage {
+  readonly objects = new Map<string, StoredArtifactObject>();
+
+  async put(input: PutArtifactObjectInput): Promise<void> {
+    this.objects.set(input.key, {
+      body: input.body,
+      contentLength: input.body.byteLength,
+      ...(input.contentType ? { contentType: input.contentType } : {}),
+    });
+  }
+
+  async get(key: string): Promise<StoredArtifactObject | null> {
+    return this.objects.get(key) ?? null;
   }
 }
 
