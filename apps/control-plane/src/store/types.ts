@@ -295,6 +295,12 @@ export interface SessionStore {
   getSession(id: string): Promise<SessionRecord | null>;
   listSessions(): Promise<SessionRecord[]>;
   updateSession(record: SessionRecord): Promise<SessionRecord>;
+  updateSessionForRun(input: {
+    record: SessionRecord;
+    runId: string;
+    leaseOwner: string;
+    now: Date;
+  }): Promise<SessionRecord | null>;
   pauseSessionQueue(input: { sessionId: string; pausedAt: Date }): Promise<SessionRecord>;
   resumeSessionQueue(input: { sessionId: string }): Promise<SessionRecord>;
 }
@@ -346,11 +352,25 @@ export interface RunStore {
     requestedAt: Date;
     error: string;
   }): Promise<ClaimedMessageBatch | null>;
-  finalizeRunCancellation(input: { runId: string; cancelledAt: Date; error: string }): Promise<ClaimedMessageBatch>;
-  completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage>;
-  failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage>;
-  completeRunBatch(input: { runId: string; completedAt: Date }): Promise<ClaimedMessageBatch>;
-  failRunBatch(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessageBatch>;
+  finalizeRunCancellation(input: {
+    runId: string;
+    leaseOwner: string;
+    cancelledAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null>;
+  completeRun(input: { runId: string; leaseOwner: string; completedAt: Date }): Promise<ClaimedMessage | null>;
+  failRun(input: { runId: string; leaseOwner: string; failedAt: Date; error: string }): Promise<ClaimedMessage | null>;
+  completeRunBatch(input: {
+    runId: string;
+    leaseOwner: string;
+    completedAt: Date;
+  }): Promise<ClaimedMessageBatch | null>;
+  failRunBatch(input: {
+    runId: string;
+    leaseOwner: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null>;
 }
 
 export interface SandboxStore {
@@ -385,6 +405,10 @@ export interface EventStore {
   nextEventSequence(sessionId: string): Promise<number>;
   appendEvent(event: NormalizedEvent & { sequence: number }): Promise<EventRecord>;
   appendEventWithNextSequence(event: NormalizedEvent): Promise<EventRecord>;
+  appendEventWithNextSequenceForRun(
+    event: Omit<NormalizedEvent, 'runId'> & { runId: string },
+    guard: { runId: string; leaseOwner: string; now: Date },
+  ): Promise<EventRecord | null>;
   getEvents(sessionId: string, afterSequence?: number): Promise<EventRecord[]>;
   listEvents(afterId?: number): Promise<EventRecord[]>;
 }

@@ -380,6 +380,41 @@ export class PostgresStore implements AppStore {
     return toSession(row);
   }
 
+  async updateSessionForRun(input: {
+    record: SessionRecord;
+    runId: string;
+    leaseOwner: string;
+    now: Date;
+  }): Promise<SessionRecord | null> {
+    const result = await this.pool.query<SessionRow>(
+      `UPDATE sessions
+       SET status = $2, title = $3, context = $4, created_at = $5, updated_at = $6
+       WHERE id = $1
+         AND EXISTS (
+           SELECT 1 FROM runs
+           WHERE id = $7
+             AND session_id = $1
+             AND lease_owner = $8
+             AND status IN ('running', 'cancelling')
+             AND lease_expires_at > $9
+         )
+       RETURNING id, status, title, context, created_at, updated_at, queue_paused_at`,
+      [
+        input.record.id,
+        input.record.status,
+        input.record.title ?? null,
+        input.record.context ?? null,
+        input.record.createdAt,
+        input.record.updatedAt,
+        input.runId,
+        input.leaseOwner,
+        input.now,
+      ],
+    );
+
+    return result.rows[0] ? toSession(result.rows[0]) : null;
+  }
+
   async pauseSessionQueue(input: { sessionId: string; pausedAt: Date }): Promise<SessionRecord> {
     const result = await this.pool.query<SessionRow>(
       `UPDATE sessions SET queue_paused_at = $2, updated_at = $2 WHERE id = $1
@@ -580,12 +615,16 @@ export class PostgresStore implements AppStore {
     });
   }
 
-  async completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage> {
-    return this.finishRun(input.runId, 'completed', input.completedAt);
+  async completeRun(input: { runId: string; leaseOwner: string; completedAt: Date }): Promise<ClaimedMessage | null> {
+    return this.finishRun(input.runId, input.leaseOwner, 'completed', input.completedAt);
   }
 
-  async completeRunBatch(input: { runId: string; completedAt: Date }): Promise<ClaimedMessageBatch> {
-    return this.finishRunBatch(input.runId, 'completed', input.completedAt);
+  async completeRunBatch(input: {
+    runId: string;
+    leaseOwner: string;
+    completedAt: Date;
+  }): Promise<ClaimedMessageBatch | null> {
+    return this.finishRunBatch(input.runId, input.leaseOwner, 'completed', input.completedAt);
   }
 
   async renewRunLease(input: {
@@ -598,7 +637,7 @@ export class PostgresStore implements AppStore {
       `UPDATE runs
        SET lease_expires_at = $3,
            heartbeat_at = $4
-        WHERE id = $1 AND lease_owner = $2 AND status IN ('running', 'cancelling')
+         WHERE id = $1 AND lease_owner = $2 AND status IN ('running', 'cancelling') AND lease_expires_at > $4
        RETURNING id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata`,
       [input.runId, input.leaseOwner, input.leaseExpiresAt, input.heartbeatAt],
     );
@@ -675,12 +714,22 @@ export class PostgresStore implements AppStore {
     });
   }
 
-  async failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage> {
-    return this.finishRun(input.runId, 'failed', input.failedAt, input.error);
+  async failRun(input: {
+    runId: string;
+    leaseOwner: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessage | null> {
+    return this.finishRun(input.runId, input.leaseOwner, 'failed', input.failedAt, input.error);
   }
 
-  async failRunBatch(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessageBatch> {
-    return this.finishRunBatch(input.runId, 'failed', input.failedAt, input.error);
+  async failRunBatch(input: {
+    runId: string;
+    leaseOwner: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null> {
+    return this.finishRunBatch(input.runId, input.leaseOwner, 'failed', input.failedAt, input.error);
   }
 
   async requestRunCancellation(input: {
@@ -729,10 +778,11 @@ export class PostgresStore implements AppStore {
 
   async finalizeRunCancellation(input: {
     runId: string;
+    leaseOwner: string;
     cancelledAt: Date;
     error: string;
-  }): Promise<ClaimedMessageBatch> {
-    return this.finishRunBatch(input.runId, 'cancelled', input.cancelledAt, input.error);
+  }): Promise<ClaimedMessageBatch | null> {
+    return this.finishRunBatch(input.runId, input.leaseOwner, 'cancelled', input.cancelledAt, input.error);
   }
 
   async getActiveSandbox(sessionId: string, provider: string): Promise<SandboxRecord | null> {
@@ -1074,6 +1124,51 @@ export class PostgresStore implements AppStore {
     return toEvent(result.rows[0]!);
   }
 
+  async appendEventWithNextSequenceForRun(
+    event: Omit<NormalizedEvent, 'runId'> & { runId: string },
+    guard: { runId: string; leaseOwner: string; now: Date },
+  ): Promise<EventRecord | null> {
+    const result = await this.pool.query<EventRow>(
+      `WITH owned_run AS (
+         SELECT 1
+         FROM runs
+         WHERE id = $2
+           AND id = $8
+           AND lease_owner = $9
+           AND status IN ('running', 'cancelling')
+           AND lease_expires_at > $10
+       ), next_sequence AS (
+         INSERT INTO session_sequence_counters (session_id, kind, next_sequence)
+         SELECT $1, 'events', 2 FROM owned_run
+         ON CONFLICT (session_id, kind)
+         DO UPDATE SET next_sequence = session_sequence_counters.next_sequence + 1
+         RETURNING next_sequence - 1 AS sequence
+       ), inserted AS (
+         INSERT INTO events (session_id, run_id, message_id, sequence, type, payload, created_at)
+         SELECT $1, $2, $3, sequence, $4, $5, $6
+         FROM next_sequence
+         RETURNING id, session_id, run_id, message_id, sequence, type, payload, created_at
+       )
+       SELECT id, session_id, run_id, message_id, sequence, type, payload, created_at,
+              pg_notify($7, json_build_object('id', id)::text)
+       FROM inserted`,
+      [
+        event.sessionId,
+        event.runId,
+        event.messageId ?? null,
+        event.type,
+        event.payload,
+        event.createdAt,
+        eventNotificationChannel,
+        guard.runId,
+        guard.leaseOwner,
+        guard.now,
+      ],
+    );
+
+    return result.rows[0] ? toEvent(result.rows[0]) : null;
+  }
+
   async getEvents(sessionId: string, afterSequence = 0): Promise<EventRecord[]> {
     const result = await this.pool.query<EventRow>(
       `SELECT id, session_id, run_id, message_id, sequence, type, payload, created_at
@@ -1246,20 +1341,22 @@ export class PostgresStore implements AppStore {
 
   private async finishRun(
     runId: string,
+    leaseOwner: string,
     status: 'completed' | 'failed' | 'cancelled',
     finishedAt: Date,
     error?: string,
-  ): Promise<ClaimedMessage> {
-    const batch = await this.finishRunBatch(runId, status, finishedAt, error);
-    return { message: batch.messages[0]!, run: batch.run };
+  ): Promise<ClaimedMessage | null> {
+    const batch = await this.finishRunBatch(runId, leaseOwner, status, finishedAt, error);
+    return batch ? { message: batch.messages[0]!, run: batch.run } : null;
   }
 
   private async finishRunBatch(
     runId: string,
+    leaseOwner: string,
     status: 'completed' | 'failed' | 'cancelled',
     finishedAt: Date,
     error?: string,
-  ): Promise<ClaimedMessageBatch> {
+  ): Promise<ClaimedMessageBatch | null> {
     return this.transaction(async (client) => {
       const runResult = await client.query<RunRow>(
         `UPDATE runs
@@ -1270,20 +1367,20 @@ export class PostgresStore implements AppStore {
               completed_at = CASE WHEN $2 = 'completed' THEN $3 ELSE completed_at END,
               failed_at = CASE WHEN $2 IN ('failed', 'cancelled') THEN $3 ELSE failed_at END,
              error = $4
-         WHERE id = $1
-         RETURNING id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata`,
-        [runId, status, finishedAt, error ?? null],
+         WHERE id = $1 AND lease_owner = $5 AND status IN ('running', 'cancelling') AND lease_expires_at > $3
+           RETURNING id, session_id, message_id, status, runner_type, lease_owner, lease_expires_at, heartbeat_at, attempt, started_at, completed_at, failed_at, error, metadata`,
+        [runId, status, finishedAt, error ?? null, leaseOwner],
       );
 
       const run = runResult.rows[0];
-      if (!run) throw new Error(`Run does not exist: ${runId}`);
+      if (!run) return null;
 
       const messageIds = getRunMessageIds(toRun(run));
       const messageResult = await client.query<MessageRow>(
         `UPDATE messages
          SET status = $2
-          WHERE id = ANY($1::uuid[])
-          RETURNING id, session_id, sequence, status, prompt, source, context, created_at`,
+          WHERE id = ANY($1::uuid[]) AND status IN ('processing', 'cancelling')
+           RETURNING id, session_id, sequence, status, prompt, source, context, created_at`,
         [messageIds, status],
       );
 

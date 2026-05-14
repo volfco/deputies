@@ -141,6 +141,95 @@ describe('WorkerService', () => {
     await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'queued' });
   });
 
+  it('does not let a stale worker complete a recovered run', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Stale completion' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+
+    const claimedAt = new Date('2026-05-06T00:00:00.000Z');
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000032',
+      runnerType: 'fake',
+      leaseOwner: 'stale-worker',
+      leaseExpiresAt: new Date(claimedAt.getTime() - 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).not.toBeNull();
+
+    await store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 1_000), limit: 10 });
+    await expect(
+      store.completeRunBatch({
+        runId: claimed!.run.id,
+        leaseOwner: 'stale-worker',
+        completedAt: new Date(claimedAt.getTime() + 2_000),
+      }),
+    ).resolves.toBeNull();
+
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({ status: 'stale' });
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'pending' }]);
+    await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'queued' });
+  });
+
+  it('does not let a worker complete a run after its lease expires', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Expired completion' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+
+    const claimedAt = new Date('2026-05-06T00:00:00.000Z');
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000033',
+      runnerType: 'fake',
+      leaseOwner: 'expired-worker',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).not.toBeNull();
+
+    await expect(
+      store.completeRunBatch({
+        runId: claimed!.run.id,
+        leaseOwner: 'expired-worker',
+        completedAt: new Date(claimedAt.getTime() + 2_000),
+      }),
+    ).resolves.toBeNull();
+
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({ status: 'running' });
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'processing' }]);
+  });
+
+  it('does not renew a run after its lease expires', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Expired renewal' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+
+    const claimedAt = new Date('2026-05-06T00:00:00.000Z');
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000034',
+      runnerType: 'fake',
+      leaseOwner: 'expired-worker',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).not.toBeNull();
+
+    await expect(
+      store.renewRunLease({
+        runId: claimed!.run.id,
+        leaseOwner: 'expired-worker',
+        leaseExpiresAt: new Date(claimedAt.getTime() + 60_000),
+        heartbeatAt: new Date(claimedAt.getTime() + 2_000),
+      }),
+    ).resolves.toBeNull();
+
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({
+      status: 'running',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+    });
+  });
+
   it('runs a queued batch with the latest message context', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
@@ -204,6 +293,92 @@ describe('WorkerService', () => {
     });
     const events = await services.events.list(session.id);
     expect(events.map((event) => event.type)).toContain('session_updated');
+  });
+
+  it('ignores session context updates after the worker loses its lease', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Stale context update' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'choose repo' });
+
+    const worker = new WorkerService({
+      store,
+      events: services.events,
+      runner: new StaleContextUpdatingRunner(store),
+      runnerType: 'stale-context-updating',
+      sandboxProvider: new FakeSandboxProvider(),
+      leaseOwner: 'test-worker',
+    });
+
+    await expect(worker.processNext()).resolves.toBe(true);
+
+    const updated = await services.sessions.get(session.id);
+    expect(updated?.context).toBeUndefined();
+    expect(updated?.status).toBe('queued');
+    const events = await services.events.list(session.id);
+    expect(events.map((event) => event.type)).not.toContain('session_updated');
+  });
+
+  it('ignores runner events emitted after the worker loses its lease', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Stale runner event' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'emit late' });
+
+    const worker = new WorkerService({
+      store,
+      events: services.events,
+      runner: new StaleEmittingRunner(store),
+      runnerType: 'stale-emitting',
+      sandboxProvider: new FakeSandboxProvider(),
+      leaseOwner: 'test-worker',
+    });
+
+    await expect(worker.processNext()).resolves.toBe(true);
+
+    const events = await services.events.list(session.id);
+    expect(events.map((event) => event.type)).not.toContain('run_completed');
+    expect(events.map((event) => event.type)).not.toContain('agent_response_final');
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'pending' }]);
+  });
+
+  it('does not clear previews after the worker loses its lease', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Stale preview clearing' });
+    await store.updateSession({
+      ...session,
+      context: { previews: [{ port: 3000, label: 'Web app' }] },
+    });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'render preview' });
+
+    const getSession = store.getSession.bind(store);
+    let recovered = false;
+    store.getSession = async (id) => {
+      if (!recovered) {
+        recovered = true;
+        await store.recoverStaleRuns({ now: new Date(Date.now() + 120_000), limit: 10 });
+      }
+      return getSession(id);
+    };
+
+    const worker = new WorkerService({
+      store,
+      events: services.events,
+      runner: new FakeRunner(),
+      runnerType: 'fake',
+      sandboxProvider: new FakeSandboxProvider(),
+      leaseOwner: 'test-worker',
+    });
+
+    await expect(worker.processNext()).resolves.toBe(true);
+
+    await expect(services.sessions.get(session.id)).resolves.toMatchObject({
+      context: { previews: [{ port: 3000, label: 'Web app' }] },
+      status: 'queued',
+    });
+    const events = await services.events.list(session.id);
+    expect(events.map((event) => event.type)).not.toContain('session_updated');
   });
 
   it('posts final deputy text to Slack thread callbacks', async () => {
@@ -484,6 +659,43 @@ describe('WorkerService', () => {
       'message_cancelled',
       'message_cancelled',
     ]);
+  });
+
+  it('aborts active execution when heartbeat loses the lease', async () => {
+    const store = new MemoryStore();
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Heartbeat lease loss' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'long running' });
+    const runner = new BlockingRunner();
+    const renewRunLease = store.renewRunLease.bind(store);
+    let recovered = false;
+    store.renewRunLease = async (input) => {
+      if (!recovered) {
+        recovered = true;
+        await store.recoverStaleRuns({ now: new Date(Date.now() + 60_000), limit: 10 });
+      }
+      return renewRunLease(input);
+    };
+
+    const worker = new WorkerService({
+      store,
+      events: services.events,
+      runner,
+      runnerType: 'blocking',
+      sandboxProvider: new FakeSandboxProvider(),
+      leaseOwner: 'test-worker',
+      leaseDurationMs: 20,
+      heartbeatIntervalMs: 5,
+      cancellationPollIntervalMs: 60_000,
+    });
+
+    const processing = worker.processNext();
+    await runner.waitForStart();
+    await runner.waitForAbort();
+
+    await expect(processing).resolves.toBe(true);
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'pending' }]);
+    await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'queued' });
   });
 
   it('allows another worker to process a different session while one session is active', async () => {
@@ -817,6 +1029,33 @@ class ContextUpdatingRunner implements Runner {
   }
 }
 
+class StaleContextUpdatingRunner implements Runner {
+  constructor(private readonly store: MemoryStore) {}
+
+  async run(input: RunnerInput): Promise<RunnerResult> {
+    await this.store.recoverStaleRuns({ now: new Date(Date.now() + 120_000), limit: 10 });
+    await input.updateSessionContext?.({ repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } });
+    return { text: 'stale update ignored' };
+  }
+}
+
+class StaleEmittingRunner implements Runner {
+  constructor(private readonly store: MemoryStore) {}
+
+  async run(input: RunnerInput): Promise<RunnerResult> {
+    await this.store.recoverStaleRuns({ now: new Date(Date.now() + 120_000), limit: 10 });
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_completed',
+      payload: { runner: 'stale' },
+      createdAt: new Date(),
+    });
+    return { text: 'stale event ignored' };
+  }
+}
+
 class BlockingRunner implements Runner {
   private started = false;
   private aborted = false;
@@ -826,15 +1065,6 @@ class BlockingRunner implements Runner {
   });
 
   async run(input: RunnerInput): Promise<RunnerResult> {
-    this.started = true;
-    await input.emit({
-      sessionId: input.sessionId,
-      runId: input.runId,
-      messageId: input.messageId,
-      type: 'run_started',
-      payload: { runner: 'test' },
-      createdAt: new Date(),
-    });
     input.signal?.addEventListener(
       'abort',
       () => {
@@ -847,6 +1077,15 @@ class BlockingRunner implements Runner {
       this.aborted = true;
       this.abortRun();
     }
+    this.started = true;
+    await input.emit({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      messageId: input.messageId,
+      type: 'run_started',
+      payload: { runner: 'test' },
+      createdAt: new Date(),
+    });
     await this.abortReceived;
     throw new Error('Operation aborted');
   }

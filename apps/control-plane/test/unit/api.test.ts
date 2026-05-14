@@ -442,7 +442,12 @@ describe('core API', () => {
       now: new Date(),
     });
     expect(claimed).not.toBeNull();
-    await store.failRunBatch({ runId: '00000000-0000-4000-8000-000000000303', failedAt: new Date(), error: 'boom' });
+    await store.failRunBatch({
+      runId: '00000000-0000-4000-8000-000000000303',
+      leaseOwner: 'test-worker',
+      failedAt: new Date(),
+      error: 'boom',
+    });
 
     const retry = await postJson(`${baseUrl}/sessions/${session.id}/messages/${message.id}/retry`, {});
 

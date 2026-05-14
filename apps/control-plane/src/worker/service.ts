@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ArtifactService } from '../artifacts/service.js';
 import { CallbackDispatcher, CallbackService, type CompletionCallbackSender } from '../callbacks/service.js';
-import type { EventService } from '../events/service.js';
+import type { AppendEventInput, EventService } from '../events/service.js';
 import type { Runner } from '../runner/types.js';
 import { SandboxLifecycleService } from '../sandbox/service.js';
 import type { SandboxProvider } from '../sandbox/types.js';
@@ -82,7 +82,12 @@ export class WorkerService {
     try {
       await this.runWithHeartbeat(claimed);
       if (await this.finalizeCancellationIfRequested(claimed.run.id)) return true;
-      const completed = await this.options.store.completeRunBatch({ runId: claimed.run.id, completedAt: new Date() });
+      const completed = await this.options.store.completeRunBatch({
+        runId: claimed.run.id,
+        leaseOwner: this.options.leaseOwner,
+        completedAt: new Date(),
+      });
+      if (!completed) return true;
       for (const message of completed.messages) {
         await this.options.events.append({
           sessionId: message.sessionId,
@@ -98,9 +103,11 @@ export class WorkerService {
       const message = error instanceof Error ? error.message : 'Unknown worker error';
       const failed = await this.options.store.failRunBatch({
         runId: claimed.run.id,
+        leaseOwner: this.options.leaseOwner,
         failedAt: new Date(),
         error: message,
       });
+      if (!failed) return true;
       await this.options.events.append({
         sessionId: failed.messages[0]!.sessionId,
         runId: failed.run.id,
@@ -150,7 +157,7 @@ export class WorkerService {
       this.options.store
         .getRun(claimed.run.id)
         .then((run) => {
-          if (run?.status === 'cancelling') abort.abort();
+          if (!run || run.status === 'cancelling') abort.abort();
         })
         .catch((error: unknown) => {
           console.error(error instanceof Error ? error.message : error);
@@ -166,7 +173,7 @@ export class WorkerService {
           heartbeatAt,
         })
         .then((run) => {
-          if (run?.status === 'cancelling') abort.abort();
+          if (!run || run.status === 'cancelling') abort.abort();
         })
         .catch((error: unknown) => {
           console.error(error instanceof Error ? error.message : error);
@@ -185,7 +192,7 @@ export class WorkerService {
 
   private async runClaimedMessage(claimed: ClaimedMessageBatch, signal: AbortSignal): Promise<void> {
     const primary = claimed.messages[0]!;
-    await this.options.events.append({
+    await this.appendOwnedRunEvent({
       sessionId: primary.sessionId,
       runId: claimed.run.id,
       messageId: primary.id,
@@ -195,7 +202,7 @@ export class WorkerService {
     const lifecycle = new SandboxLifecycleService(this.options.store, this.options.sandboxProvider);
     const { sandbox, record, created } = await lifecycle.ensure(primary.sessionId);
     await this.options.store.updateSandbox({ ...record, updatedAt: new Date() });
-    await this.options.events.append({
+    await this.appendOwnedRunEvent({
       sessionId: primary.sessionId,
       runId: claimed.run.id,
       messageId: primary.id,
@@ -221,15 +228,23 @@ export class WorkerService {
         sandbox,
         signal,
         updateSessionContext: async (context) => {
+          if (signal.aborted || !(await this.isRunOwnedByThisWorker(claimed.run.id))) return runContext;
           const session = await this.options.store.getSession(primary.sessionId);
           if (!session) throw new Error(`Session not found: ${primary.sessionId}`);
-          const updated = await this.options.store.updateSession({
-            ...session,
-            context: { ...(session.context ?? {}), ...context },
-            updatedAt: new Date(),
+          if (signal.aborted || !(await this.isRunOwnedByThisWorker(claimed.run.id))) return runContext;
+          const updated = await this.options.store.updateSessionForRun({
+            record: {
+              ...session,
+              context: { ...(session.context ?? {}), ...context },
+              updatedAt: new Date(),
+            },
+            runId: claimed.run.id,
+            leaseOwner: this.options.leaseOwner,
+            now: new Date(),
           });
+          if (!updated) return runContext;
           runContext = updated.context ?? {};
-          await this.options.events.append({
+          await this.appendOwnedRunEvent({
             sessionId: primary.sessionId,
             runId: claimed.run.id,
             messageId: primary.id,
@@ -240,9 +255,10 @@ export class WorkerService {
         },
         emit: async (event) => {
           if (signal.aborted) return;
-          await this.options.events.append({
+          const runId = event.runId ?? claimed.run.id;
+          await this.appendOwnedRunEvent({
             sessionId: event.sessionId,
-            runId: event.runId ?? claimed.run.id,
+            runId,
             messageId: event.messageId ?? primary.id,
             type: event.type,
             payload: event.payload,
@@ -250,7 +266,8 @@ export class WorkerService {
         },
       });
       if (await this.isRunCancellationRequested(claimed.run.id)) return;
-      await this.options.events.append({
+      if (!(await this.isRunOwnedByThisWorker(claimed.run.id))) return;
+      await this.appendOwnedRunEvent({
         sessionId: primary.sessionId,
         runId: claimed.run.id,
         messageId: primary.id,
@@ -278,12 +295,19 @@ export class WorkerService {
   ): Promise<Record<string, unknown>> {
     const context = session.context ?? {};
     if (!Array.isArray(context.previews) || context.previews.length === 0) return context;
-    const updated = await this.options.store.updateSession({
-      ...session,
-      context: { ...context, previews: [] },
-      updatedAt: new Date(),
+    if (!(await this.isRunOwnedByThisWorker(claimed.run.id))) return context;
+    const updated = await this.options.store.updateSessionForRun({
+      record: {
+        ...session,
+        context: { ...context, previews: [] },
+        updatedAt: new Date(),
+      },
+      runId: claimed.run.id,
+      leaseOwner: this.options.leaseOwner,
+      now: new Date(),
     });
-    await this.options.events.append({
+    if (!updated) return context;
+    await this.appendOwnedRunEvent({
       sessionId: claimed.messages[0]!.sessionId,
       runId: claimed.run.id,
       messageId: claimed.messages[0]!.id,
@@ -298,13 +322,34 @@ export class WorkerService {
     return status === 'cancelling' || status === 'cancelled';
   }
 
+  private async isRunOwnedByThisWorker(runId: string): Promise<boolean> {
+    const run = await this.options.store.getRun(runId);
+    return (
+      !!run &&
+      (run.status === 'running' || run.status === 'cancelling') &&
+      run.leaseOwner === this.options.leaseOwner &&
+      !!run.leaseExpiresAt &&
+      run.leaseExpiresAt > new Date()
+    );
+  }
+
+  private async appendOwnedRunEvent(input: AppendEventInput & { runId: string }): Promise<void> {
+    await this.options.events.appendForRun(input, {
+      runId: input.runId,
+      leaseOwner: this.options.leaseOwner,
+      now: new Date(),
+    });
+  }
+
   private async finalizeCancellationIfRequested(runId: string): Promise<boolean> {
     if (!(await this.isRunCancellationRequested(runId))) return false;
     const cancelled = await this.options.store.finalizeRunCancellation({
       runId,
+      leaseOwner: this.options.leaseOwner,
       cancelledAt: new Date(),
       error: 'Run cancelled by user',
     });
+    if (!cancelled) return false;
     const primary = cancelled.messages[0]!;
     await this.options.events.append({
       sessionId: primary.sessionId,

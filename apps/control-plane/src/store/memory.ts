@@ -116,6 +116,26 @@ export class MemoryStore implements AppStore {
     return record;
   }
 
+  async updateSessionForRun(input: {
+    record: SessionRecord;
+    runId: string;
+    leaseOwner: string;
+    now: Date;
+  }): Promise<SessionRecord | null> {
+    const run = this.runs.get(input.runId);
+    if (
+      !run ||
+      run.sessionId !== input.record.id ||
+      (run.status !== 'running' && run.status !== 'cancelling') ||
+      run.leaseOwner !== input.leaseOwner ||
+      !run.leaseExpiresAt ||
+      run.leaseExpiresAt <= input.now
+    ) {
+      return null;
+    }
+    return this.updateSession(input.record);
+  }
+
   async pauseSessionQueue(input: { sessionId: string; pausedAt: Date }): Promise<SessionRecord> {
     const existing = this.sessions.get(input.sessionId);
     if (!existing) throw new Error(`Session does not exist: ${input.sessionId}`);
@@ -250,13 +270,17 @@ export class MemoryStore implements AppStore {
     return null;
   }
 
-  async completeRun(input: { runId: string; completedAt: Date }): Promise<ClaimedMessage> {
+  async completeRun(input: { runId: string; leaseOwner: string; completedAt: Date }): Promise<ClaimedMessage | null> {
     const batch = await this.completeRunBatch(input);
-    return { message: batch.messages[0]!, run: batch.run };
+    return batch ? { message: batch.messages[0]!, run: batch.run } : null;
   }
 
-  async completeRunBatch(input: { runId: string; completedAt: Date }): Promise<ClaimedMessageBatch> {
-    return this.finishRun(input.runId, input.completedAt, 'completed');
+  async completeRunBatch(input: {
+    runId: string;
+    leaseOwner: string;
+    completedAt: Date;
+  }): Promise<ClaimedMessageBatch | null> {
+    return this.finishRun(input.runId, input.leaseOwner, input.completedAt, 'completed');
   }
 
   async renewRunLease(input: {
@@ -266,8 +290,15 @@ export class MemoryStore implements AppStore {
     heartbeatAt: Date;
   }): Promise<RunRecord | null> {
     const run = this.runs.get(input.runId);
-    if (!run || (run.status !== 'running' && run.status !== 'cancelling') || run.leaseOwner !== input.leaseOwner)
+    if (
+      !run ||
+      (run.status !== 'running' && run.status !== 'cancelling') ||
+      run.leaseOwner !== input.leaseOwner ||
+      !run.leaseExpiresAt ||
+      run.leaseExpiresAt <= input.heartbeatAt
+    ) {
       return null;
+    }
 
     const renewed: RunRecord = {
       ...run,
@@ -334,13 +365,24 @@ export class MemoryStore implements AppStore {
     return recovered;
   }
 
-  async failRun(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessage> {
+  async failRun(input: {
+    runId: string;
+    leaseOwner: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessage | null> {
     const batch = await this.failRunBatch(input);
-    return { message: batch.messages[0]!, run: batch.run };
+    return batch ? { message: batch.messages[0]!, run: batch.run } : null;
   }
 
-  async failRunBatch(input: { runId: string; failedAt: Date; error: string }): Promise<ClaimedMessageBatch> {
-    const claimed = await this.finishRun(input.runId, input.failedAt, 'failed');
+  async failRunBatch(input: {
+    runId: string;
+    leaseOwner: string;
+    failedAt: Date;
+    error: string;
+  }): Promise<ClaimedMessageBatch | null> {
+    const claimed = await this.finishRun(input.runId, input.leaseOwner, input.failedAt, 'failed');
+    if (!claimed) return null;
     this.runs.set(input.runId, { ...claimed.run, error: input.error });
     return { ...claimed, run: this.runs.get(input.runId)! };
   }
@@ -380,10 +422,12 @@ export class MemoryStore implements AppStore {
 
   async finalizeRunCancellation(input: {
     runId: string;
+    leaseOwner: string;
     cancelledAt: Date;
     error: string;
-  }): Promise<ClaimedMessageBatch> {
-    const claimed = this.finishRun(input.runId, input.cancelledAt, 'cancelled');
+  }): Promise<ClaimedMessageBatch | null> {
+    const claimed = this.finishRun(input.runId, input.leaseOwner, input.cancelledAt, 'cancelled');
+    if (!claimed) return null;
     const cancelledRun: RunRecord = { ...claimed.run, error: input.error };
     this.runs.set(input.runId, cancelledRun);
     return { ...claimed, run: cancelledRun };
@@ -566,6 +610,24 @@ export class MemoryStore implements AppStore {
     return this.appendEvent({ ...event, sequence: await this.nextEventSequence(event.sessionId) });
   }
 
+  async appendEventWithNextSequenceForRun(
+    event: Omit<NormalizedEvent, 'runId'> & { runId: string },
+    guard: { runId: string; leaseOwner: string; now: Date },
+  ): Promise<EventRecord | null> {
+    const run = this.runs.get(guard.runId);
+    if (
+      !run ||
+      event.runId !== guard.runId ||
+      (run.status !== 'running' && run.status !== 'cancelling') ||
+      run.leaseOwner !== guard.leaseOwner ||
+      !run.leaseExpiresAt ||
+      run.leaseExpiresAt <= guard.now
+    ) {
+      return null;
+    }
+    return this.appendEventWithNextSequence(event as NormalizedEvent);
+  }
+
   async getEvents(sessionId: string, afterSequence = 0): Promise<EventRecord[]> {
     return (this.events.get(sessionId) ?? []).filter((event) => event.sequence > afterSequence);
   }
@@ -677,11 +739,14 @@ export class MemoryStore implements AppStore {
 
   private finishRun(
     runId: string,
+    leaseOwner: string,
     finishedAt: Date,
     status: 'completed' | 'failed' | 'cancelled',
-  ): ClaimedMessageBatch {
+  ): ClaimedMessageBatch | null {
     const run = this.runs.get(runId);
-    if (!run) throw new Error(`Run does not exist: ${runId}`);
+    if (!run) return null;
+    if ((run.status !== 'running' && run.status !== 'cancelling') || run.leaseOwner !== leaseOwner) return null;
+    if (!run.leaseExpiresAt || run.leaseExpiresAt <= finishedAt) return null;
 
     const sessionMessages = this.messages.get(run.sessionId) ?? [];
     const messageIds = getRunMessageIds(run);

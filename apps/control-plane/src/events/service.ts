@@ -51,17 +51,22 @@ export class EventService {
   constructor(private readonly store: EventStore) {}
 
   async append<T extends NormalizedEventType>(input: AppendEventInput<T>): Promise<PersistedEvent<T>> {
-    const event = {
-      sessionId: input.sessionId,
-      type: input.type,
-      payload: sanitizeJsonPayload(input.payload ?? {}) as NormalizedEventPayload<T>,
-      createdAt: new Date(),
-    } as NormalizedEvent<T>;
-
-    if (input.runId) event.runId = input.runId;
-    if (input.messageId) event.messageId = input.messageId;
+    const event = normalizeAppendInput(input);
 
     const persisted = await this.store.appendEventWithNextSequence(event);
+    this.publish(persisted);
+    return persisted as PersistedEvent<T>;
+  }
+
+  async appendForRun<T extends NormalizedEventType>(
+    input: AppendEventInput<T> & { runId: string },
+    guard: { runId: string; leaseOwner: string; now: Date },
+  ): Promise<PersistedEvent<T> | null> {
+    const event = { ...normalizeAppendInput(input), runId: input.runId } as Omit<NormalizedEvent, 'runId'> & {
+      runId: string;
+    };
+    const persisted = await this.store.appendEventWithNextSequenceForRun(event, guard);
+    if (!persisted) return null;
     this.publish(persisted);
     return persisted as PersistedEvent<T>;
   }
@@ -132,6 +137,19 @@ function sanitizeJsonPayload(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeJsonPayload);
 
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeJsonPayload(item)]));
+}
+
+function normalizeAppendInput<T extends NormalizedEventType>(input: AppendEventInput<T>): NormalizedEvent<T> {
+  const event = {
+    sessionId: input.sessionId,
+    type: input.type,
+    payload: sanitizeJsonPayload(input.payload ?? {}) as NormalizedEventPayload<T>,
+    createdAt: new Date(),
+  } as NormalizedEvent<T>;
+
+  if (input.runId) event.runId = input.runId;
+  if (input.messageId) event.messageId = input.messageId;
+  return event;
 }
 
 function isGlobalEvent(event: Pick<EventRecord, 'type'>): boolean {

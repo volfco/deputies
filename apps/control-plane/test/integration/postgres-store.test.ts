@@ -196,8 +196,12 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     expect(claimed?.messages.map((message) => message.prompt)).toEqual(['first', 'edited second']);
     expect(claimed?.run.metadata).toMatchObject({ messageIds: [first.id, second.id], sequences: [1, 2] });
 
-    const completed = await store.completeRunBatch({ runId: claimed!.run.id, completedAt: new Date() });
-    expect(completed.messages.map((message) => message.status)).toEqual(['completed', 'completed']);
+    const completed = await store.completeRunBatch({
+      runId: claimed!.run.id,
+      leaseOwner: 'worker-1',
+      completedAt: new Date(),
+    });
+    expect(completed?.messages.map((message) => message.status)).toEqual(['completed', 'completed']);
   });
 
   it('does not double-claim one session under concurrent workers', async () => {
@@ -374,15 +378,70 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
 
     const cancelled = await store.finalizeRunCancellation({
       runId: claimed.run.id,
+      leaseOwner: 'worker-1',
       cancelledAt: new Date(),
       error: 'cancelled by test',
     });
-    expect(cancelled.messages.map((message) => message.status)).toEqual(['cancelled', 'cancelled']);
+    expect(cancelled?.messages.map((message) => message.status)).toEqual(['cancelled', 'cancelled']);
     await expect(store.getRun(claimed.run.id)).resolves.toMatchObject({
       status: 'cancelled',
       error: 'cancelled by test',
     });
     await expect(services.sessions.get(session.id)).resolves.toMatchObject({ status: 'queued' });
+  });
+
+  it('rejects stale postgres run completion after recovery', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Postgres stale completion' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+
+    const claimedAt = new Date('2026-05-06T00:00:00.000Z');
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000905',
+      runnerType: 'fake',
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(claimedAt.getTime() - 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).not.toBeNull();
+
+    await store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 1_000), limit: 10 });
+
+    await expect(
+      store.completeRunBatch({
+        runId: claimed!.run.id,
+        leaseOwner: 'worker-1',
+        completedAt: new Date(claimedAt.getTime() + 2_000),
+      }),
+    ).resolves.toBeNull();
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({ status: 'stale' });
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'pending' }]);
+  });
+
+  it('rejects postgres run completion after lease expiration', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Postgres expired completion' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'first' });
+
+    const claimedAt = new Date('2026-05-06T00:00:00.000Z');
+    const claimed = await store.claimNextPendingMessageBatch({
+      runId: '00000000-0000-4000-8000-000000000906',
+      runnerType: 'fake',
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).not.toBeNull();
+
+    await expect(
+      store.completeRunBatch({
+        runId: claimed!.run.id,
+        leaseOwner: 'worker-1',
+        completedAt: new Date(claimedAt.getTime() + 2_000),
+      }),
+    ).resolves.toBeNull();
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({ status: 'running' });
+    await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'processing' }]);
   });
 
   it('runs postgres advisory locks on only one holder', async () => {
@@ -595,6 +654,34 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     await expect(store.recoverStaleRuns({ now: new Date(claimedAt.getTime() + 2_000), limit: 10 })).resolves.toEqual(
       [],
     );
+  });
+
+  it('does not renew expired run leases', async () => {
+    const services = createServices(store);
+    const session = await services.sessions.create({ title: 'Expired heartbeat' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'too late' });
+
+    const claimedAt = new Date();
+    const claimed = await store.claimNextPendingMessage({
+      runId: '00000000-0000-4000-8000-000000000022',
+      runnerType: 'fake',
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+      now: claimedAt,
+    });
+    expect(claimed).toBeTruthy();
+
+    const renewed = await store.renewRunLease({
+      runId: claimed!.run.id,
+      leaseOwner: 'worker-1',
+      leaseExpiresAt: new Date(claimedAt.getTime() + 60_000),
+      heartbeatAt: new Date(claimedAt.getTime() + 2_000),
+    });
+    expect(renewed).toBeNull();
+
+    await expect(store.getRun(claimed!.run.id)).resolves.toMatchObject({
+      leaseExpiresAt: new Date(claimedAt.getTime() + 1_000),
+    });
   });
 
   it('processes an HTTP-created message through the worker using Postgres', async () => {
