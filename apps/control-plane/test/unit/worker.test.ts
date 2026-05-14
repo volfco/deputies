@@ -304,6 +304,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new StaleContextUpdatingRunner(store),
       runnerType: 'stale-context-updating',
       sandboxProvider: new FakeSandboxProvider(),
@@ -328,6 +329,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new StaleEmittingRunner(store),
       runnerType: 'stale-emitting',
       sandboxProvider: new FakeSandboxProvider(),
@@ -365,6 +367,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner: new FakeRunner(),
       runnerType: 'fake',
       sandboxProvider: new FakeSandboxProvider(),
@@ -680,6 +683,7 @@ describe('WorkerService', () => {
     const worker = new WorkerService({
       store,
       events: services.events,
+      artifacts: services.artifacts,
       runner,
       runnerType: 'blocking',
       sandboxProvider: new FakeSandboxProvider(),

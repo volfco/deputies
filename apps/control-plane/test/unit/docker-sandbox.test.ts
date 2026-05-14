@@ -140,9 +140,8 @@ describe('DockerSandboxProvider', () => {
     vi.doMock('node:child_process', () => ({ spawn: spawnMock }));
 
     try {
-      const { InProcessDockerOrchestrator: MockedInProcessDockerOrchestrator } = await import(
-        '../../src/sandbox/docker.js'
-      );
+      const { InProcessDockerOrchestrator: MockedInProcessDockerOrchestrator } =
+        await import('../../src/sandbox/docker.js');
       const orchestrator = new MockedInProcessDockerOrchestrator();
 
       await expect(orchestrator.create({ sessionId: 'session-5' })).rejects.toThrow(
