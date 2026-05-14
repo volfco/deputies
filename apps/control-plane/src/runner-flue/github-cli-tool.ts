@@ -37,10 +37,7 @@ type GitHubCliToolOptions = {
   messageId?: string;
 };
 
-export function createGitHubCliTool(
-  repository: RepositoryToolServices,
-  options: GitHubCliToolOptions = {},
-): ToolDef {
+export function createGitHubCliTool(repository: RepositoryToolServices, options: GitHubCliToolOptions = {}): ToolDef {
   return {
     name: 'gh',
     description:

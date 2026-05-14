@@ -22,10 +22,6 @@ depends = ["typecheck", "test"]
 description = "Start the local HTTPS wildcard portless proxy"
 run = "pnpm portless:start"
 
-[tasks.portless-start-http]
-description = "Start the host-preserving HTTP wildcard portless proxy"
-run = "pnpm portless:start:http"
-
 [tasks.portless-alias-web]
 description = "Route the local Deputies hostname to the Vite web dev server"
 run = "pnpm portless:alias:web"

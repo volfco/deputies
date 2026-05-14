@@ -24,15 +24,15 @@ VITE_API_PROXY_TARGET=http://localhost:3583 pnpm web:dev
 
 ### Local Sandbox Previews
 
-Use a host-preserving wildcard proxy when developing session-cookie auth and sandbox previews locally. `portless --no-tls` is the simplest local-only option. Published previews use one-label wildcard subdomains such as `http://p-3000-<session-id>.deputies.localhost`.
+Use a host-preserving wildcard proxy when developing session-cookie auth and sandbox previews locally. Published previews use one-label wildcard subdomains such as `https://p-3000-<session-id>.deputies.localhost`.
 
-Use `--no-tls` for local previews because the default HTTPS portless proxy can strip the original wildcard host before requests reach the Docker Compose web proxy. The preview router needs that host, for example `p-3000-<session-id>.deputies.localhost`, to identify the session and sandbox port.
+Portless TLS terminates HTTPS locally. In Docker Compose, `apps/web/Caddyfile.local` handles the forwarded preview host that Portless preserves in `X-Forwarded-Host`. In Vite dev mode, `apps/web/vite.config.ts` uses the same forwarded-host fallback.
 
-Start the HTTP wildcard proxy in one terminal. Portless uses port `80` for `--no-tls`, so accept the sudo prompt when it starts:
+Start the HTTPS wildcard proxy in one terminal. Portless uses port `443`, so accept the sudo prompt when it starts:
 
 ```sh
-pnpm portless:start:http
-# or: mise run portless-start-http
+pnpm portless:start
+# or: mise run portless-start
 ```
 
 Register the web UI alias once, or after resetting portless aliases:
@@ -49,21 +49,19 @@ set -a; . ./.env.local; set +a; pnpm control-plane:dev
 pnpm web:dev
 ```
 
-Open the app at `http://deputies.localhost`. Published previews are listed from `GET /sessions/:sessionId/previews`; no preview is shown until the agent publishes one with the preview tool.
+Open the app at `https://deputies.localhost`. Published previews are listed from `GET /sessions/:sessionId/previews`; no preview is shown until the agent publishes one with the preview tool.
 
 For portless local development, use these `.env.local` values:
 
 ```sh
 VITE_API_BASE_URL=
-WEB_BASE_URL=http://deputies.localhost
-AUTH_SUCCESS_REDIRECT_URL=http://deputies.localhost
+WEB_BASE_URL=https://deputies.localhost
+AUTH_SUCCESS_REDIRECT_URL=https://deputies.localhost
 AUTH_COOKIE_DOMAIN=.deputies.localhost
-AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SECURE=true
 PREVIEW_BASE_DOMAIN=deputies.localhost
 PREVIEW_TRUST_FORWARDED_HOSTS=true
 ```
-
-`portless proxy start --no-tls --wildcard` preserves wildcard preview hosts into the web proxy, including `Host` and `X-Forwarded-Host` values like `p-test.deputies.localhost`.
 
 Preview links are browser navigations. They work with `API_AUTH_MODE=none` or session-cookie auth. They do not work with bearer-token-only auth because the browser cannot attach the UI's localStorage bearer token to a new tab.
 

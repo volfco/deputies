@@ -25,6 +25,10 @@ services:
       API_UPSTREAM: http://api:3583
     ports:
       - '5173:5173'
+    volumes:
+      # Local Portless TLS needs a forwarded-host fallback that production
+      # should not expose publicly.
+      - ../../apps/web/Caddyfile.local:/etc/caddy/Caddyfile:ro
 
   postgres:
     image: postgres:17-alpine

@@ -54,7 +54,7 @@ export class EventService {
     const event = {
       sessionId: input.sessionId,
       type: input.type,
-      payload: (input.payload ?? {}) as NormalizedEventPayload<T>,
+      payload: sanitizeJsonPayload(input.payload ?? {}) as NormalizedEventPayload<T>,
       createdAt: new Date(),
     } as NormalizedEvent<T>;
 
@@ -123,6 +123,15 @@ export class EventService {
       subscriber(event);
     }
   }
+}
+
+function sanitizeJsonPayload(value: unknown): unknown {
+  if (typeof value === 'string') return value.replaceAll('\u0000', '');
+  if (!value || typeof value !== 'object') return value;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map(sanitizeJsonPayload);
+
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeJsonPayload(item)]));
 }
 
 function isGlobalEvent(event: Pick<EventRecord, 'type'>): boolean {
