@@ -12,7 +12,7 @@ import type { Runner, RunnerInput, RunnerResult } from '../runner/types.js';
 import { createArtifactTool } from './artifact-tool.js';
 import { createGitTool, type AgentRef } from './git-tool.js';
 import { createGitHubCliTool } from './github-cli-tool.js';
-import { createPreviewTool } from './preview-tool.js';
+import { createServiceTool } from './service-tool.js';
 import { createRepositoryTool, type RepositoryToolServices, type RepositoryToolState } from './repository-tool.js';
 import type { FlueAgentFactory, FlueSessionPort } from './types.js';
 
@@ -89,7 +89,7 @@ export class FlueRunner implements Runner {
     }
     if (input.updateSessionContext) {
       tools.push(
-        createPreviewTool({
+        createServiceTool({
           sessionId: input.sessionId,
           providerSandboxId: input.sandbox.providerSandboxId,
           sandboxMetadata: input.sandbox.metadata,
@@ -227,11 +227,11 @@ export class FlueRunner implements Runner {
 
 function withToolGuidance(prompt: string, includeArtifacts: boolean, includeRepository: boolean): string {
   const lines = [
-    'Preview tool guidance:',
-    '- If you start or identify a web server the user should open, call preview({ action: "publish", port, label, path, ttlSeconds }) after confirming the server is running. Use ttlSeconds of at least 300 for interactive previews so the sandbox stays alive long enough for the user to open it. Multiple previews may be visible at the same time.',
-    '- Use preview({ action: "extend", port, ttlSeconds }) to keep an existing preview sandbox alive longer, preview({ action: "list" }) to inspect published previews, and preview({ action: "unpublish", port }) to remove stale links.',
-    '- Do not publish ports that are not serving an app or useful HTTP endpoint.',
-    '- For Vite dev servers published as previews, do not hard-code server.hmr.host, server.hmr.clientPort, or server.hmr.protocol to localhost; let Vite infer the browser preview URL unless the user specifically asks otherwise.',
+    'Service tool guidance:',
+    '- If you start or identify a web server, app preview, code-server instance, API docs, notebook, dashboard, or other HTTP service the user should open, call service({ action: "publish", port, label, path, ttlSeconds }) after confirming the service is running. Use ttlSeconds of at least 300 for interactive services so the sandbox stays alive long enough for the user to open it. Multiple services may be visible at the same time.',
+    '- Use service({ action: "extend", port, ttlSeconds }) to keep an existing service sandbox alive longer, service({ action: "list" }) to inspect published services, and service({ action: "unpublish", port }) to remove stale links.',
+    '- Do not publish ports that are not serving an app, browser-accessible tool, or useful HTTP endpoint.',
+    '- For Vite dev servers published as services/previews, do not hard-code server.hmr.host, server.hmr.clientPort, or server.hmr.protocol to localhost; let Vite infer the browser URL unless the user specifically asks otherwise.',
     '',
   ];
   if (includeArtifacts) {

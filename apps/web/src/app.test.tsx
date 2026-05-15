@@ -23,7 +23,7 @@ type MockApiOptions = {
   messagesBySession?: Record<string, unknown[]>;
   events?: unknown[];
   artifacts?: unknown[];
-  previews?: unknown[];
+  services?: unknown[];
   externalResources?: unknown[];
   artifactPreview?: unknown;
   artifactPreviewStatus?: number;
@@ -1873,8 +1873,8 @@ function mockApi(options: MockApiOptions = {}) {
       return jsonResponse({ artifacts: options.artifacts ?? [] });
     }
 
-    if (url.pathname.match(/^\/sessions\/[^/]+\/previews$/)) {
-      return jsonResponse({ previews: options.previews ?? [] });
+    if (url.pathname.match(/^\/sessions\/[^/]+\/services$/)) {
+      return jsonResponse({ services: options.services ?? [] });
     }
 
     if (url.pathname.match(/^\/sessions\/[^/]+\/external-resources$/)) {

@@ -96,8 +96,8 @@ async function mockApi(page: Page): Promise<void> {
       return;
     }
 
-    if (url.pathname === `/sessions/${sessionId}/previews`) {
-      await route.fulfill({ json: { previews: [] } });
+    if (url.pathname === `/sessions/${sessionId}/services`) {
+      await route.fulfill({ json: { services: [] } });
       return;
     }
 

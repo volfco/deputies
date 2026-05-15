@@ -7,7 +7,7 @@ import {
   CallbackDelivery,
   ExternalResource,
   Message,
-  SandboxPreview,
+  SandboxService,
   Session,
   apiConnectionDelayedEvent,
   apiConnectionOkEvent,
@@ -26,7 +26,7 @@ import {
   listEvents,
   listExternalResources,
   listMessages,
-  listPreviews,
+  listServices,
   listSessions,
   logout,
   pauseQueue,
@@ -97,7 +97,7 @@ export function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [previews, setPreviews] = useState<SandboxPreview[]>([]);
+  const [services, setServices] = useState<SandboxService[]>([]);
   const [externalResources, setExternalResources] = useState<ExternalResource[]>([]);
   const [callbacks, setCallbacks] = useState<CallbackDelivery[]>([]);
   const [newThreadPrompt, setNewThreadPrompt] = useState('');
@@ -353,7 +353,7 @@ export function App() {
                   event.type === 'sandbox_stopped' ||
                   event.type === 'sandbox_destroyed'
                 ) {
-                  setPreviews([]);
+                  setServices([]);
                 }
                 if (shouldRefreshSessionDetail(event.type)) {
                   refreshSessionOutputs(activeSessionId).catch(() => undefined);
@@ -434,12 +434,12 @@ export function App() {
   async function refreshSessionDetail(sessionId: string) {
     setError('');
     try {
-      const [nextMessages, nextEvents, nextArtifacts, nextPreviews, nextExternalResources, nextCallbacks] =
+      const [nextMessages, nextEvents, nextArtifacts, nextServices, nextExternalResources, nextCallbacks] =
         await Promise.all([
           listMessages(sessionId, token),
           listEvents(sessionId, token),
           listArtifacts(sessionId, token),
-          listPreviews(sessionId, token),
+          listServices(sessionId, token),
           listExternalResources(sessionId, token),
           listCallbacks(sessionId, token),
         ]);
@@ -448,7 +448,7 @@ export function App() {
       setMessages(nextMessages);
       setEvents(nextEvents);
       setArtifacts(nextArtifacts);
-      setPreviews(nextPreviews);
+      setServices(nextServices);
       setExternalResources(nextExternalResources);
       setCallbacks(nextCallbacks);
       setDetailLoadedSessionId(sessionId);
@@ -465,17 +465,17 @@ export function App() {
 
     detailRefreshInFlightRef.current = sessionId;
     try {
-      const [nextMessages, nextArtifacts, nextPreviews, nextExternalResources, nextCallbacks] = await Promise.all([
+      const [nextMessages, nextArtifacts, nextServices, nextExternalResources, nextCallbacks] = await Promise.all([
         listMessages(sessionId, token),
         listArtifacts(sessionId, token),
-        listPreviews(sessionId, token),
+        listServices(sessionId, token),
         listExternalResources(sessionId, token),
         listCallbacks(sessionId, token),
       ]);
       if (selectedSessionIdRef.current === sessionId) {
         setMessages(nextMessages);
         setArtifacts(nextArtifacts);
-        setPreviews(nextPreviews);
+        setServices(nextServices);
         setExternalResources(nextExternalResources);
         setCallbacks(nextCallbacks);
       }
@@ -516,7 +516,7 @@ export function App() {
       setMessages([message]);
       setEvents([]);
       setArtifacts([]);
-      setPreviews([]);
+      setServices([]);
       setExternalResources([]);
       setCallbacks([]);
       eventCursor.current = 0;
@@ -722,7 +722,7 @@ export function App() {
     setMessages([]);
     setEvents([]);
     setArtifacts([]);
-    setPreviews([]);
+    setServices([]);
     setExternalResources([]);
     setCallbacks([]);
   }
@@ -738,7 +738,7 @@ export function App() {
     setMessages([]);
     setEvents([]);
     setArtifacts([]);
-    setPreviews([]);
+    setServices([]);
     setExternalResources([]);
     setCallbacks([]);
     eventCursor.current = 0;
@@ -802,7 +802,7 @@ export function App() {
 
   type SessionStatusRollback = {
     artifacts: Artifact[];
-    previews: SandboxPreview[];
+    services: SandboxService[];
     externalResources: ExternalResource[];
     callbacks: CallbackDelivery[];
     events: AgentEvent[];
@@ -817,7 +817,7 @@ export function App() {
     if (!session) return null;
     const rollback = {
       artifacts,
-      previews,
+      services,
       externalResources,
       callbacks,
       events,
@@ -843,7 +843,7 @@ export function App() {
       setMessages(rollback.messages);
       setEvents(rollback.events);
       setArtifacts(rollback.artifacts);
-      setPreviews(rollback.previews);
+      setServices(rollback.services);
       setExternalResources(rollback.externalResources);
       setCallbacks(rollback.callbacks);
     }
@@ -854,7 +854,7 @@ export function App() {
     if (!session) return null;
     const rollback = {
       artifacts,
-      previews,
+      services,
       externalResources,
       callbacks,
       events,
@@ -880,7 +880,7 @@ export function App() {
       setMessages([]);
       setEvents([]);
       setArtifacts([]);
-      setPreviews([]);
+      setServices([]);
       setExternalResources([]);
       setCallbacks([]);
       eventCursor.current = 0;
@@ -1071,7 +1071,7 @@ export function App() {
                                 <MobileContextPanel
                                   repository={selectedRepository}
                                   artifacts={artifacts}
-                                  previews={previews}
+                                  services={services}
                                   externalResources={externalResources}
                                   callbacks={callbacks}
                                   onExtendSandbox={handleExtendSandbox}
@@ -1079,7 +1079,7 @@ export function App() {
                                 />
                                 <ChatPanel
                                   artifacts={artifacts}
-                                  previews={previews}
+                                  services={services}
                                   editingMessageId={editingMessageId}
                                   events={events}
                                   messageDraft={messageDraft}
@@ -1131,7 +1131,7 @@ export function App() {
                         <DesktopContextPanel
                           repository={selectedRepository}
                           artifacts={artifacts}
-                          previews={previews}
+                          services={services}
                           externalResources={externalResources}
                           callbacks={callbacks}
                           onExtendSandbox={handleExtendSandbox}

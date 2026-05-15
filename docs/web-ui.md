@@ -22,11 +22,11 @@ The web app uses same-origin API requests by default. In Vite dev mode, `apps/we
 VITE_API_PROXY_TARGET=http://localhost:3583 pnpm web:dev
 ```
 
-### Local Sandbox Previews
+### Local Sandbox Services
 
-Use a host-preserving wildcard proxy when developing session-cookie auth and sandbox previews locally. Published previews use one-label wildcard subdomains such as `https://p-3000-<session-id>.deputies.localhost`.
+Use a host-preserving wildcard proxy when developing session-cookie auth and sandbox services locally. Published services, including app previews, use one-label wildcard subdomains such as `https://s-3000-<session-id>.deputies.localhost`.
 
-Portless TLS terminates HTTPS locally. In Docker Compose, `apps/web/Caddyfile.local` handles the forwarded preview host that Portless preserves in `X-Forwarded-Host`. In Vite dev mode, `apps/web/vite.config.ts` uses the same forwarded-host fallback.
+Portless TLS terminates HTTPS locally. In Docker Compose, `apps/web/Caddyfile.local` handles the forwarded service host that Portless preserves in `X-Forwarded-Host`. In Vite dev mode, `apps/web/vite.config.ts` uses the same forwarded-host fallback.
 
 Start the HTTPS wildcard proxy in one terminal. Portless uses port `443`, so accept the sudo prompt when it starts:
 
@@ -49,7 +49,7 @@ set -a; . ./.env.local; set +a; pnpm control-plane:dev
 pnpm web:dev
 ```
 
-Open the app at `https://deputies.localhost`. Published previews are listed from `GET /sessions/:sessionId/previews`; no preview is shown until the agent publishes one with the preview tool.
+Open the app at `https://deputies.localhost`. Published services are listed from `GET /sessions/:sessionId/services`; no service is shown until the agent publishes one with the service tool.
 
 For portless local development, use these `.env.local` values:
 
@@ -59,13 +59,13 @@ WEB_BASE_URL=https://deputies.localhost
 AUTH_SUCCESS_REDIRECT_URL=https://deputies.localhost
 AUTH_COOKIE_DOMAIN=.deputies.localhost
 AUTH_COOKIE_SECURE=true
-PREVIEW_BASE_DOMAIN=deputies.localhost
-PREVIEW_TRUST_FORWARDED_HOSTS=true
+SERVICE_BASE_DOMAIN=deputies.localhost
+SERVICE_TRUST_FORWARDED_HOSTS=true
 ```
 
-Preview links are browser navigations. They work with `API_AUTH_MODE=none` or session-cookie auth. They do not work with bearer-token-only auth because the browser cannot attach the UI's localStorage bearer token to a new tab.
+Service links are browser navigations. They work with `API_AUTH_MODE=none` or session-cookie auth. They do not work with bearer-token-only auth because the browser cannot attach the UI's localStorage bearer token to a new tab.
 
-For production-like deployments, configure real DNS records so the app hostname and wildcard preview hostname point to the deployed web/API entrypoint. Prefer a first-level wildcard such as `*.example.com`; nested wildcards like `*.app.example.com` may require provider-specific certificate upgrades such as Cloudflare Advanced Certificate Manager. For example, use `app.example.com` for the UI and `p-<session>.example.com` for previews, then set:
+For production-like deployments, configure real DNS records so the app hostname and wildcard service hostname point to the deployed web/API entrypoint. Prefer a first-level wildcard such as `*.example.com`; nested wildcards like `*.app.example.com` may require provider-specific certificate upgrades such as Cloudflare Advanced Certificate Manager. For example, use `app.example.com` for the UI and `s-<port>-<session>.example.com` for services, then set:
 
 ```sh
 VITE_API_BASE_URL=
@@ -73,15 +73,15 @@ WEB_BASE_URL=https://app.example.com
 AUTH_SUCCESS_REDIRECT_URL=https://app.example.com
 AUTH_COOKIE_DOMAIN=.example.com
 AUTH_COOKIE_SECURE=true
-PREVIEW_BASE_DOMAIN=example.com
-PREVIEW_TRUST_FORWARDED_HOSTS=false
+SERVICE_BASE_DOMAIN=example.com
+SERVICE_TRUST_FORWARDED_HOSTS=false
 ```
 
-On Railway with Cloudflare DNS, add both custom domains to the web entrypoint service: `app.example.com` and `*.example.com`. The wildcard CNAME should point directly to Railway's provided target, and Railway's `_acme-challenge` CNAME must remain DNS-only so certificate issuance and renewal can complete. If a wildcard preview host returns a TLS handshake error before any HTTP status, Railway has not finished validating or serving the wildcard certificate yet.
+On Railway with Cloudflare DNS, add both custom domains to the web entrypoint service: `app.example.com` and `*.example.com`. The wildcard CNAME should point directly to Railway's provided target, and Railway's `_acme-challenge` CNAME must remain DNS-only so certificate issuance and renewal can complete. If a wildcard service host returns a TLS handshake error before any HTTP status, Railway has not finished validating or serving the wildcard certificate yet.
 
-After changing `AUTH_COOKIE_DOMAIN`, existing browser sessions may still hold an old host-only cookie for the app domain. Log out and back in, or clear cookies for the app and preview domains. A valid production session cookie should be scoped to `.example.com` so it is sent to both `app.example.com` and `p-<session>.example.com`.
+After changing `AUTH_COOKIE_DOMAIN`, existing browser sessions may still hold an old host-only cookie for the app domain. Log out and back in, or clear cookies for the app and service domains. A valid production session cookie should be scoped to `.example.com` so it is sent to both `app.example.com` and `s-<port>-<session>.example.com`.
 
-The Deputies web dev server moves its own Vite HMR socket to `/__deputies_vite_hmr` so preview app WebSocket upgrades on `/` can pass through the preview proxy. For Vite apps running inside a sandbox, avoid hard-coding `server.hmr.host`, `server.hmr.clientPort`, or `server.hmr.protocol` to `localhost`; let Vite infer the preview browser URL.
+The Deputies web dev server moves its own Vite HMR socket to `/__deputies_vite_hmr` so sandbox service WebSocket upgrades on `/` can pass through the service proxy. For Vite apps running inside a sandbox, avoid hard-coding `server.hmr.host`, `server.hmr.clientPort`, or `server.hmr.protocol` to `localhost`; let Vite infer the browser URL.
 
 If you keep using plain Vite without a wildcard proxy, keep `AUTH_COOKIE_SECURE=false` and use an HTTP `WEB_BASE_URL`/`AUTH_SUCCESS_REDIRECT_URL` instead.
 

@@ -2,18 +2,18 @@
 	root * /usr/share/caddy
 	encode zstd gzip
 
-	@preview_host header_regexp Host ^p-
+	@service_host header_regexp Host ^s-
 	# Portless terminates TLS locally and may forward Caddy an internal Host
-	# while preserving the browser preview host/proto in X-Forwarded-*.
-	@preview_forwarded_host header_regexp X-Forwarded-Host ^p-
-	handle @preview_host {
+	# while preserving the browser service host/proto in X-Forwarded-*.
+	@service_forwarded_host header_regexp X-Forwarded-Host ^s-
+	handle @service_host {
 		reverse_proxy {$API_UPSTREAM:http://control-plane:3583} {
 			header_up X-Original-Host {host}
 			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto {scheme}
 		}
 	}
-	handle @preview_forwarded_host {
+	handle @service_forwarded_host {
 		reverse_proxy {$API_UPSTREAM:http://control-plane:3583} {
 			header_up X-Original-Host {header.X-Forwarded-Host}
 			header_up X-Forwarded-Host {header.X-Forwarded-Host}

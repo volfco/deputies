@@ -74,7 +74,7 @@ export type ArtifactPreviewResponse = {
   preview: ArtifactPreview;
 };
 
-export type SandboxPreview = {
+export type SandboxService = {
   port: number;
   url: string;
   status?: 'available' | 'unavailable' | 'unknown';
@@ -326,9 +326,9 @@ export async function getArtifactPreview(input: {
   return body.preview;
 }
 
-export async function listPreviews(sessionId: string, token: string): Promise<SandboxPreview[]> {
-  const body = await request<{ previews: SandboxPreview[] }>(`/sessions/${sessionId}/previews`, { token });
-  return body.previews;
+export async function listServices(sessionId: string, token: string): Promise<SandboxService[]> {
+  const body = await request<{ services: SandboxService[] }>(`/sessions/${sessionId}/services`, { token });
+  return body.services;
 }
 
 export async function extendSandbox(input: {

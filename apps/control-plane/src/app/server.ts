@@ -43,20 +43,20 @@ import { MessageService, MessageServiceError } from '../messages/service.js';
 import { SandboxCleanupService, SandboxKeepaliveService } from '../sandbox/service.js';
 import { sandboxRuntimeId } from '../sandbox/runtime.js';
 import type { SandboxProvider } from '../sandbox/types.js';
-import { readPreviews } from '../sessions/previews.js';
+import { readServices } from '../sessions/services.js';
 import { SessionService, SessionServiceError } from '../sessions/service.js';
 import { MemoryStore } from '../store/memory.js';
 import type { AppStore, AuthUserRecord, SandboxRecord } from '../store/types.js';
 import { writeGlobalEventStream, writeSessionEventStream } from './event-stream.js';
 import {
-  getSessionPreview,
-  handlePreviewUpgrade,
+  getSessionService,
+  handleServiceUpgrade,
   isAuthorizedRequest,
-  parsePreviewHostFromRequest,
-  parsePreviewPort,
-  proxyPreview,
-  serializePreview,
-} from './preview-proxy.js';
+  parseServiceHostFromRequest,
+  parseServicePort,
+  proxyService,
+  serializeService,
+} from './service-proxy.js';
 import {
   HttpRequestError,
   optionalString,
@@ -280,18 +280,18 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.use('/events', apiAuthMiddleware(config, services.store));
 
   app.use('*', async (c, next) => {
-    const previewHost = parsePreviewHostFromRequest(config, c);
-    if (!previewHost) {
+    const serviceHost = parseServiceHostFromRequest(config, c);
+    if (!serviceHost) {
       await next();
       return;
     }
     if (!(await isAuthorizedRequest(config, services.store, c)))
       return writeError(c, 401, 'unauthorized', 'Missing or invalid session');
-    const session = await services.sessions.get(previewHost.sessionId);
+    const session = await services.sessions.get(serviceHost.sessionId);
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
-    const preview = await getSessionPreview(config, services, previewHost.sessionId, previewHost.port);
-    if (!preview) return writeError(c, 404, 'not_found', 'Preview URL is not available for this sandbox');
-    return proxyPreview(c, config, previewHost.sessionId, previewHost.port, preview);
+    const service = await getSessionService(config, services, serviceHost.sessionId, serviceHost.port);
+    if (!service) return writeError(c, 404, 'not_found', 'Service URL is not available for this sandbox');
+    return proxyService(c, config, serviceHost.sessionId, serviceHost.port, service);
   });
 
   app.post('/sessions', async (c) => {
@@ -679,15 +679,15 @@ export function createApp(config: AppConfig, services = createServices()) {
     }
   });
 
-  app.get('/sessions/:sessionId/previews', async (c) => {
+  app.get('/sessions/:sessionId/services', async (c) => {
     const sessionId = c.req.param('sessionId');
     const session = await services.sessions.get(sessionId);
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
 
-    const requestedPort = parsePreviewPort(c.req.query('port'));
-    const published = readPreviews(session.context ?? {});
+    const requestedPort = parseServicePort(c.req.query('port'));
+    const published = readServices(session.context ?? {});
     const requested = requestedPort ? [{ port: requestedPort }] : published;
-    const previews = [];
+    const liveServices = [];
     const sandbox = services.sandboxProvider
       ? await services.store.getActiveSandbox(sessionId, services.sandboxProvider.name)
       : null;
@@ -701,10 +701,11 @@ export function createApp(config: AppConfig, services = createServices()) {
           item.runtimeId !== runtimeId)
       )
         continue;
-      const preview = await getSessionPreview(config, services, sessionId, item.port);
-      if (preview) previews.push(serializePreview(c, config, sessionId, preview, item, sandboxTiming(config, sandbox)));
+      const service = await getSessionService(config, services, sessionId, item.port);
+      if (service)
+        liveServices.push(serializeService(c, config, sessionId, service, item, sandboxTiming(config, sandbox)));
     }
-    return c.json({ previews });
+    return c.json({ services: liveServices });
   });
 
   app.post('/sessions/:sessionId/sandbox/extend', async (c) => {
@@ -715,8 +716,8 @@ export function createApp(config: AppConfig, services = createServices()) {
 
     const body = await readJsonBody(c, config.maxJsonBodyBytes);
     const seconds = parseKeepaliveSeconds(body.seconds ?? body.ttlSeconds);
-    const port = body.port === undefined ? undefined : parsePreviewPort(String(body.port));
-    if (body.port !== undefined && !port) return writeError(c, 400, 'invalid_request', 'Invalid preview port');
+    const port = body.port === undefined ? undefined : parseServicePort(String(body.port));
+    if (body.port !== undefined && !port) return writeError(c, 400, 'invalid_request', 'Invalid service port');
 
     const result = await services.sandboxKeepalive.extend({
       sessionId,
@@ -728,21 +729,21 @@ export function createApp(config: AppConfig, services = createServices()) {
     return c.json({ sandbox: serializeSandboxKeepalive(config, result.record, result.providerSync) });
   });
 
-  const handlePreviewProxy = async (c: Context) => {
+  const handleServiceProxy = async (c: Context) => {
     const sessionId = c.req.param('sessionId');
     if (!sessionId) return writeError(c, 400, 'invalid_request', 'Missing session ID');
     const session = await services.sessions.get(sessionId);
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
 
-    const port = parsePreviewPort(c.req.param('port'));
-    if (!port) return writeError(c, 400, 'invalid_request', 'Invalid preview port');
-    const preview = await getSessionPreview(config, services, sessionId, port);
-    if (!preview) return writeError(c, 404, 'not_found', 'Preview URL is not available for this sandbox');
-    return proxyPreview(c, config, sessionId, port, preview);
+    const port = parseServicePort(c.req.param('port'));
+    if (!port) return writeError(c, 400, 'invalid_request', 'Invalid service port');
+    const service = await getSessionService(config, services, sessionId, port);
+    if (!service) return writeError(c, 404, 'not_found', 'Service URL is not available for this sandbox');
+    return proxyService(c, config, sessionId, port, service);
   };
 
-  app.all('/sessions/:sessionId/previews/:port', handlePreviewProxy);
-  app.all('/sessions/:sessionId/previews/:port/*', handlePreviewProxy);
+  app.all('/sessions/:sessionId/services/:port', handleServiceProxy);
+  app.all('/sessions/:sessionId/services/:port/*', handleServiceProxy);
 
   app.get('/sessions/:sessionId/callbacks', async (c) => {
     const sessionId = c.req.param('sessionId');
@@ -784,7 +785,7 @@ export function createApp(config: AppConfig, services = createServices()) {
 export function createServer(config: AppConfig, services = createServices()) {
   const server = createAdaptorServer({ fetch: createApp(config, services).fetch }) as Server;
   server.on('upgrade', (request, socket, head) => {
-    handlePreviewUpgrade(config, services, request, socket, head).catch(() => socket.destroy());
+    handleServiceUpgrade(config, services, request, socket, head).catch(() => socket.destroy());
   });
   return server;
 }
@@ -864,7 +865,10 @@ function parseKeepaliveSeconds(value: unknown): number {
   return value;
 }
 
-function sandboxTiming(config: AppConfig, sandbox: SandboxRecord | null): { shutdownAt?: Date; keepaliveUntil?: Date; maxKeepaliveUntil?: Date } {
+function sandboxTiming(
+  config: AppConfig,
+  sandbox: SandboxRecord | null,
+): { shutdownAt?: Date; keepaliveUntil?: Date; maxKeepaliveUntil?: Date } {
   if (!sandbox || sandbox.status !== 'ready') return {};
   const now = new Date();
   const stopAt = new Date(sandbox.updatedAt.getTime() + config.sandboxStopDelayMs);

@@ -218,7 +218,8 @@ export class WorkerService {
     try {
       const session = await this.options.store.getSession(primary.sessionId);
       if (!session) throw new Error(`Session not found: ${primary.sessionId}`);
-      const sessionContext = created || restarted ? await this.clearSessionPreviewsForRun(session, claimed) : (session.context ?? {});
+      const sessionContext =
+        created || restarted ? await this.clearSessionServicesForRun(session, claimed) : (session.context ?? {});
       let runContext = { ...sessionContext, ...buildBatchContext(claimed.messages) };
       const result = await this.options.runner.run({
         sessionId: primary.sessionId,
@@ -292,17 +293,17 @@ export class WorkerService {
     }
   }
 
-  private async clearSessionPreviewsForRun(
+  private async clearSessionServicesForRun(
     session: SessionRecord,
     claimed: ClaimedMessageBatch,
   ): Promise<Record<string, unknown>> {
     const context = session.context ?? {};
-    if (!Array.isArray(context.previews) || context.previews.length === 0) return context;
+    if (!Array.isArray(context.services) || context.services.length === 0) return context;
     if (!(await this.isRunOwnedByThisWorker(claimed.run.id))) return context;
     const updated = await this.options.store.updateSessionForRun({
       record: {
         ...session,
-        context: { ...context, previews: [] },
+        context: { ...context, services: [] },
         updatedAt: new Date(),
       },
       runId: claimed.run.id,

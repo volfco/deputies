@@ -667,23 +667,23 @@ describe('core API', () => {
     ]);
   });
 
-  it('proxies preview HTML and rewrites root-relative Vite asset paths', async () => {
+  it('proxies service HTML and rewrites root-relative Vite asset paths', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
-    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(
       loadConfig({
         API_AUTH_MODE: 'none',
         WEB_BASE_URL: 'https://deputies.localhost',
-        PREVIEW_TRUST_FORWARDED_HOSTS: 'true',
+        SERVICE_TRUST_FORWARDED_HOSTS: 'true',
       }),
       createServices(store, { sandboxProvider: provider }),
     );
     baseUrl = await listen(server);
 
     try {
-      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Preview rewrite' });
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Service rewrite' });
       const { session } = (await createSession.json()) as { session: { id: string } };
       const sandbox = await provider.create({ sessionId: session.id });
       const storedSession = await store.getSession(session.id);
@@ -691,8 +691,14 @@ describe('core API', () => {
       await store.updateSession({
         ...storedSession,
         context: {
-          previews: [
-            { port: 3000, label: 'Vite app', path: '/', providerSandboxId: sandbox.providerSandboxId, runtimeId: 'runtime-1' },
+          services: [
+            {
+              port: 3000,
+              label: 'Vite app',
+              path: '/',
+              providerSandboxId: sandbox.providerSandboxId,
+              runtimeId: 'runtime-1',
+            },
           ],
         },
       });
@@ -709,37 +715,37 @@ describe('core API', () => {
         updatedAt: now,
       });
 
-      const previewRoot = `${baseUrl}/sessions/${session.id}/previews/3000/`;
-      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews`)).json()).resolves.toMatchObject({
-        previews: [
+      const serviceRoot = `${baseUrl}/sessions/${session.id}/services/3000/`;
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/services`)).json()).resolves.toMatchObject({
+        services: [
           {
             port: 3000,
             label: 'Vite app',
             path: '/',
-            url: `https://p-3000-${session.id}.deputies.localhost/`,
+            url: `https://s-3000-${session.id}.deputies.localhost/`,
           },
         ],
       });
-      const html = await (await fetch(previewRoot)).text();
+      const html = await (await fetch(serviceRoot)).text();
 
-      expect(html).toContain(`/sessions/${session.id}/previews/3000/@vite/client`);
-      expect(html).toContain(`/sessions/${session.id}/previews/3000/src/main.tsx`);
-      await expect((await fetch(`${previewRoot}@vite/client`)).text()).resolves.toBe('vite client');
-      await expect((await fetch(`${previewRoot}src/main.tsx`)).text()).resolves.toBe('main');
+      expect(html).toContain(`/sessions/${session.id}/services/3000/@vite/client`);
+      expect(html).toContain(`/sessions/${session.id}/services/3000/src/main.tsx`);
+      await expect((await fetch(`${serviceRoot}@vite/client`)).text()).resolves.toBe('vite client');
+      await expect((await fetch(`${serviceRoot}src/main.tsx`)).text()).resolves.toBe('main');
       await expect(
         (
-          await fetch(`${previewRoot}@vite/client`, {
-            headers: { host: `p-3000-${session.id}.evil.localhost` },
+          await fetch(`${serviceRoot}@vite/client`, {
+            headers: { host: `s-3000-${session.id}.evil.localhost` },
           })
         ).text(),
       ).resolves.toBe('vite client');
 
-      const pathRedirect = await fetch(`${previewRoot}redirect`, { redirect: 'manual' });
-      expect(pathRedirect.headers.get('location')).toBe(`/sessions/${session.id}/previews/3000/dashboard`);
+      const pathRedirect = await fetch(`${serviceRoot}redirect`, { redirect: 'manual' });
+      expect(pathRedirect.headers.get('location')).toBe(`/sessions/${session.id}/services/3000/dashboard`);
 
       const hostRedirect = await fetch(`${baseUrl}/redirect`, {
         redirect: 'manual',
-        headers: { 'x-forwarded-host': `p-3000-${session.id}.deputies.localhost` },
+        headers: { 'x-forwarded-host': `s-3000-${session.id}.deputies.localhost` },
       });
       expect(hostRedirect.headers.get('location')).toBe('/dashboard');
     } finally {
@@ -747,16 +753,16 @@ describe('core API', () => {
     }
   });
 
-  it('does not list a default preview when none has been published', async () => {
+  it('does not list a default service when none has been published', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
-    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store, { sandboxProvider: provider }));
     baseUrl = await listen(server);
 
     try {
-      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'No preview' });
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'No service' });
       const { session } = (await createSession.json()) as { session: { id: string } };
       const sandbox = await provider.create({ sessionId: session.id });
       const now = new Date();
@@ -772,12 +778,12 @@ describe('core API', () => {
         updatedAt: now,
       });
 
-      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews`)).json()).resolves.toEqual({
-        previews: [],
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/services`)).json()).resolves.toEqual({
+        services: [],
       });
-      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews?port=3000`)).json()).resolves.toMatchObject(
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/services?port=3000`)).json()).resolves.toMatchObject(
         {
-          previews: [{ port: 3000 }],
+          services: [{ port: 3000 }],
         },
       );
     } finally {
@@ -785,19 +791,23 @@ describe('core API', () => {
     }
   });
 
-  it('extends an active sandbox and returns preview shutdown timing', async () => {
+  it('extends an active sandbox and returns service shutdown timing', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
-    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', SANDBOX_STOP_DELAY_SECONDS: '60', SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS: '600' }),
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        SANDBOX_STOP_DELAY_SECONDS: '60',
+        SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS: '600',
+      }),
       createServices(store, { sandboxProvider: provider }),
     );
     baseUrl = await listen(server);
 
     try {
-      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Extend preview' });
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Extend service' });
       const { session } = (await createSession.json()) as { session: { id: string } };
       const sandbox = await provider.create({ sessionId: session.id });
       const now = new Date();
@@ -818,14 +828,22 @@ describe('core API', () => {
       const extendBody = (await extend.json()) as { sandbox: { keepaliveUntil: string; providerSync: string } };
       expect(extendBody.sandbox.providerSync).toBe('ok');
       expect(new Date(extendBody.sandbox.keepaliveUntil).getTime()).toBeGreaterThan(Date.now() + 250_000);
-      const secondExtend = await postJson(`${baseUrl}/sessions/${session.id}/sandbox/extend`, { seconds: 300, port: 3000 });
+      const secondExtend = await postJson(`${baseUrl}/sessions/${session.id}/sandbox/extend`, {
+        seconds: 300,
+        port: 3000,
+      });
       expect(secondExtend.status).toBe(200);
-      const secondExtendBody = (await secondExtend.json()) as { sandbox: { keepaliveUntil: string; providerSync: string } };
+      const secondExtendBody = (await secondExtend.json()) as {
+        sandbox: { keepaliveUntil: string; providerSync: string };
+      };
       expect(new Date(secondExtendBody.sandbox.keepaliveUntil).getTime()).toBeGreaterThan(
         new Date(extendBody.sandbox.keepaliveUntil).getTime() + 250_000,
       );
       expect(new Date(secondExtendBody.sandbox.keepaliveUntil).getTime()).toBeLessThanOrEqual(Date.now() + 600_000);
-      const cappedExtend = await postJson(`${baseUrl}/sessions/${session.id}/sandbox/extend`, { seconds: 300, port: 3000 });
+      const cappedExtend = await postJson(`${baseUrl}/sessions/${session.id}/sandbox/extend`, {
+        seconds: 300,
+        port: 3000,
+      });
       expect(cappedExtend.status).toBe(200);
       const cappedExtendBody = (await cappedExtend.json()) as { sandbox: { keepaliveUntil: string } };
       expect(provider.keepaliveRefreshes).toEqual([
@@ -834,33 +852,35 @@ describe('core API', () => {
         { providerSandboxId: sandbox.providerSandboxId, durationMs: 300_000 },
       ]);
 
-      const previews = (await (await fetch(`${baseUrl}/sessions/${session.id}/previews?port=3000`)).json()) as {
-        previews: Array<{ shutdownAt: string; keepaliveUntil: string }>;
+      const services = (await (await fetch(`${baseUrl}/sessions/${session.id}/services?port=3000`)).json()) as {
+        services: Array<{ shutdownAt: string; keepaliveUntil: string }>;
       };
-      expect(previews.previews[0]?.keepaliveUntil).toBe(cappedExtendBody.sandbox.keepaliveUntil);
-      expect(previews.previews[0]?.shutdownAt).toBe(cappedExtendBody.sandbox.keepaliveUntil);
+      expect(services.services[0]?.keepaliveUntil).toBe(cappedExtendBody.sandbox.keepaliveUntil);
+      expect(services.services[0]?.shutdownAt).toBe(cappedExtendBody.sandbox.keepaliveUntil);
     } finally {
       await closeServer(upstream);
     }
   });
 
-  it('does not list published previews from an old sandbox', async () => {
+  it('does not list published services from an old sandbox', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
-    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store, { sandboxProvider: provider }));
     baseUrl = await listen(server);
 
     try {
-      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stale preview' });
-      const { session } = (await createSession.json()) as { session: { id: string; createdAt: string; updatedAt: string } };
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stale service' });
+      const { session } = (await createSession.json()) as {
+        session: { id: string; createdAt: string; updatedAt: string };
+      };
       await store.updateSession({
         ...session,
         status: 'idle',
         createdAt: new Date(session.createdAt),
         updatedAt: new Date(session.updatedAt),
-        context: { previews: [{ port: 3000, providerSandboxId: 'old-sandbox' }] },
+        context: { services: [{ port: 3000, providerSandboxId: 'old-sandbox' }] },
       });
       const sandbox = await provider.create({ sessionId: session.id });
       const now = new Date();
@@ -876,32 +896,34 @@ describe('core API', () => {
         updatedAt: now,
       });
 
-      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews`)).json()).resolves.toEqual({
-        previews: [],
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/services`)).json()).resolves.toEqual({
+        services: [],
       });
     } finally {
       await closeServer(upstream);
     }
   });
 
-  it('does not list published previews from an old sandbox runtime', async () => {
+  it('does not list published services from an old sandbox runtime', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
-    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store, { sandboxProvider: provider }));
     baseUrl = await listen(server);
 
     try {
-      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stale runtime preview' });
-      const { session } = (await createSession.json()) as { session: { id: string; createdAt: string; updatedAt: string } };
+      const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Stale runtime service' });
+      const { session } = (await createSession.json()) as {
+        session: { id: string; createdAt: string; updatedAt: string };
+      };
       const sandbox = await provider.create({ sessionId: session.id });
       await store.updateSession({
         ...session,
         status: 'idle',
         createdAt: new Date(session.createdAt),
         updatedAt: new Date(session.updatedAt),
-        context: { previews: [{ port: 3000, providerSandboxId: sandbox.providerSandboxId, runtimeId: 'old-runtime' }] },
+        context: { services: [{ port: 3000, providerSandboxId: sandbox.providerSandboxId, runtimeId: 'old-runtime' }] },
       });
       const now = new Date();
       await store.createSandbox({
@@ -916,19 +938,19 @@ describe('core API', () => {
         updatedAt: now,
       });
 
-      await expect((await fetch(`${baseUrl}/sessions/${session.id}/previews`)).json()).resolves.toEqual({
-        previews: [],
+      await expect((await fetch(`${baseUrl}/sessions/${session.id}/services`)).json()).resolves.toEqual({
+        services: [],
       });
     } finally {
       await closeServer(upstream);
     }
   });
 
-  it('does not trust forwarded preview hosts unless explicitly configured', async () => {
+  it('does not trust forwarded service hosts unless explicitly configured', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
-    const provider = new PreviewSandboxProvider(upstreamBaseUrl);
+    const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(
       loadConfig({ API_AUTH_MODE: 'none', WEB_BASE_URL: 'https://deputies.localhost' }),
       createServices(store, { sandboxProvider: provider }),
@@ -937,7 +959,7 @@ describe('core API', () => {
 
     try {
       const response = await fetch(`${baseUrl}/`, {
-        headers: { 'x-forwarded-host': 'p-3000-session-1.deputies.localhost' },
+        headers: { 'x-forwarded-host': 's-3000-session-1.deputies.localhost' },
       });
 
       expect(response.status).toBe(404);
@@ -946,13 +968,13 @@ describe('core API', () => {
     }
   });
 
-  it('rejects preview hosts outside the configured preview domain', async () => {
+  it('rejects service hosts outside the configured preview domain', async () => {
     await closeServer(server);
-    server = createServer(loadConfig({ API_AUTH_MODE: 'none', PREVIEW_BASE_DOMAIN: 'deputies.localhost' }));
+    server = createServer(loadConfig({ API_AUTH_MODE: 'none', SERVICE_BASE_DOMAIN: 'deputies.localhost' }));
     baseUrl = await listen(server);
 
     const response = await fetch(`${baseUrl}/`, {
-      headers: { host: 'p-3000-session-1.evil.localhost' },
+      headers: { host: 's-3000-session-1.evil.localhost' },
     });
 
     expect(response.status).toBe(404);
@@ -1462,7 +1484,7 @@ async function listen(server: Server): Promise<string> {
   return `http://${address.address}:${address.port}`;
 }
 
-class PreviewSandboxProvider extends FakeSandboxProvider {
+class ServiceSandboxProvider extends FakeSandboxProvider {
   keepaliveRefreshes: Array<{ providerSandboxId: string; durationMs: number }> = [];
 
   override readonly capabilities = {

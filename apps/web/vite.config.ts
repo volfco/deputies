@@ -11,7 +11,7 @@ const allowedHosts = process.env.VITE_DEV_ALLOWED_HOSTS
       .filter(Boolean)
   : ['.localhost', '.ngrok-free.app', '.ngrok-free.dev', '.ngrok.io'];
 const apiProxy = { target: apiProxyTarget, ws: true };
-const previewProxy = {
+const serviceProxy = {
   target: apiProxyTarget,
   ws: true,
   xfwd: true,
@@ -23,18 +23,18 @@ const previewProxy = {
     };
     url?: string | undefined;
   }) {
-    return isPreviewRequest(request.headers) ? undefined : request.url;
+    return isServiceRequest(request.headers) ? undefined : request.url;
   },
 };
 
-function isPreviewRequest(headers: {
+function isServiceRequest(headers: {
   host?: string | undefined;
   'x-forwarded-host'?: string | string[] | undefined;
   'x-original-host'?: string | string[] | undefined;
 }): boolean {
   return [headers.host, headers['x-forwarded-host'], headers['x-original-host']]
     .flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []))
-    .some((host) => host.split(',').some((item) => item.trim().startsWith('p-')));
+    .some((host) => host.split(',').some((item) => item.trim().startsWith('s-')));
 }
 
 export default defineConfig({
@@ -50,7 +50,7 @@ export default defineConfig({
       '/sessions': apiProxy,
       '/events': apiProxy,
       '/webhooks': apiProxy,
-      '/': previewProxy,
+      '/': serviceProxy,
     },
   },
 });

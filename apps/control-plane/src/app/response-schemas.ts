@@ -65,9 +65,9 @@ export const publicApiResponseSchemas = {
     description: 'External resource list envelope.',
     fields: { externalResources: 'array' },
   },
-  previews: {
-    description: 'Published sandbox preview list envelope.',
-    fields: { previews: 'array' },
+  services: {
+    description: 'Published sandbox service list envelope.',
+    fields: { services: 'array' },
   },
   sandbox: {
     description: 'Sandbox lifecycle status envelope.',

@@ -44,8 +44,8 @@ export type AppConfig = {
   authCookieDomain?: string;
   authSuccessRedirectUrl?: string;
   webBaseUrl?: string;
-  previewBaseDomain?: string;
-  previewTrustForwardedHosts: boolean;
+  serviceBaseDomain?: string;
+  serviceTrustForwardedHosts: boolean;
   githubAppClientId?: string;
   githubAppClientSecret?: string;
   githubAppCallbackUrl?: string;
@@ -110,8 +110,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       parseNonNegativeInteger(env.SANDBOX_STOP_DELAY_SECONDS, 60, 'SANDBOX_STOP_DELAY_SECONDS') * 1000,
     sandboxRetentionMs: parsePositiveInteger(env.SANDBOX_RETENTION_SECONDS, 3600, 'SANDBOX_RETENTION_SECONDS') * 1000,
     sandboxKeepaliveMaxExtensionMs:
-      parsePositiveInteger(env.SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS, 7200, 'SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS') *
-      1000,
+      parsePositiveInteger(
+        env.SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS,
+        7200,
+        'SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS',
+      ) * 1000,
     runMode: parseEnum(env.RUN_MODE, ['all', 'api', 'worker'], 'all'),
     runner: parseEnum(env.RUNNER, ['fake', 'flue'], 'fake'),
     sandboxProvider: parseEnum(
@@ -130,7 +133,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     authProvider: parseEnum(env.AUTH_PROVIDER, ['static', 'github'], 'static'),
     authCookieSecure: parseBoolean(env.AUTH_COOKIE_SECURE, false, 'AUTH_COOKIE_SECURE'),
     authCookieSameSite: parseEnum(env.AUTH_COOKIE_SAME_SITE, ['lax', 'none'], 'lax'),
-    previewTrustForwardedHosts: parseBoolean(env.PREVIEW_TRUST_FORWARDED_HOSTS, false, 'PREVIEW_TRUST_FORWARDED_HOSTS'),
+    serviceTrustForwardedHosts: parseBoolean(env.SERVICE_TRUST_FORWARDED_HOSTS, false, 'SERVICE_TRUST_FORWARDED_HOSTS'),
     githubOAuthBaseUrl: env.GITHUB_OAUTH_BASE_URL ?? 'https://github.com',
     authGithubAllowedUsers: parseStringList(env.AUTH_GITHUB_ALLOWED_USERS),
     authGithubAllowedOrganizations: parseStringList(env.AUTH_GITHUB_ALLOWED_ORGANIZATIONS),
@@ -182,7 +185,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.AUTH_COOKIE_DOMAIN) config.authCookieDomain = env.AUTH_COOKIE_DOMAIN;
   if (env.AUTH_SUCCESS_REDIRECT_URL) config.authSuccessRedirectUrl = env.AUTH_SUCCESS_REDIRECT_URL;
   if (env.WEB_BASE_URL) config.webBaseUrl = env.WEB_BASE_URL;
-  if (env.PREVIEW_BASE_DOMAIN) config.previewBaseDomain = env.PREVIEW_BASE_DOMAIN;
+  if (env.SERVICE_BASE_DOMAIN) config.serviceBaseDomain = env.SERVICE_BASE_DOMAIN;
   if (env.GITHUB_APP_CLIENT_ID) config.githubAppClientId = env.GITHUB_APP_CLIENT_ID;
   if (env.GITHUB_APP_CLIENT_SECRET) config.githubAppClientSecret = env.GITHUB_APP_CLIENT_SECRET;
   if (env.GITHUB_APP_CALLBACK_URL) config.githubAppCallbackUrl = env.GITHUB_APP_CALLBACK_URL;

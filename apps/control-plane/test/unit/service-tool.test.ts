@@ -1,9 +1,9 @@
-import { createPreviewTool } from '../../src/runner-flue/preview-tool.js';
+import { createServiceTool } from '../../src/runner-flue/service-tool.js';
 
-describe('preview tool', () => {
-  it('publishes, lists, and unpublishes previews in session context', async () => {
+describe('service tool', () => {
+  it('publishes, lists, and unpublishes services in session context', async () => {
     let context: Record<string, unknown> = {};
-    const tool = createPreviewTool({
+    const tool = createServiceTool({
       sessionId: 'session-1',
       providerSandboxId: 'sandbox-1',
       sandboxMetadata: { runtimeId: 'runtime-1' },
@@ -21,24 +21,24 @@ describe('preview tool', () => {
     await expect(
       tool.execute({ action: 'publish', port: 5173, label: 'Vite app', path: '/dashboard' }).then(JSON.parse),
     ).resolves.toEqual({
-      previews: [
+      services: [
         { port: 5173, label: 'Vite app', path: '/dashboard', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
       ],
       keepalive: { keepaliveUntil: '2026-05-15T00:00:00.000Z', providerSync: 'not_supported' },
     });
     await expect(tool.execute({ action: 'list' }).then(JSON.parse)).resolves.toEqual({
-      previews: [
+      services: [
         { port: 5173, label: 'Vite app', path: '/dashboard', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
       ],
     });
-    await expect(tool.execute({ action: 'unpublish', port: 5173 })).resolves.toBe(JSON.stringify({ previews: [] }));
+    await expect(tool.execute({ action: 'unpublish', port: 5173 })).resolves.toBe(JSON.stringify({ services: [] }));
   });
 
-  it('keeps existing previews by default when publishing', async () => {
+  it('keeps existing services by default when publishing', async () => {
     let context: Record<string, unknown> = {
-      previews: [{ port: 2343, label: 'Old server', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' }],
+      services: [{ port: 2343, label: 'Old server', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' }],
     };
-    const tool = createPreviewTool({
+    const tool = createServiceTool({
       sessionId: 'session-1',
       providerSandboxId: 'sandbox-1',
       sandboxMetadata: { runtimeId: 'runtime-1' },
@@ -53,8 +53,10 @@ describe('preview tool', () => {
       },
     });
 
-    await expect(tool.execute({ action: 'publish', port: 2344, label: 'New server' }).then(JSON.parse)).resolves.toEqual({
-      previews: [
+    await expect(
+      tool.execute({ action: 'publish', port: 2344, label: 'New server' }).then(JSON.parse),
+    ).resolves.toEqual({
+      services: [
         { port: 2343, label: 'Old server', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
         { port: 2344, label: 'New server', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
       ],
@@ -62,14 +64,14 @@ describe('preview tool', () => {
     });
   });
 
-  it('drops previews from old sandbox runtimes when publishing', async () => {
+  it('drops services from old sandbox runtimes when publishing', async () => {
     let context: Record<string, unknown> = {
-      previews: [
+      services: [
         { port: 2343, label: 'Old runtime', providerSandboxId: 'sandbox-1', runtimeId: 'old-runtime' },
         { port: 2344, label: 'Current runtime', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
       ],
     };
-    const tool = createPreviewTool({
+    const tool = createServiceTool({
       sessionId: 'session-1',
       providerSandboxId: 'sandbox-1',
       sandboxMetadata: { runtimeId: 'runtime-1' },
@@ -84,23 +86,25 @@ describe('preview tool', () => {
       },
     });
 
-    await expect(tool.execute({ action: 'publish', port: 2345, label: 'New server' }).then(JSON.parse)).resolves.toEqual({
-      previews: [
+    await expect(
+      tool.execute({ action: 'publish', port: 2345, label: 'New server' }).then(JSON.parse),
+    ).resolves.toEqual({
+      services: [
         { port: 2344, label: 'Current runtime', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
         { port: 2345, label: 'New server', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
       ],
       keepalive: { keepaliveUntil: '2026-05-15T00:00:00.000Z', providerSync: 'not_supported' },
     });
-    expect(context.previews).toEqual([
+    expect(context.services).toEqual([
       { port: 2344, label: 'Current runtime', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
       { port: 2345, label: 'New server', providerSandboxId: 'sandbox-1', runtimeId: 'runtime-1' },
     ]);
   });
 
-  it('extends publish keepalive to at least the default preview TTL', async () => {
+  it('extends publish keepalive to at least the default service TTL', async () => {
     let context: Record<string, unknown> = {};
     const extensions: Array<{ durationMs: number; maxDurationMs: number; port?: number }> = [];
-    const tool = createPreviewTool({
+    const tool = createServiceTool({
       sessionId: 'session-1',
       providerSandboxId: 'sandbox-1',
       sandboxMetadata: { runtimeId: 'runtime-1' },

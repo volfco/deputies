@@ -269,7 +269,7 @@ describe('WorkerService', () => {
     const session = await services.sessions.create({ title: 'Dynamic context' });
     await store.updateSession({
       ...session,
-      context: { previews: [{ port: 3000, label: 'Web app' }] },
+      context: { services: [{ port: 3000, label: 'Web app' }] },
     });
     await services.messages.enqueue({ sessionId: session.id, prompt: 'choose repo' });
 
@@ -287,7 +287,7 @@ describe('WorkerService', () => {
 
     await expect(services.sessions.get(session.id)).resolves.toMatchObject({
       context: {
-        previews: [],
+        services: [],
         repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' },
       },
     });
@@ -344,15 +344,15 @@ describe('WorkerService', () => {
     await expect(services.messages.list(session.id)).resolves.toMatchObject([{ status: 'pending' }]);
   });
 
-  it('does not clear previews after the worker loses its lease', async () => {
+  it('does not clear services after the worker loses its lease', async () => {
     const store = new MemoryStore();
     const services = createServices(store);
-    const session = await services.sessions.create({ title: 'Stale preview clearing' });
+    const session = await services.sessions.create({ title: 'Stale service clearing' });
     await store.updateSession({
       ...session,
-      context: { previews: [{ port: 3000, label: 'Web app' }] },
+      context: { services: [{ port: 3000, label: 'Web app' }] },
     });
-    await services.messages.enqueue({ sessionId: session.id, prompt: 'render preview' });
+    await services.messages.enqueue({ sessionId: session.id, prompt: 'render service' });
 
     const getSession = store.getSession.bind(store);
     let recovered = false;
@@ -377,7 +377,7 @@ describe('WorkerService', () => {
     await expect(worker.processNext()).resolves.toBe(true);
 
     await expect(services.sessions.get(session.id)).resolves.toMatchObject({
-      context: { previews: [{ port: 3000, label: 'Web app' }] },
+      context: { services: [{ port: 3000, label: 'Web app' }] },
       status: 'queued',
     });
     const events = await services.events.list(session.id);

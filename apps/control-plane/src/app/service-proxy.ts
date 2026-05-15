@@ -8,15 +8,15 @@ import { requireApiBearerToken, type AppConfig } from '../config/index.js';
 import type { SandboxPreviewUrl, SandboxProvider } from '../sandbox/types.js';
 import type { AppStore } from '../store/types.js';
 
-type PreviewServices = {
+type ServiceProxyServices = {
   store: AppStore;
   sessions: { get(sessionId: string): Promise<unknown | null> };
   sandboxProvider?: SandboxProvider;
 };
 
-export async function getSessionPreview(
+export async function getSessionService(
   config: AppConfig,
-  services: PreviewServices,
+  services: ServiceProxyServices,
   sessionId: string,
   port: number,
 ): Promise<SandboxPreviewUrl | null> {
@@ -34,8 +34,8 @@ export async function getSessionPreview(
   return preview && isAllowedPreviewTarget(config, provider.name, preview.targetUrl) ? preview : null;
 }
 
-export async function isActivePreviewSandbox(
-  services: PreviewServices,
+export async function isActiveServiceSandbox(
+  services: ServiceProxyServices,
   sessionId: string,
   providerSandboxId: string,
 ): Promise<boolean> {
@@ -45,7 +45,7 @@ export async function isActivePreviewSandbox(
   return sandbox?.providerSandboxId === providerSandboxId;
 }
 
-export function serializePreview(
+export function serializeService(
   c: Context,
   config: AppConfig,
   sessionId: string,
@@ -66,14 +66,14 @@ export function serializePreview(
   };
 }
 
-export async function proxyPreview(
+export async function proxyService(
   c: Context,
   config: AppConfig,
   sessionId: string,
   port: number,
   preview: SandboxPreviewUrl,
 ): Promise<Response> {
-  const isHostPreview = Boolean(parsePreviewHostFromRequest(config, c));
+  const isHostPreview = Boolean(parseServiceHostFromRequest(config, c));
   const target = previewTargetUrl(c, sessionId, port, preview.targetUrl, isHostPreview);
   const request = c.req.raw;
   const response = await fetch(target, {
@@ -99,7 +99,7 @@ export async function proxyPreview(
   });
 }
 
-export function parsePreviewHostFromRequest(config: AppConfig, c: Context): { sessionId: string; port: number } | null {
+export function parseServiceHostFromRequest(config: AppConfig, c: Context): { sessionId: string; port: number } | null {
   return parsePreviewHostFromHosts(previewRequestHosts(config, c), previewAllowedDomains(config, c));
 }
 
@@ -111,23 +111,23 @@ export async function isAuthorizedRequest(config: AppConfig, store: AppStore, c:
   return Boolean(authSessionId && (await store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() })));
 }
 
-export async function handlePreviewUpgrade(
+export async function handleServiceUpgrade(
   config: AppConfig,
-  services: PreviewServices,
+  services: ServiceProxyServices,
   request: IncomingMessage,
   socket: Duplex,
   head: Buffer,
 ): Promise<void> {
   const incoming = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const hostPreview = parsePreviewHostFromNodeRequest(config, request);
-  const pathMatch = incoming.pathname.match(/^\/sessions\/([^/]+)\/previews\/(\d+)(?:\/.*)?$/);
+  const pathMatch = incoming.pathname.match(/^\/sessions\/([^/]+)\/services\/(\d+)(?:\/.*)?$/);
   if (!hostPreview && !pathMatch) {
     socket.destroy();
     return;
   }
 
   const sessionId = hostPreview?.sessionId ?? decodeURIComponent(pathMatch?.[1] ?? '');
-  const port = hostPreview?.port ?? parsePreviewPort(pathMatch?.[2]);
+  const port = hostPreview?.port ?? parseServicePort(pathMatch?.[2]);
   if (!port || !(await isAuthorizedUpgrade(config, services, request))) {
     socket.destroy();
     return;
@@ -137,7 +137,7 @@ export async function handlePreviewUpgrade(
     socket.destroy();
     return;
   }
-  const preview = await getSessionPreview(config, services, sessionId, port);
+  const preview = await getSessionService(config, services, sessionId, port);
   if (!preview) {
     socket.destroy();
     return;
@@ -161,7 +161,7 @@ export async function handlePreviewUpgrade(
   proxyPreviewUpgrade(upgradeInput);
 }
 
-export function parsePreviewPort(value: string | undefined): number | null {
+export function parseServicePort(value: string | undefined): number | null {
   if (!value) return null;
   const port = Number(value);
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
@@ -218,7 +218,7 @@ function previewTargetUrlFromUrl(
   port: number,
   targetUrl: string,
 ): string {
-  const prefix = `/sessions/${sessionId}/previews/${port}`;
+  const prefix = `/sessions/${sessionId}/services/${port}`;
   let suffix = '/';
   if (isHostPreview) {
     suffix = incoming.pathname || '/';
@@ -237,7 +237,7 @@ function previewUrl(c: Context, config: AppConfig, sessionId: string, port: numb
   const requestHost = baseUrl?.host ?? previewRequestHost(config, c) ?? requestUrl.host;
   const protocol =
     baseUrl?.protocol.replace(/:$/, '') ?? c.req.header('x-forwarded-proto') ?? requestUrl.protocol.replace(/:$/, '');
-  const domain = config.previewBaseDomain ?? previewDomainFromHost(requestHost);
+  const domain = config.serviceBaseDomain ?? previewDomainFromHost(requestHost);
   const suffix = path.startsWith('/') ? path.slice(1) : path;
   if (!domain) return `${previewBasePath(sessionId, port)}${suffix}`;
   return `${protocol}://${previewHostLabel(sessionId, port)}.${domain}/${suffix}`;
@@ -251,7 +251,7 @@ function previewDomainFromHost(host: string): string | null {
 }
 
 function previewHostLabel(sessionId: string, port: number): string {
-  return `p-${port}-${sessionId}`;
+  return `s-${port}-${sessionId}`;
 }
 
 function parsePreviewHost(
@@ -262,9 +262,9 @@ function parsePreviewHost(
   if (!hostname) return null;
   if (allowedDomains?.length && !allowedDomains.some((domain) => hostname.endsWith(`.${domain}`))) return null;
   const label = hostname.split('.')[0];
-  const match = label?.match(/^p-(\d+)-(.+)$/);
+  const match = label?.match(/^s-(\d+)-(.+)$/);
   if (!match) return null;
-  const port = parsePreviewPort(match[1]);
+  const port = parseServicePort(match[1]);
   if (!port) return null;
   return { port, sessionId: match[2]! };
 }
@@ -319,7 +319,7 @@ function previewHostHeaderValues(
   forwardedHost: string | string[] | undefined,
   originalHost: string | string[] | undefined,
 ): Array<string | string[] | undefined> {
-  return config.previewTrustForwardedHosts ? [forwardedHost, originalHost, host] : [host];
+  return config.serviceTrustForwardedHosts ? [forwardedHost, originalHost, host] : [host];
 }
 
 function previewHeaderHosts(values: Array<string | string[] | undefined>): string[] {
@@ -336,7 +336,7 @@ function previewHeaderHosts(values: Array<string | string[] | undefined>): strin
 
 function previewAllowedDomains(config: AppConfig, request?: Context | IncomingMessage): string[] {
   const domains = new Set<string>();
-  if (config.previewBaseDomain) domains.add(stripPort(config.previewBaseDomain));
+  if (config.serviceBaseDomain) domains.add(stripPort(config.serviceBaseDomain));
   if (config.webBaseUrl) {
     const derived = previewDomainFromHost(new URL(config.webBaseUrl).host);
     if (derived) domains.add(stripPort(derived));
@@ -362,7 +362,7 @@ function stripPort(host: string): string {
 
 async function isAuthorizedUpgrade(
   config: AppConfig,
-  services: PreviewServices,
+  services: ServiceProxyServices,
   request: IncomingMessage,
 ): Promise<boolean> {
   if (config.apiAuthMode === 'none') return true;
@@ -514,5 +514,5 @@ function rewritePreviewLocation(location: string, sessionId: string, port: numbe
 }
 
 function previewBasePath(sessionId: string, port: number): string {
-  return `/sessions/${sessionId}/previews/${port}/`;
+  return `/sessions/${sessionId}/services/${port}/`;
 }
