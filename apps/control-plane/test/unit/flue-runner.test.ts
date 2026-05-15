@@ -53,7 +53,7 @@ describe('FlueRunner', () => {
 
     expect(calls).toMatchObject([{ agentId: 'session-1', sessionId: 'session-1', sandbox, cwd: '/workspace' }]);
     expect(calls[0]?.onEvent).toEqual(expect.any(Function));
-    expect(prompts[0]).toContain('Preview tool guidance:');
+    expect(prompts[0]).toContain('Service tool guidance:');
     expect(prompts[0]).toContain('User request:\nhello');
     expect(result.text).toBe('flue: ok');
     expect(events.map((event) => event.type)).toEqual(['run_started', 'agent_text_delta', 'run_completed']);

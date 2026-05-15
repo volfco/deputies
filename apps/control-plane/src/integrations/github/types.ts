@@ -9,6 +9,14 @@ export type GitHubInstallationToken = {
   installationId: number;
 };
 
+export type GitHubInstallationRepository = GitHubRepository & {
+  id: number;
+  fullName: string;
+  description: string | null;
+  private: boolean;
+  defaultBranch: string;
+};
+
 export type GitHubRepositoryAccess = GitHubRepository & {
   provider: 'github';
   cloneUrl: string;

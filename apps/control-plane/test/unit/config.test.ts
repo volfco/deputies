@@ -35,6 +35,7 @@ describe('loadConfig', () => {
       authGithubAllowedUsers: [],
       authGithubAllowedOrganizations: [],
       flueSessionStore: 'postgres',
+      flueModelOptions: [],
       slackApiBaseUrl: 'https://slack.com/api',
       unsafeAllowAllSlackIds: false,
       slackAllowedTeamIds: [],

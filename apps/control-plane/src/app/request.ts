@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import type { AppConfig } from '../config/index.js';
 import { extractRepositoryReference, type RepositoryReference } from '../repositories/extract.js';
 
 export async function readJsonBody(c: Context, maxBytes: number): Promise<Record<string, unknown>> {
@@ -67,6 +68,26 @@ export function parseRepositoryBody(value: unknown): RepositoryReference | undef
   const reference = extractRepositoryReference(`repo:${owner}/${repo}`);
   if (!reference) throw new HttpRequestError(400, 'invalid_request', 'Expected valid GitHub repository owner and name');
   return reference;
+}
+
+export function parseModelBody(value: unknown, config: Pick<AppConfig, 'flueModel' | 'flueModelOptions'>): string | undefined {
+  const model = optionalString(value);
+  if (!model) return undefined;
+
+  const allowedModels = config.flueModelOptions.length ? config.flueModelOptions : config.flueModel ? [config.flueModel] : [];
+  if (allowedModels.length && !allowedModels.includes(model)) {
+    throw new HttpRequestError(400, 'invalid_request', 'Expected model to be one of the configured model options');
+  }
+  return model;
+}
+
+export function parseBranchBody(value: unknown): string | undefined {
+  const branch = optionalString(value);
+  if (!branch) return undefined;
+  if (branch.includes('\0') || branch.startsWith('-') || branch.includes('..')) {
+    throw new HttpRequestError(400, 'invalid_request', 'Expected valid branch name');
+  }
+  return branch;
 }
 
 export function parseCursor(value: string | null): number | undefined {

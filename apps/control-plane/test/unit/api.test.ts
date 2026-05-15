@@ -6,6 +6,7 @@ import { ArtifactService } from '../../src/artifacts/service.js';
 import { FilesystemArtifactObjectStorage, type ArtifactObjectStorage } from '../../src/artifacts/storage.js';
 import { createServer, createServices, createWorkerHealthServer, type AppServices } from '../../src/app/server.js';
 import { loadConfig } from '../../src/config/index.js';
+import { GitHubApiError } from '../../src/integrations/github/client.js';
 import { FakeSandboxProvider } from '../../src/sandbox/fake.js';
 import type { SandboxPreviewUrlInput } from '../../src/sandbox/types.js';
 import { MemoryStore } from '../../src/store/memory.js';
@@ -56,6 +57,36 @@ describe('core API', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ status: 'ok', runMode: 'all' });
+  });
+
+  it('maps GitHub branch authorization failures to stable API errors', async () => {
+    services.githubRepositoryAccess = {
+      async listRepositories() {
+        return [];
+      },
+      async listBranches() {
+        throw new GitHubApiError('GET', '/repos/acme/widget/branches', 403, 'Resource not accessible by integration');
+      },
+    };
+
+    const response = await fetch(`${baseUrl}/repositories/acme/widget/branches`);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: 'github_authorization_failed' });
+  });
+
+  it('ignores branch message context without repository context', async () => {
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Branch only' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+
+    const response = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
+      prompt: 'use a branch',
+      branch: 'feature/demo',
+    });
+
+    expect(response.status).toBe(202);
+    const body = (await response.json()) as { message: Record<string, unknown> };
+    expect(body.message).not.toHaveProperty('context');
   });
 
   it('exposes only worker health routes for worker mode', async () => {

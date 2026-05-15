@@ -1,4 +1,4 @@
-import { FormEvent, WheelEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, PanelLeftOpen } from 'lucide-react';
 import {
   ApiError,
@@ -20,12 +20,15 @@ import {
   getCurrentUser,
   getArtifactPreview,
   getHealth,
+  getModelOptions,
+  listBranches,
   login,
   listArtifacts,
   listCallbacks,
   listEvents,
   listExternalResources,
   listMessages,
+  listRepositoryOptions,
   listServices,
   listSessions,
   logout,
@@ -39,6 +42,8 @@ import {
   updateSession,
   type Health,
   type AuthUser,
+  type BranchOption,
+  type RepositoryOption,
 } from './api.js';
 import { Button } from './components/ui/button.js';
 import {
@@ -100,8 +105,20 @@ export function App() {
   const [services, setServices] = useState<SandboxService[]>([]);
   const [externalResources, setExternalResources] = useState<ExternalResource[]>([]);
   const [callbacks, setCallbacks] = useState<CallbackDelivery[]>([]);
+  const [repositoryOptions, setRepositoryOptions] = useState<RepositoryOption[]>([]);
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [repositoryOptionsLoading, setRepositoryOptionsLoading] = useState(false);
+  const [repositoryOptionsError, setRepositoryOptionsError] = useState('');
+  const [branchOptionsLoading, setBranchOptionsLoading] = useState(false);
+  const [branchOptionsError, setBranchOptionsError] = useState('');
+  const [newThreadModel, setNewThreadModel] = useState('');
+  const [newThreadBranch, setNewThreadBranch] = useState('');
   const [newThreadPrompt, setNewThreadPrompt] = useState('');
   const [newThreadRepository, setNewThreadRepository] = useState('');
+  const [followUpRepository, setFollowUpRepository] = useState('');
+  const [followUpBranch, setFollowUpBranch] = useState('');
+  const [followUpModel, setFollowUpModel] = useState('');
   const [editingMessageId, setEditingMessageId] = useState('');
   const [messageDraft, setMessageDraft] = useState('');
   const [draftToken, setDraftToken] = useState(token);
@@ -140,6 +157,7 @@ export function App() {
   const sessionsRefreshQueuedRef = useRef(false);
   const detailRefreshInFlightRef = useRef<string | null>(null);
   const detailRefreshQueuedSessionIdRef = useRef<string | null>(null);
+  const branchOptionsRepositoryRef = useRef('');
 
   const bearerAuthRequired = health?.apiAuthMode === 'bearer';
   const sessionAuthRequired = health?.apiAuthMode === 'session';
@@ -152,6 +170,8 @@ export function App() {
     [sessions, selectedSessionId],
   );
   const selectedRepository = repositoryLabel(selectedSession?.context?.repository);
+  const selectedSessionModel = typeof selectedSession?.context?.model === 'string' ? selectedSession.context.model : '';
+  const selectedSessionBranch = typeof selectedSession?.context?.branch === 'string' ? selectedSession.context.branch : '';
   const selectedSessionArchived = selectedSession?.status === 'archived';
   const selectedSessionDetailLoading = Boolean(selectedSessionId && detailLoadedSessionId !== selectedSessionId);
   const sortedSessions = useMemo(() => sortSessionsByLastActivity(sessions), [sessions]);
@@ -169,6 +189,95 @@ export function App() {
       if (sessionsRefreshTimerRef.current !== null) window.clearTimeout(sessionsRefreshTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!canCallApi) return;
+    let cancelled = false;
+
+    setRepositoryOptionsLoading(true);
+    setRepositoryOptionsError('');
+    Promise.all([listRepositoryOptions(token), getModelOptions(token)])
+      .then(([repositories, models]) => {
+        if (cancelled) return;
+        setRepositoryOptions(repositories);
+        setModelOptions(models.models);
+        setNewThreadModel((current) => {
+          if (current && models.models.includes(current)) return current;
+          return models.defaultModel ?? models.models[0] ?? '';
+        });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRepositoryOptionsError(errorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setRepositoryOptionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canCallApi, token]);
+
+  useEffect(() => {
+    const repository =
+      isCreatingThread || !selectedSessionId ? newThreadRepository : followUpRepository || selectedRepository || '';
+    if (branchOptionsRepositoryRef.current !== repository) {
+      branchOptionsRepositoryRef.current = repository;
+      setBranchOptions([]);
+      setBranchOptionsError('');
+      if (isCreatingThread || !selectedSessionId) setNewThreadBranch('');
+      else if (followUpRepository) setFollowUpBranch('');
+    }
+    if (!canCallApi || !repository) {
+      setBranchOptionsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setBranchOptionsLoading(true);
+    setBranchOptionsError('');
+    listBranches({ repository, token })
+      .then((branches) => {
+        if (cancelled) return;
+        setBranchOptions(branches);
+        const setBranch = isCreatingThread || !selectedSessionId ? setNewThreadBranch : setFollowUpBranch;
+        setBranch((current) => {
+          if (current && branches.some((branch) => branch.name === current)) return current;
+          if (!isCreatingThread && !selectedSessionId) return '';
+          if (!isCreatingThread && !followUpRepository) return '';
+          const repo = repositoryOptions.find((option) => option.fullName === repository);
+          return repo?.defaultBranch ?? branches[0]?.name ?? '';
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setBranchOptions([]);
+        setBranchOptionsError(errorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled) setBranchOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canCallApi,
+    token,
+    isCreatingThread,
+    selectedSessionId,
+    selectedSessionBranch,
+    newThreadRepository,
+    followUpRepository,
+    selectedRepository,
+    repositoryOptions,
+  ]);
+
+  useEffect(() => {
+    const appShell = appShellRef.current;
+    if (!appShell) return;
+
+    appShell.addEventListener('wheel', handleAppWheel, { capture: true, passive: false });
+    return () => appShell.removeEventListener('wheel', handleAppWheel, { capture: true });
+  });
 
   useEffect(() => {
     applyThemePreference(themePreference);
@@ -507,6 +616,8 @@ export function App() {
         prompt: firstPrompt,
         token,
         ...(firstRepository ? { repository: firstRepository } : {}),
+        ...(newThreadModel ? { model: newThreadModel } : {}),
+        ...(newThreadBranch ? { branch: newThreadBranch } : {}),
       });
       setSessions((current) => [
         { ...session, status: session.status === 'active' ? 'active' : 'queued', updatedAt: message.createdAt },
@@ -531,18 +642,19 @@ export function App() {
     }
   }
 
-  async function handleSendMessage(input: { prompt: string; repository: string }): Promise<boolean> {
+  async function handleSendMessage(input: { prompt: string }): Promise<boolean> {
     const messagePrompt = input.prompt.trim();
     if (sendMessageInFlightRef.current || !selectedSessionId || selectedSessionArchived || !messagePrompt) return false;
     sendMessageInFlightRef.current = true;
     setError('');
     try {
-      const repositoryInput = input.repository.trim();
       const message = await enqueueMessage({
         sessionId: selectedSessionId,
         prompt: messagePrompt,
         token,
-        ...(repositoryInput ? { repository: repositoryInput } : {}),
+        ...(followUpRepository.trim() ? { repository: followUpRepository.trim() } : {}),
+        ...(followUpModel ? { model: followUpModel } : {}),
+        ...(followUpBranch ? { branch: followUpBranch } : {}),
       });
       setMessages((current) => [...current, message]);
       setSessions((current) =>
@@ -562,6 +674,12 @@ export function App() {
     } finally {
       sendMessageInFlightRef.current = false;
     }
+  }
+
+  function handleFollowUpRepositoryChange(value: string) {
+    const nextRepository = value === selectedRepository ? '' : value;
+    setFollowUpRepository(nextRepository);
+    setFollowUpBranch('');
   }
 
   async function handleUpdateTitle(title: string): Promise<boolean> {
@@ -735,6 +853,9 @@ export function App() {
     localStorage.setItem(newSessionSelectedStorageKey, 'true');
     setSelectedSessionId('');
     setIsCreatingThread(true);
+    setFollowUpRepository('');
+    setFollowUpBranch('');
+    setFollowUpModel('');
     setMessages([]);
     setEvents([]);
     setArtifacts([]);
@@ -751,6 +872,9 @@ export function App() {
     localStorage.removeItem(newSessionSelectedStorageKey);
     setSelectedSessionId(sessionId);
     setIsCreatingThread(false);
+    setFollowUpRepository('');
+    setFollowUpBranch('');
+    setFollowUpModel('');
     setSidebarOpen(false);
   }
 
@@ -765,7 +889,7 @@ export function App() {
     setThreadAutoFollowEnabled(isThreadNearBottom(container));
   }
 
-  function handleAppWheel(event: WheelEvent<HTMLElement>): void {
+  function handleAppWheel(event: globalThis.WheelEvent): void {
     if (!event.deltaY || event.defaultPrevented) return;
     const appShell = appShellRef.current;
     const threadScroll = threadScrollRef.current;
@@ -955,7 +1079,6 @@ export function App() {
   return (
     <main
       ref={appShellRef}
-      onWheelCapture={handleAppWheel}
       className="flex h-screen flex-col overflow-hidden bg-background text-foreground"
     >
       {error ? (
@@ -1039,10 +1162,21 @@ export function App() {
                     loading={loading}
                     prompt={newThreadPrompt}
                     repository={newThreadRepository}
+                    repositoryOptions={repositoryOptions}
+                    repositoryOptionsLoading={repositoryOptionsLoading}
+                    repositoryOptionsError={repositoryOptionsError}
+                    branch={newThreadBranch}
+                    branchOptions={branchOptions}
+                    branchOptionsLoading={branchOptionsLoading}
+                    branchOptionsError={branchOptionsError}
+                    model={newThreadModel}
+                    modelOptions={modelOptions}
                     showOpenSidebar={!sidebarOpen}
                     onOpenSidebar={expandSidebar}
                     onPromptChange={setNewThreadPrompt}
                     onRepositoryChange={setNewThreadRepository}
+                    onBranchChange={setNewThreadBranch}
+                    onModelChange={setNewThreadModel}
                     onSubmit={handleCreateThread}
                   />
                 ) : (
@@ -1070,6 +1204,7 @@ export function App() {
                               <>
                                 <MobileContextPanel
                                   repository={selectedRepository}
+                                  branch={selectedSessionBranch || null}
                                   artifacts={artifacts}
                                   services={services}
                                   externalResources={externalResources}
@@ -1122,6 +1257,22 @@ export function App() {
                             key={selectedSession.id}
                             archived={selectedSessionArchived}
                             hasSelectedRepository={Boolean(selectedRepository)}
+                            repository={followUpRepository}
+                            inheritedRepository={selectedRepository || ''}
+                            repositoryOptions={repositoryOptions}
+                            repositoryOptionsLoading={repositoryOptionsLoading}
+                            repositoryOptionsError={repositoryOptionsError}
+                            branch={followUpBranch}
+                            inheritedBranch={selectedSessionBranch}
+                            branchOptions={branchOptions}
+                            branchOptionsLoading={branchOptionsLoading}
+                            branchOptionsError={branchOptionsError}
+                            model={followUpModel}
+                            inheritedModel={selectedSessionModel}
+                            modelOptions={modelOptions}
+                            onBranchChange={setFollowUpBranch}
+                            onModelChange={setFollowUpModel}
+                            onRepositoryChange={handleFollowUpRepositoryChange}
                             onFocusChange={setComposerFocused}
                             onSubmit={handleSendMessage}
                           />
@@ -1130,6 +1281,7 @@ export function App() {
                       {selectedSessionDetailLoading ? null : (
                         <DesktopContextPanel
                           repository={selectedRepository}
+                          branch={selectedSessionBranch || null}
                           artifacts={artifacts}
                           services={services}
                           externalResources={externalResources}

@@ -31,6 +31,11 @@ import { EventService } from '../events/service.js';
 import { ExternalResourceService } from '../external-resources/service.js';
 import { GenericWebhookError, GenericWebhookService } from '../integrations/generic-webhook/service.js';
 import { type GitHubArchivedSessionNotifier } from '../integrations/github/archived-session-notifier.js';
+import {
+  GitHubRepositoryAccessError,
+  type GitHubRepositoryAccessService,
+} from '../integrations/github/repository-access.js';
+import { GitHubApiError } from '../integrations/github/client.js';
 import { verifyGitHubWebhookSignature } from '../integrations/github/webhook-auth.js';
 import { GitHubWebhookService } from '../integrations/github/webhook-service.js';
 import { type GitHubIssueContextFetcher } from '../integrations/github/issue-context-fetcher.js';
@@ -60,7 +65,9 @@ import {
 import {
   HttpRequestError,
   optionalString,
+  parseBranchBody,
   parseCursor,
+  parseModelBody,
   parseRepositoryBody,
   readJsonBody,
   readRawBody,
@@ -85,6 +92,7 @@ export type AppServices = {
   githubReactionSender?: Pick<GitHubReactionSender, 'addEyes'>;
   githubIssueContextFetcher?: Pick<GitHubIssueContextFetcher, 'listIssueComments'>;
   githubArchivedSessionNotifier?: Pick<GitHubArchivedSessionNotifier, 'postNotice' | 'postRecoveryAcknowledgement'>;
+  githubRepositoryAccess?: Pick<GitHubRepositoryAccessService, 'listRepositories' | 'listBranches'>;
   githubOAuthClient?: GitHubOAuthClient;
 };
 
@@ -276,6 +284,9 @@ export function createApp(config: AppConfig, services = createServices()) {
 
   app.use('/sessions/*', apiAuthMiddleware(config, services.store));
   app.use('/sessions', apiAuthMiddleware(config, services.store));
+  app.use('/repositories/*', apiAuthMiddleware(config, services.store));
+  app.use('/repositories', apiAuthMiddleware(config, services.store));
+  app.use('/models', apiAuthMiddleware(config, services.store));
   app.use('/events/*', apiAuthMiddleware(config, services.store));
   app.use('/events', apiAuthMiddleware(config, services.store));
 
@@ -304,6 +315,46 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.get('/sessions', async (c) => {
     const sessions = await services.sessions.list();
     return c.json({ sessions });
+  });
+
+  app.get('/repositories', async (c) => {
+    let repositories = configuredRepositoryOptions(config);
+    if (services.githubRepositoryAccess) {
+      try {
+        const installedRepositories = await services.githubRepositoryAccess.listRepositories();
+        if (installedRepositories.length) {
+          repositories = installedRepositories.map((repository) => ({
+            fullName: repository.fullName,
+            owner: repository.owner,
+            name: repository.repo,
+            description: repository.description,
+            private: repository.private,
+            defaultBranch: repository.defaultBranch,
+          }));
+        }
+      } catch {
+        // Keep the picker useful when GitHub installation listing is temporarily unavailable.
+      }
+    }
+    return c.json({ repositories });
+  });
+
+  app.get('/repositories/:owner/:repo/branches', async (c) => {
+    if (!services.githubRepositoryAccess) return c.json({ branches: [] });
+    try {
+      const branches = await services.githubRepositoryAccess.listBranches({
+        owner: c.req.param('owner'),
+        repo: c.req.param('repo'),
+      });
+      return c.json({ branches });
+    } catch (error) {
+      return writeGitHubRepositoryError(c, error);
+    }
+  });
+
+  app.get('/models', async (c) => {
+    const models = config.flueModelOptions.length ? config.flueModelOptions : config.flueModel ? [config.flueModel] : [];
+    return c.json({ models, defaultModel: config.flueModel ?? models[0] ?? null });
   });
 
   app.get('/events', async (c) => {
@@ -525,11 +576,18 @@ export function createApp(config: AppConfig, services = createServices()) {
 
     try {
       const repository = parseRepositoryBody(body.repository);
+      const model = parseModelBody(body.model, config);
+      const branch = repository ? parseBranchBody(body.branch) : undefined;
+      const context = {
+        ...(repository ? { repository } : {}),
+        ...(model ? { model } : {}),
+        ...(repository && branch ? { branch } : {}),
+      };
       const message = await services.messages.enqueue({
         sessionId,
         prompt,
         ...(await messageAuthor(c, config, services.store)),
-        ...(repository ? { context: { repository } } : {}),
+        ...(Object.keys(context).length ? { context } : {}),
       });
       return c.json({ message }, 202);
     } catch (error) {
@@ -856,6 +914,31 @@ function allowedCorsOrigin(config: AppConfig): (origin: string) => string | unde
 
 function writeError(c: Context, statusCode: number, error: string, message: string) {
   return c.json({ error, message }, statusCode as never);
+}
+
+function writeGitHubRepositoryError(c: Context, error: unknown) {
+  if (error instanceof GitHubRepositoryAccessError) {
+    return writeError(c, 403, error.code, error.message);
+  }
+  if (error instanceof GitHubApiError) {
+    if (error.statusCode === 401 || error.statusCode === 403) {
+      return writeError(c, 403, 'github_authorization_failed', 'GitHub authorization failed for this repository');
+    }
+    if (error.statusCode === 404) {
+      return writeError(c, 404, 'github_repository_not_found', 'GitHub repository or installation was not found');
+    }
+    return writeError(c, 502, 'github_api_error', 'GitHub API request failed');
+  }
+  throw error;
+}
+
+function configuredRepositoryOptions(config: AppConfig) {
+  return config.githubAllowedRepositories
+    .filter((repository) => repository.includes('/') && !repository.includes('*'))
+    .map((fullName) => {
+      const [owner, name] = fullName.split('/');
+      return { fullName, owner, name };
+    });
 }
 
 function parseKeepaliveSeconds(value: unknown): number {

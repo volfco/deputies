@@ -16,7 +16,7 @@ pnpm web:dev
 
 For quick UI experiments that do not need durable state, you can instead run the API with `APP_STORE=memory`.
 
-The web app uses same-origin API requests by default. In Vite dev mode, `apps/web/vite.config.ts` proxies `/health`, `/auth`, `/sessions`, `/events`, and `/webhooks` to the API at `VITE_API_PROXY_TARGET` or `http://localhost:3583`.
+The web app uses same-origin API requests by default. In Vite dev mode, `apps/web/vite.config.ts` proxies `/health`, `/auth`, `/sessions`, `/events`, `/repositories`, `/models`, and `/webhooks` to the API at `VITE_API_PROXY_TARGET` or `http://localhost:3583`.
 
 ```sh
 VITE_API_PROXY_TARGET=http://localhost:3583 pnpm web:dev

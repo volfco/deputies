@@ -6,6 +6,7 @@ export type RunnerInput = {
   runId: string;
   messageId: string;
   prompt: string;
+  model?: string;
   context: Record<string, unknown>;
   sandbox: SandboxHandle;
   signal?: AbortSignal;

@@ -51,6 +51,7 @@ if (githubClient && githubRepositoryAccess) {
   services.githubReactionSender = new GitHubReactionSender(githubClient, githubRepositoryAccess);
   services.githubIssueContextFetcher = new GitHubIssueContextFetcher(githubClient, githubRepositoryAccess);
   services.githubArchivedSessionNotifier = new GitHubArchivedSessionNotifier(githubClient, githubRepositoryAccess);
+  services.githubRepositoryAccess = githubRepositoryAccess;
 }
 const resources: CloseableResource[] = [];
 let server: ReturnType<typeof createServer> | undefined;

@@ -226,6 +226,7 @@ export class WorkerService {
         runId: claimed.run.id,
         messageId: primary.id,
         prompt: buildBatchPrompt(claimed.messages),
+        ...(typeof runContext.model === 'string' ? { model: runContext.model } : {}),
         context: runContext,
         sandbox,
         signal,

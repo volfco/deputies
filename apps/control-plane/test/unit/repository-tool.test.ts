@@ -11,7 +11,10 @@ describe('repository Flue tool', () => {
     await expect(tool.execute({ action: 'status' })).resolves.toContain('No active repository is set');
     await expect(tool.execute({ action: 'list' })).resolves.toContain('- manaflow-ai/manaflow');
 
-    services.state.context = { repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' } };
+    services.state.context = {
+      repository: { provider: 'github', owner: 'manaflow-ai', repo: 'manaflow' },
+      branch: 'old-feature',
+    };
     await expect(tool.execute({ action: 'status' })).resolves.toContain('Active repository: manaflow-ai/manaflow');
   });
 
@@ -95,6 +98,8 @@ describe('repository Flue tool', () => {
     expect(shells[0]?.cwd).toBe('/workspace');
     expect(shells[0]?.command).toContain('git -c http.extraHeader="$GITHUB_AUTH_HEADER" clone');
     expect(shells[0]?.command).toContain('default_branch="$(git -C');
+    expect(shells[0]?.command).toContain('diff --quiet --ignore-submodules');
+    expect(shells[0]?.command).toContain('preserving checkout instead of switching branches');
     expect(shells[0]?.command).toContain('checkout -B "$default_branch" "origin/$default_branch"');
     expect(shells[0]?.command).toContain("git -C '/workspace/manaflow' config user.name 'DevDeputies'");
     expect(shells[0]?.command).toContain(

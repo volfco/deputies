@@ -1,3 +1,5 @@
+import type { GitHubInstallationRepository } from './types.js';
+
 export type GitHubClientOptions = {
   apiBaseUrl: string;
   fetchImpl?: typeof fetch;
@@ -37,6 +39,74 @@ export class GitHubClient {
     if (typeof body.expires_at !== 'string' || !body.expires_at)
       throw new Error('GitHub installation token response is missing expires_at');
     return { token: body.token, expiresAt: new Date(body.expires_at) };
+  }
+
+  async listAppInstallations(input: { appJwt: string }): Promise<Array<{ id: number }>> {
+    const installations: Array<{ id: number }> = [];
+    for (let page = 1; ; page += 1) {
+      const body = await this.request<Array<{ id?: number }>>(`/app/installations?per_page=100&page=${page}`, {
+        method: 'GET',
+        token: input.appJwt,
+      });
+      installations.push(
+        ...body.flatMap((installation) => (typeof installation.id === 'number' ? [{ id: installation.id }] : [])),
+      );
+      if (body.length < 100) return installations;
+    }
+  }
+
+  async listInstallationRepositories(input: { token: string }): Promise<GitHubInstallationRepository[]> {
+    const repos: GitHubInstallationRepository[] = [];
+    for (let page = 1; ; page += 1) {
+      const body = await this.request<{
+        repositories?: Array<{
+          id?: number;
+          name?: string;
+          full_name?: string;
+          description?: string | null;
+          private?: boolean;
+          default_branch?: string;
+          owner?: { login?: string };
+        }>;
+      }>(`/installation/repositories?per_page=100&page=${page}`, { method: 'GET', token: input.token });
+      const pageRepos = body.repositories ?? [];
+      repos.push(
+        ...pageRepos.flatMap((repo) => {
+          if (
+            typeof repo.id !== 'number' ||
+            typeof repo.name !== 'string' ||
+            typeof repo.full_name !== 'string' ||
+            typeof repo.owner?.login !== 'string'
+          ) {
+            return [];
+          }
+          return [
+            {
+              id: repo.id,
+              owner: repo.owner.login,
+              repo: repo.name,
+              fullName: repo.full_name,
+              description: repo.description ?? null,
+              private: Boolean(repo.private),
+              defaultBranch: repo.default_branch ?? 'main',
+            },
+          ];
+        }),
+      );
+      if (pageRepos.length < 100) return repos;
+    }
+  }
+
+  async listBranches(input: { owner: string; repo: string; token: string }): Promise<Array<{ name: string }>> {
+    const branches: Array<{ name: string }> = [];
+    for (let page = 1; ; page += 1) {
+      const body = await this.request<Array<{ name?: string }>>(
+        `/repos/${input.owner}/${input.repo}/branches?per_page=100&page=${page}`,
+        { method: 'GET', token: input.token },
+      );
+      branches.push(...body.flatMap((branch) => (typeof branch.name === 'string' ? [{ name: branch.name }] : [])));
+      if (body.length < 100) return branches;
+    }
   }
 
   async createIssueComment(input: {
@@ -125,10 +195,18 @@ export class GitHubClient {
       ...(input.json ? { body: JSON.stringify(input.json) } : {}),
     });
     const body = (await response.json().catch(() => ({}))) as T & { message?: string };
-    if (!response.ok)
-      throw new Error(
-        `GitHub API ${input.method} ${path} failed with ${response.status}: ${body.message ?? 'unknown_error'}`,
-      );
+    if (!response.ok) throw new GitHubApiError(input.method, path, response.status, body.message ?? 'unknown_error');
     return body;
+  }
+}
+
+export class GitHubApiError extends Error {
+  constructor(
+    readonly method: string,
+    readonly path: string,
+    readonly statusCode: number,
+    readonly githubMessage: string,
+  ) {
+    super(`GitHub API ${method} ${path} failed with ${statusCode}: ${githubMessage}`);
   }
 }

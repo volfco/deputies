@@ -45,6 +45,18 @@ export const publicApiResponseSchemas = {
     description: 'Session list envelope.',
     fields: { sessions: 'array' },
   },
+  repositories: {
+    description: 'Configured repository picker options.',
+    fields: { repositories: 'array' },
+  },
+  branches: {
+    description: 'Repository branch picker options.',
+    fields: { branches: 'array' },
+  },
+  models: {
+    description: 'Configured model picker options.',
+    fields: { models: 'array', defaultModel: 'optional:string' },
+  },
   message: {
     description: 'Single message envelope.',
     fields: { message: 'object' },

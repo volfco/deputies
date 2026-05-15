@@ -8,6 +8,22 @@ export type AuthProviderKind = 'static' | 'github';
 export type AuthCookieSameSite = 'lax' | 'none';
 export type ArtifactStorageKind = 'disabled' | 'filesystem' | 's3';
 
+const ANTHROPIC_FLUE_MODELS = [
+  'anthropic/claude-haiku-4-5',
+  'anthropic/claude-sonnet-4-5',
+  'anthropic/claude-sonnet-4-6',
+  'anthropic/claude-opus-4-5',
+  'anthropic/claude-opus-4-6',
+  'anthropic/claude-opus-4-7',
+];
+const OPENAI_FLUE_MODELS = ['openai/gpt-5.2', 'openai/gpt-5.4', 'openai/gpt-5.5'];
+const OPENAI_CODEX_FLUE_MODELS = [
+  'openai-codex/gpt-5.2-codex',
+  'openai-codex/gpt-5.3-codex',
+  'openai-codex/gpt-5.3-codex-spark',
+  'openai-codex/gpt-5.5',
+];
+
 export type AppConfig = {
   port: number;
   maxJsonBodyBytes: number;
@@ -55,6 +71,7 @@ export type AppConfig = {
   databaseUrl?: string;
   flueSessionStore: 'postgres' | 'memory';
   flueModel?: string;
+  flueModelOptions: string[];
   flueOpenaiCodexAuthFile?: string;
   flueOpenaiCodexAuthJson?: string;
   flueOpenaiCodexAuthBase64?: string;
@@ -138,6 +155,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     authGithubAllowedUsers: parseStringList(env.AUTH_GITHUB_ALLOWED_USERS),
     authGithubAllowedOrganizations: parseStringList(env.AUTH_GITHUB_ALLOWED_ORGANIZATIONS),
     flueSessionStore: parseEnum(env.FLUE_SESSION_STORE, ['postgres', 'memory'], 'postgres'),
+    flueModelOptions: parseStringList(env.FLUE_MODEL_OPTIONS),
     slackApiBaseUrl: env.SLACK_API_BASE_URL ?? 'https://slack.com/api',
     unsafeAllowAllSlackIds: parseBoolean(env.UNSAFE_ALLOW_ALL_SLACK_IDS, false, 'UNSAFE_ALLOW_ALL_SLACK_IDS'),
     slackAllowedTeamIds: parseStringList(env.SLACK_ALLOWED_TEAM_IDS),
@@ -216,6 +234,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     config.artifactStorageS3AccessKeyId = env.ARTIFACT_STORAGE_S3_ACCESS_KEY_ID;
   if (env.ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY)
     config.artifactStorageS3SecretAccessKey = env.ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY;
+
+  config.flueModelOptions = deriveFlueModelOptions(env, config.flueModelOptions, config.flueModel);
 
   validateProductAuthConfig(config);
   validateArtifactStorageConfig(config);
@@ -412,6 +432,25 @@ function parseStringList(value: string | undefined): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function deriveFlueModelOptions(env: NodeJS.ProcessEnv, explicitOptions: string[], defaultModel: string | undefined): string[] {
+  const derived = explicitOptions.length ? explicitOptions : providerDerivedFlueModels(env);
+  return dedupeStrings(defaultModel ? [defaultModel, ...derived] : derived);
+}
+
+function providerDerivedFlueModels(env: NodeJS.ProcessEnv): string[] {
+  return [
+    ...(env.ANTHROPIC_API_KEY ? ANTHROPIC_FLUE_MODELS : []),
+    ...(env.OPENAI_API_KEY ? OPENAI_FLUE_MODELS : []),
+    ...(env.FLUE_OPENAI_CODEX_AUTH_FILE || env.FLUE_OPENAI_CODEX_AUTH_JSON || env.FLUE_OPENAI_CODEX_AUTH_BASE64
+      ? OPENAI_CODEX_FLUE_MODELS
+      : []),
+  ];
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 function normalizePrivateKey(value: string): string {

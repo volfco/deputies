@@ -1,4 +1,4 @@
-import type { FlueEvent, SandboxFactory, SessionData, ShellResult, ToolDef } from '@flue/sdk';
+import type { AgentInit, FlueEvent, SandboxFactory, SessionData, ShellResult, ToolDef } from '@flue/sdk';
 import type { RunnerInput, RunnerResult } from '../runner/types.js';
 import type { SandboxHandle } from '../sandbox/types.js';
 
@@ -39,6 +39,7 @@ export interface FlueAgentFactory {
     sessionId: string;
     sandbox: SandboxHandle;
     cwd?: string;
+    model?: AgentInit['model'];
     tools?: ToolDef[];
     onEvent?: (event: FlueEvent) => void;
   }): Promise<FlueAgentPort>;

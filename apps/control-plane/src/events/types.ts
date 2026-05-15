@@ -38,7 +38,7 @@ export type NormalizedEventPayloadMap = {
   sandbox_destroy_failed: SandboxLifecyclePayload & { error: string };
   sandbox_stopped: SandboxLifecyclePayload;
   sandbox_stop_failed: SandboxLifecyclePayload & { error: string };
-  repository_ready: { provider: string; owner: string; repo: string; workspacePath: string; expiresAt: string };
+  repository_ready: { provider: string; owner: string; repo: string; branch?: string; workspacePath: string; expiresAt: string };
   agent_text_delta: { text: string; flueSessionId?: string | undefined };
   agent_response_final: { text: string };
   tool_started: ToolStartedPayload;

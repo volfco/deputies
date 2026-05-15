@@ -38,6 +38,20 @@ export type RepositoryInput = {
   repo: string;
 };
 
+export type RepositoryOption = {
+  fullName: string;
+  owner: string;
+  name: string;
+  defaultBranch?: string;
+};
+
+export type BranchOption = { name: string };
+
+export type ModelOptions = {
+  models: string[];
+  defaultModel: string | null;
+};
+
 export type AgentEvent = {
   id?: number;
   sessionId: string;
@@ -185,6 +199,25 @@ export async function listSessions(token: string): Promise<Session[]> {
   return body.sessions;
 }
 
+export async function listRepositoryOptions(token: string): Promise<RepositoryOption[]> {
+  const body = await request<{ repositories: RepositoryOption[] }>('/repositories', { token });
+  return body.repositories;
+}
+
+export async function listBranches(input: { repository: string; token: string }): Promise<BranchOption[]> {
+  const [owner, repo] = input.repository.split('/');
+  if (!owner || !repo) return [];
+  const body = await request<{ branches: BranchOption[] }>(
+    `/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`,
+    { token: input.token },
+  );
+  return body.branches;
+}
+
+export async function getModelOptions(token: string): Promise<ModelOptions> {
+  return request<ModelOptions>('/models', { token });
+}
+
 export async function createSession(input: { title?: string; token: string }): Promise<Session> {
   const body = await request<{ session: Session }>('/sessions', {
     method: 'POST',
@@ -231,9 +264,15 @@ export async function enqueueMessage(input: {
   prompt: string;
   token: string;
   repository?: string | RepositoryInput;
+  model?: string;
+  branch?: string;
 }): Promise<Message> {
-  const requestBody: { prompt: string; repository?: string | RepositoryInput } = { prompt: input.prompt };
+  const requestBody: { prompt: string; repository?: string | RepositoryInput; model?: string; branch?: string } = {
+    prompt: input.prompt,
+  };
   if (input.repository) requestBody.repository = input.repository;
+  if (input.model) requestBody.model = input.model;
+  if (input.branch) requestBody.branch = input.branch;
   const body = await request<{ message: Message }>(`/sessions/${input.sessionId}/messages`, {
     method: 'POST',
     token: input.token,

@@ -19,6 +19,10 @@ type StreamEventPusher = (event: unknown) => void;
 
 type MockApiOptions = {
   submittedPrompts?: string[];
+  submittedMessageBodies?: unknown[];
+  repositories?: unknown[];
+  branches?: unknown[];
+  models?: string[];
   messages?: unknown[];
   messagesBySession?: Record<string, unknown[]>;
   events?: unknown[];
@@ -29,7 +33,7 @@ type MockApiOptions = {
   artifactPreviewStatus?: number;
   sessions?: unknown[];
   callbacks?: unknown[];
-  sessionOverride?: Partial<typeof session>;
+  sessionOverride?: Partial<typeof session> & { context?: Record<string, unknown> };
   onCancelRun?: () => void;
   onRetryMessage?: (messageId: string) => void;
   onReplayCallback?: (callbackId: string) => void;
@@ -73,6 +77,44 @@ it('submits composer text on Enter and preserves Shift Enter for newlines', asyn
 
   fireEvent.keyDown(composer, { key: 'Enter' });
   await waitFor(() => expect(submittedPrompts).toEqual(['follow up']));
+});
+
+it('does not submit inherited session context as follow-up overrides', async () => {
+  const submittedMessageBodies: unknown[] = [];
+  mockApi({
+    submittedMessageBodies,
+    sessionOverride: {
+      context: {
+        repository: { provider: 'github', owner: 'owner', repo: 'repo' },
+        branch: 'feature',
+        model: 'openai/gpt-4.1',
+      },
+    },
+  });
+  render(<App />);
+
+  const composer = await screen.findByPlaceholderText('Ask your deputy to investigate, change code, or follow up...');
+  fireEvent.change(composer, { target: { value: 'follow up' } });
+  fireEvent.keyDown(composer, { key: 'Enter' });
+
+  await waitFor(() => expect(submittedMessageBodies).toHaveLength(1));
+  expect(submittedMessageBodies[0]).toEqual({ prompt: 'follow up' });
+});
+
+it('allows starting a session without repository options', async () => {
+  const submittedMessageBodies: unknown[] = [];
+  mockApi({ submittedMessageBodies, repositories: [] });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'New session' }));
+  fireEvent.change(screen.getByPlaceholderText('Ask Deputies to investigate, change code, or answer a question...'), {
+    target: { value: 'start work' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+  await waitFor(() => expect(submittedMessageBodies).toHaveLength(1));
+  expect(submittedMessageBodies[0]).toMatchObject({ prompt: 'start work' });
+  expect(submittedMessageBodies[0]).not.toHaveProperty('repository');
 });
 
 it('keeps Enter available for newlines in mobile composer text', async () => {
@@ -1799,6 +1841,32 @@ function mockApi(options: MockApiOptions = {}) {
       return jsonResponse({ sessions: options.sessions ?? [currentSession] });
     }
 
+    if (url.pathname === '/sessions' && method === 'POST') {
+      currentSession = {
+        ...currentSession,
+        id: '00000000-0000-4000-8000-000000000102',
+        title: 'start work',
+        createdAt: '2026-05-05T12:01:00.000Z',
+        updatedAt: '2026-05-05T12:01:00.000Z',
+      };
+      return jsonResponse({ session: currentSession });
+    }
+
+    if (url.pathname === '/repositories' && method === 'GET') {
+      return jsonResponse({
+        repositories: options.repositories ?? [{ fullName: 'owner/repo', owner: 'owner', name: 'repo', defaultBranch: 'main' }],
+      });
+    }
+
+    if (url.pathname === '/repositories/owner/repo/branches' && method === 'GET') {
+      return jsonResponse({ branches: options.branches ?? [{ name: 'main' }, { name: 'feature' }] });
+    }
+
+    if (url.pathname === '/models' && method === 'GET') {
+      const models = options.models ?? ['anthropic/claude-sonnet', 'openai/gpt-4.1'];
+      return jsonResponse({ models, defaultModel: models[0] ?? null });
+    }
+
     if (url.pathname === `/sessions/${currentSession.id}/unarchive` && method === 'POST') {
       if (options.hangUnarchive) return new Promise<Response>(() => undefined);
       currentSession = { ...currentSession, status: 'idle' };
@@ -1827,6 +1895,7 @@ function mockApi(options: MockApiOptions = {}) {
     if (url.pathname === `/sessions/${currentSession.id}/messages` && method === 'POST') {
       const body = JSON.parse(String(init?.body)) as { prompt: string };
       options.submittedPrompts?.push(body.prompt);
+      options.submittedMessageBodies?.push(body);
       const message = {
         id: '00000000-0000-4000-8000-000000000101',
         sessionId: currentSession.id,

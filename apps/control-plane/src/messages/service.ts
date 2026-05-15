@@ -197,8 +197,15 @@ function mergeSessionContext(
   sessionContext: Record<string, unknown> | undefined,
   messageContext: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-  if (!messageContext || !Object.prototype.hasOwnProperty.call(messageContext, 'repository')) return undefined;
-  return { ...(sessionContext ?? {}), repository: messageContext.repository };
+  if (!messageContext) return undefined;
+  const nextContext = { ...(sessionContext ?? {}) };
+  let changed = false;
+  for (const key of ['repository', 'model', 'branch']) {
+    if (!Object.prototype.hasOwnProperty.call(messageContext, key)) continue;
+    nextContext[key] = messageContext[key];
+    changed = true;
+  }
+  return changed ? nextContext : undefined;
 }
 
 export class MessageServiceError extends Error {

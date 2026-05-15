@@ -846,6 +846,7 @@ function humanizeEventName(value: string): string {
 
 export function MobileContextPanel(props: {
   repository: string | null;
+  branch: string | null;
   artifacts: Artifact[];
   services: SandboxService[];
   externalResources: ExternalResource[];
@@ -863,6 +864,7 @@ export function MobileContextPanel(props: {
 
 export function DesktopContextPanel(props: {
   repository: string | null;
+  branch: string | null;
   artifacts: Artifact[];
   services: SandboxService[];
   externalResources: ExternalResource[];
@@ -884,6 +886,7 @@ export function DesktopContextPanel(props: {
 
 function ContextPanelContent(props: {
   repository: string | null;
+  branch: string | null;
   artifacts: Artifact[];
   services: SandboxService[];
   externalResources: ExternalResource[];
@@ -905,6 +908,9 @@ function ContextPanelContent(props: {
             >
               {props.repository}
             </a>
+            {props.branch ? (
+              <span className="mt-1 block text-xs text-muted-foreground">Branch: {props.branch}</span>
+            ) : null}
             <span className="mt-1 block text-xs">
               Follow-ups inherit this repo. Enter another repo in the composer to switch.
             </span>

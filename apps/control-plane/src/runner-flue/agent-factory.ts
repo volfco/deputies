@@ -54,7 +54,7 @@ export class RealFlueAgentFactory implements FlueAgentFactory {
     const initOptions: AgentInit = {
       name: FLUE_HARNESS_NAME,
       sandbox: sandboxHandleToFlueFactory(input.sandbox),
-      model: this.options.model,
+      model: input.model ?? this.options.model,
       persist: this.sessionStore,
     };
     if (input.cwd) initOptions.cwd = input.cwd;

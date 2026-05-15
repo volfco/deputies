@@ -111,6 +111,7 @@ export class FlueRunner implements Runner {
       sessionId: input.sessionId,
       sandbox: input.sandbox,
       cwd: repositorySetup?.workspacePath ?? input.sandbox.workspacePath,
+      ...(input.model ? { model: input.model } : {}),
       tools,
       onEvent: (event) => {
         if (input.signal?.aborted) return;
@@ -201,6 +202,7 @@ export class FlueRunner implements Runner {
         provider: setup.access.provider,
         owner: setup.access.owner,
         repo: setup.access.repo,
+        ...(setup.branch ? { branch: setup.branch } : {}),
         workspacePath: setup.workspacePath,
         expiresAt: setup.access.expiresAt.toISOString(),
       },

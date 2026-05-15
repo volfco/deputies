@@ -24,7 +24,7 @@ import {
   Sun,
   X,
 } from 'lucide-react';
-import { getApiBaseUrl, githubLoginUrl, Health, Session } from '../api.js';
+import { BranchOption, getApiBaseUrl, githubLoginUrl, Health, RepositoryOption, Session } from '../api.js';
 import { Badge } from './ui/badge.js';
 import { Button } from './ui/button.js';
 import { Card } from './ui/card.js';
@@ -492,10 +492,21 @@ export function NewThreadPanel(props: {
   loading: boolean;
   prompt: string;
   repository: string;
+  repositoryOptions: RepositoryOption[];
+  repositoryOptionsLoading: boolean;
+  repositoryOptionsError: string;
+  branch: string;
+  branchOptions: BranchOption[];
+  branchOptionsLoading: boolean;
+  branchOptionsError: string;
+  model: string;
+  modelOptions: string[];
   showOpenSidebar: boolean;
   onOpenSidebar: () => void;
   onPromptChange: (value: string) => void;
   onRepositoryChange: (value: string) => void;
+  onBranchChange: (value: string) => void;
+  onModelChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
   return (
@@ -522,12 +533,51 @@ export function NewThreadPanel(props: {
         </p>
         <h2 className="mt-6 text-xl font-semibold">What needs doing?</h2>
         <form className="mt-4 grid gap-3" onSubmit={props.onSubmit}>
-          <Input
-            value={props.repository}
-            onChange={(event) => props.onRepositoryChange(event.target.value)}
-            placeholder="GitHub repository, e.g. owner/repo or https://github.com/owner/repo"
-            disabled={!props.canCallApi}
-          />
+          <div className="grid gap-2 sm:grid-cols-[minmax(16rem,1fr)_minmax(8rem,12rem)_minmax(8rem,14rem)]">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="new-thread-repository">
+                Repository
+              </label>
+              <RepositoryPicker
+                id="new-thread-repository"
+                value={props.repository}
+                repositories={props.repositoryOptions}
+                loading={props.repositoryOptionsLoading}
+                error={props.repositoryOptionsError}
+                onChange={props.onRepositoryChange}
+                placeholder="GitHub repository, e.g. owner/repo"
+                disabled={!props.canCallApi}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="new-thread-branch">
+                Branch
+              </label>
+              <BranchPicker
+                id="new-thread-branch"
+                value={props.branch}
+                branches={props.branchOptions}
+                loading={props.branchOptionsLoading}
+                error={props.branchOptionsError}
+                onChange={props.onBranchChange}
+                disabled={!props.canCallApi || !props.repository}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="new-thread-model">
+                Model
+              </label>
+              <OptionPicker
+                id="new-thread-model"
+                label="Model"
+                value={props.model}
+                options={props.modelOptions.map((model) => ({ value: model, label: formatModelLabel(model) }))}
+                emptyLabel="Default model"
+                onChange={props.onModelChange}
+                disabled={!props.canCallApi || props.modelOptions.length <= 1}
+              />
+            </div>
+          </div>
           <Textarea
             className="min-h-40"
             value={props.prompt}
@@ -553,12 +603,27 @@ export function NewThreadPanel(props: {
 export function MessageComposer(props: {
   archived: boolean;
   hasSelectedRepository: boolean;
+  repository: string;
+  inheritedRepository: string;
+  repositoryOptions: RepositoryOption[];
+  repositoryOptionsLoading: boolean;
+  repositoryOptionsError: string;
+  branch: string;
+  inheritedBranch: string;
+  branchOptions: BranchOption[];
+  branchOptionsLoading: boolean;
+  branchOptionsError: string;
+  model: string;
+  inheritedModel: string;
+  modelOptions: string[];
+  onRepositoryChange: (value: string) => void;
+  onBranchChange: (value: string) => void;
+  onModelChange: (value: string) => void;
   onFocusChange: (focused: boolean) => void;
-  onSubmit: (input: { prompt: string; repository: string }) => Promise<boolean>;
+  onSubmit: (input: { prompt: string }) => Promise<boolean>;
 }) {
   const [prompt, setPrompt] = useState('');
   const [promptResetKey, setPromptResetKey] = useState(0);
-  const [repository, setRepository] = useState('');
   const submitTouchRef = useRef<{ moved: boolean; x: number; y: number } | null>(null);
 
   const canSubmit = !props.archived && Boolean(prompt.trim());
@@ -566,11 +631,10 @@ export function MessageComposer(props: {
   async function submitPrompt() {
     if (!canSubmit) return;
     const submittedPrompt = prompt;
-    const submittedRepository = repository;
     blurFocusedTextControl();
     setPromptResetKey((key) => key + 1);
     setPrompt('');
-    const sent = await props.onSubmit({ prompt: submittedPrompt, repository: submittedRepository });
+    const sent = await props.onSubmit({ prompt: submittedPrompt });
     if (!sent) setPrompt(submittedPrompt);
   }
 
@@ -616,7 +680,7 @@ export function MessageComposer(props: {
       onBlur={handleBlur}
       onSubmit={handleSubmit}
     >
-      <Card className="overflow-hidden bg-card/90">
+      <Card className="bg-card/90">
         <Textarea
           key={promptResetKey}
           className="min-h-28 border-0 bg-transparent focus:ring-0"
@@ -631,12 +695,41 @@ export function MessageComposer(props: {
           disabled={props.archived}
         />
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
-          <Input
-            className="h-8 min-w-0 flex-1 text-xs min-[480px]:max-w-80"
-            value={repository}
-            onChange={(event) => setRepository(event.target.value)}
-            placeholder={props.hasSelectedRepository ? 'Override repo...' : 'GitHub repo, e.g. owner/repo'}
+          <RepositoryPicker
+            className="min-w-0 flex-[2_1_16rem]"
+            triggerClassName="h-8 text-xs"
+            direction="up"
+            value={props.repository}
+            repositories={props.repositoryOptions}
+            loading={props.repositoryOptionsLoading}
+            error={props.repositoryOptionsError}
+            onChange={props.onRepositoryChange}
+            placeholder={props.inheritedRepository || 'GitHub repo, e.g. owner/repo'}
             disabled={props.archived}
+          />
+          <BranchPicker
+            className="min-w-0 flex-[1_2_8rem]"
+            triggerClassName="h-8 text-xs"
+            direction="up"
+            value={props.branch}
+            branches={props.branchOptions}
+            loading={props.branchOptionsLoading}
+            error={props.branchOptionsError}
+            onChange={props.onBranchChange}
+            disabled={props.archived || (!props.repository && !props.hasSelectedRepository)}
+            placeholder={props.inheritedBranch || 'Branch'}
+          />
+          <OptionPicker
+            className="min-w-0 flex-[1_2_9rem]"
+            triggerClassName="h-8 text-xs"
+            direction="up"
+            label="Model"
+            value={props.model}
+            options={props.modelOptions.map((model) => ({ value: model, label: formatModelLabel(model) }))}
+            emptyLabel={props.inheritedModel ? `Inherit ${formatModelLabel(props.inheritedModel)}` : 'Default model'}
+            allowEmpty={Boolean(props.model)}
+            onChange={props.onModelChange}
+            disabled={props.archived || props.modelOptions.length <= 1}
           />
           {props.archived ? (
             <span className="min-w-full text-center sm:min-w-0 sm:flex-1 sm:text-left">
@@ -658,6 +751,218 @@ export function MessageComposer(props: {
       </Card>
     </form>
   );
+}
+
+function RepositoryPicker(props: {
+  id?: string;
+  className?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  direction?: 'up' | 'down';
+  value: string;
+  repositories: RepositoryOption[];
+  loading: boolean;
+  error: string;
+  placeholder: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <OptionPicker
+      {...(props.id ? { id: props.id } : {})}
+      {...(props.className ? { className: props.className } : {})}
+      {...(props.triggerClassName ? { triggerClassName: props.triggerClassName } : {})}
+      menuClassName="min-w-72"
+      {...(props.direction ? { direction: props.direction } : {})}
+      label="Repository"
+      value={props.value}
+      options={props.repositories.map((repository) => ({ value: repository.fullName, label: repository.fullName }))}
+      emptyLabel={props.loading ? 'Loading repositories...' : props.placeholder}
+      loading={props.loading}
+      error={props.error ? 'Could not load repositories.' : ''}
+      searchable
+      allowEmpty={Boolean(props.value)}
+      onChange={props.onChange}
+      disabled={props.disabled}
+    />
+  );
+}
+
+function BranchPicker(props: {
+  id?: string;
+  className?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  direction?: 'up' | 'down';
+  value: string;
+  branches: BranchOption[];
+  loading: boolean;
+  error: string;
+  placeholder?: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <OptionPicker
+      {...(props.id ? { id: props.id } : {})}
+      {...(props.className ? { className: props.className } : {})}
+      {...(props.triggerClassName ? { triggerClassName: props.triggerClassName } : {})}
+      menuClassName="min-w-72"
+      {...(props.direction ? { direction: props.direction } : {})}
+      label="Branch"
+      value={props.value}
+      options={props.branches.map((branch) => ({ value: branch.name, label: branch.name }))}
+      emptyLabel={
+        props.loading ? 'Loading branches...' : props.placeholder || (props.branches.length ? 'Select branch...' : 'No branches')
+      }
+      loading={props.loading}
+      error={props.error ? 'Could not load branches.' : ''}
+      allowCustom
+      allowEmpty={Boolean(props.value)}
+      onChange={props.onChange}
+      disabled={props.disabled}
+    />
+  );
+}
+
+function OptionPicker(props: {
+  id?: string;
+  className?: string;
+  triggerClassName?: string;
+  menuClassName?: string;
+  direction?: 'up' | 'down';
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  emptyLabel: string;
+  loading?: boolean;
+  error?: string;
+  searchable?: boolean;
+  allowCustom?: boolean;
+  allowEmpty?: boolean;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const selected = props.options.find((option) => option.value === props.value);
+  const filteredOptions = props.options.filter((option) =>
+    `${option.label} ${option.value}`.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const customValue = search.trim();
+  const showCustom = props.allowCustom && customValue && !props.options.some((option) => option.value === customValue);
+  const disabled = props.disabled;
+  const direction = props.direction ?? 'down';
+
+  function select(value: string) {
+    props.onChange(value);
+    setSearch('');
+    setOpen(false);
+  }
+
+  return (
+    <div
+      className={cn('relative', props.className)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+    >
+      <button
+        id={props.id}
+        type="button"
+        className={cn(
+          'relative flex h-10 w-full items-center rounded-md border border-input bg-background/80 py-0 pl-3 pr-9 text-left text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50',
+          props.triggerClassName,
+        )}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={props.label}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="truncate" title={selected?.label ?? props.emptyLabel}>
+          {selected?.label ?? props.emptyLabel}
+        </span>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 leading-none text-muted-foreground">
+          ⌄
+        </span>
+      </button>
+      {open ? (
+        <div
+          className={cn(
+            'absolute left-0 right-0 z-30 overflow-auto rounded-md border border-border bg-card p-1 text-sm text-foreground shadow-xl',
+            direction === 'up' ? 'bottom-full mb-1 max-h-[min(60vh,28rem)]' : 'top-full mt-1 max-h-80',
+            props.menuClassName,
+          )}
+          role="listbox"
+        >
+          {(props.searchable || props.options.length > 8 || props.allowCustom) && !props.loading ? (
+            <Input
+              className="mb-1 h-8 bg-background text-xs"
+              value={search}
+              placeholder={props.allowCustom ? `Search or type ${props.label.toLowerCase()}...` : 'Search...'}
+              aria-label={`Search ${props.label}`}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && showCustom) select(customValue);
+              }}
+            />
+          ) : null}
+          {props.allowEmpty ? (
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2 py-1.5 text-left text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              role="option"
+              aria-selected={!props.value}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => select('')}
+            >
+              Clear override
+            </button>
+          ) : null}
+          {props.loading ? <p className="px-2 py-2 text-muted-foreground">Loading...</p> : null}
+          {!props.loading && props.error ? <p className="px-2 py-2 text-destructive">{props.error}</p> : null}
+          {!props.loading && !props.error && !filteredOptions.length && !showCustom ? (
+            <p className="px-2 py-2 text-muted-foreground">No matches.</p>
+          ) : null}
+          {!props.loading && showCustom ? (
+            <button
+              type="button"
+              className="block w-full rounded-sm px-2 py-1.5 text-left hover:bg-accent hover:text-accent-foreground"
+              role="option"
+              aria-selected={false}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => select(customValue)}
+            >
+              Use "{customValue}"
+            </button>
+          ) : null}
+          {!props.loading &&
+            filteredOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={cn(
+                  'block w-full rounded-sm px-2 py-1.5 text-left hover:bg-accent hover:text-accent-foreground',
+                  option.value === props.value && 'bg-accent text-accent-foreground',
+                )}
+                role="option"
+                aria-selected={option.value === props.value}
+                title={option.label}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => select(option.value)}
+              >
+                <span className="block break-words leading-snug">{option.label}</span>
+              </button>
+            ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatModelLabel(model: string): string {
+  return model.replace(/^[^/]+\//, '').replace(/-/g, ' ');
 }
 
 export function ThreadHeader(props: {

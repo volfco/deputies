@@ -1,6 +1,6 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
 import { createGitHubAppJwt } from '../../src/integrations/github/auth.js';
-import type { GitHubClient } from '../../src/integrations/github/client.js';
+import { GitHubClient } from '../../src/integrations/github/client.js';
 import {
   GitHubRepositoryAccessError,
   GitHubRepositoryAccessService,
@@ -124,6 +124,25 @@ describe('GitHub App runtime access', () => {
     await expect(service.getRepositoryAccess({ owner: 'other', repo: 'repo' })).rejects.toBeInstanceOf(
       GitHubRepositoryAccessError,
     );
+  });
+
+  it('paginates GitHub App installations', async () => {
+    const requests: string[] = [];
+    const client = new GitHubClient({
+      apiBaseUrl: 'https://api.github.test',
+      fetchImpl: async (url) => {
+        requests.push(String(url));
+        const page = new URL(String(url)).searchParams.get('page');
+        const count = page === '1' ? 100 : 1;
+        return Response.json(Array.from({ length: count }, (_, index) => ({ id: index + (page === '1' ? 1 : 101) })));
+      },
+    });
+
+    await expect(client.listAppInstallations({ appJwt: 'app-jwt' })).resolves.toHaveLength(101);
+    expect(requests).toEqual([
+      'https://api.github.test/app/installations?per_page=100&page=1',
+      'https://api.github.test/app/installations?per_page=100&page=2',
+    ]);
   });
 });
 

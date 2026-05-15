@@ -100,8 +100,9 @@ export async function prepareActiveRepository(services: RepositoryToolServices):
   const agent = services.agentRef.current;
   if (!agent?.shell) throw new Error('Repository preparation is unavailable before the sandbox agent is ready');
   const access = await services.github.getRepositoryAccess(repository);
+  const branch = typeof services.state.context.branch === 'string' ? services.state.context.branch : undefined;
   const workspacePath = joinPath(services.sandbox.workspacePath, access.repo);
-  const result = await agent.shell(repositorySetupCommand(access, workspacePath), {
+  const result = await agent.shell(repositorySetupCommand(access, workspacePath, branch), {
     cwd: services.sandbox.workspacePath,
     env: { GITHUB_AUTH_HEADER: gitAuthHeader(access.auth.token) },
     timeout: 120_000,
@@ -119,6 +120,7 @@ export async function prepareActiveRepository(services: RepositoryToolServices):
       provider: access.provider,
       owner: access.owner,
       repo: access.repo,
+      ...(branch ? { branch } : {}),
       workspacePath,
       expiresAt: access.expiresAt.toISOString(),
     },
@@ -127,6 +129,7 @@ export async function prepareActiveRepository(services: RepositoryToolServices):
 
   return [
     `Repository prepared: ${repository.owner}/${repository.repo}`,
+    ...(branch ? [`Branch: ${branch}`] : []),
     `Workspace path: ${workspacePath}`,
     'Use absolute paths under this workspace for read/write/edit/bash if this run did not start in the repository cwd.',
   ].join('\n');
@@ -176,8 +179,12 @@ async function setRepositoryContext(
   const repo = typeof params.repo === 'string' ? params.repo.trim() : '';
   if (!owner || !repo) throw new Error('repository set requires owner and repo');
   const repository = { provider: 'github' as const, owner, repo };
+  const previousRepository = getActiveRepository(services.state);
   await services.github.getRepositoryAccess(repository);
-  const nextContext = { ...services.state.context, repository };
+  const nextContext: Record<string, unknown> = { ...services.state.context, repository };
+  if (previousRepository?.owner !== owner || previousRepository?.repo !== repo) {
+    delete nextContext.branch;
+  }
   services.state.context = services.updateSessionContext
     ? await services.updateSessionContext(nextContext)
     : nextContext;

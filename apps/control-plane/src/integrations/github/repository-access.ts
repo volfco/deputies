@@ -1,6 +1,11 @@
 import { createGitHubAppJwt } from './auth.js';
 import type { GitHubClient } from './client.js';
-import type { GitHubInstallationToken, GitHubRepository, GitHubRepositoryAccess } from './types.js';
+import type {
+  GitHubInstallationRepository,
+  GitHubInstallationToken,
+  GitHubRepository,
+  GitHubRepositoryAccess,
+} from './types.js';
 
 export type GitHubRepositoryAccessServiceOptions = {
   appId: string;
@@ -17,6 +22,12 @@ export class GitHubRepositoryAccessService {
   private readonly now: () => Date;
   private readonly tokensByRepository = new Map<string, GitHubInstallationToken>();
   private readonly installationsByRepository = new Map<string, number>();
+  private repositoriesCache: { repositories: GitHubInstallationRepository[]; freshUntil: number; staleUntil: number } | null =
+    null;
+  private readonly branchesByRepository = new Map<
+    string,
+    { branches: Array<{ name: string }>; freshUntil: number; staleUntil: number }
+  >();
 
   constructor(private readonly options: GitHubRepositoryAccessServiceOptions) {
     this.allowedRepositories = options.allowedRepositories ?? [];
@@ -40,6 +51,54 @@ export class GitHubRepositoryAccessService {
 
   listAllowedRepositories(): string[] {
     return [...this.allowedRepositories];
+  }
+
+  async listRepositories(): Promise<GitHubInstallationRepository[]> {
+    const cached = this.repositoriesCache;
+    const now = this.now().getTime();
+    if (cached && cached.freshUntil > now) return cached.repositories;
+
+    try {
+      const appJwt = this.createAppJwt();
+      const installations = await this.options.client.listAppInstallations({ appJwt });
+      const repoLists = await Promise.all(
+        installations.map(async (installation) => {
+          const token = await this.options.client.createInstallationAccessToken({
+            installationId: installation.id,
+            appJwt,
+          });
+          return this.options.client.listInstallationRepositories({ token: token.token });
+        }),
+      );
+      const repositories = repoLists
+        .flat()
+        .filter((repository) => isRepositoryAllowed(repository, this.allowedRepositories));
+      const result = dedupeRepositories(repositories).sort((a, b) => a.fullName.localeCompare(b.fullName));
+      this.repositoriesCache = { repositories: result, freshUntil: now + 5 * 60_000, staleUntil: now + 60 * 60_000 };
+      return result;
+    } catch (error) {
+      if (cached && cached.staleUntil > now) return cached.repositories;
+      throw error;
+    }
+  }
+
+  async listBranches(repository: GitHubRepository): Promise<Array<{ name: string }>> {
+    this.assertAllowed(repository);
+    const key = repositoryKey(repository).toLowerCase();
+    const cached = this.branchesByRepository.get(key);
+    const now = this.now().getTime();
+    if (cached && cached.freshUntil > now) return cached.branches;
+
+    const installationId = await this.getInstallationId(repository);
+    const token = await this.getInstallationToken(installationId, repository);
+    try {
+      const branches = await this.options.client.listBranches({ ...repository, token: token.token });
+      this.branchesByRepository.set(key, { branches, freshUntil: now + 5 * 60_000, staleUntil: now + 60 * 60_000 });
+      return branches;
+    } catch (error) {
+      if (cached && cached.staleUntil > now) return cached.branches;
+      throw error;
+    }
   }
 
   private async getInstallationId(repository: GitHubRepository): Promise<number> {
@@ -98,6 +157,12 @@ export class GitHubRepositoryAccessError extends Error {
 
 function repositoryKey(repository: GitHubRepository): string {
   return `${repository.owner}/${repository.repo}`;
+}
+
+function dedupeRepositories(repositories: GitHubInstallationRepository[]): GitHubInstallationRepository[] {
+  const byName = new Map<string, GitHubInstallationRepository>();
+  for (const repository of repositories) byName.set(repository.fullName.toLowerCase(), repository);
+  return [...byName.values()];
 }
 
 export function isRepositoryAllowed(repository: GitHubRepository, allowedRepositories: string[] | undefined): boolean {
