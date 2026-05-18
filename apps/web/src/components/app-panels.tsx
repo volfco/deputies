@@ -34,6 +34,8 @@ import {
   getApiBaseUrl,
   githubLoginUrl,
   Health,
+  AppNotice,
+  ModelOption,
   RepositoryOption,
   Session,
   SetupStatus,
@@ -74,6 +76,24 @@ export function LocalSandboxWarning() {
           runtime in a temporary workspace. Use it only for trusted local development.
         </p>
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
+export function AppNoticesBanner(props: { notices: AppNotice[] }) {
+  if (!props.notices.length) return null;
+  return (
+    <div
+      className="border-b border-warning/50 bg-warning/15 px-3 py-2 text-sm text-warning-foreground dark:text-warning md:px-8 xl:px-20"
+      role="alert"
+    >
+      <div className="grid gap-1">
+        {props.notices.map((notice) => (
+          <p key={notice.code}>
+            <strong>{notice.message}</strong> {notice.action ?? ''}
+          </p>
+        ))}
       </div>
     </div>
   );
@@ -644,7 +664,8 @@ export function NewThreadPanel(props: {
   branchOptionsLoading: boolean;
   branchOptionsError: string;
   model: string;
-  modelOptions: string[];
+  modelOptions: ModelOption[];
+  modelUnavailableReason: string;
   showOpenSidebar: boolean;
   onOpenSidebar: () => void;
   onPromptChange: (value: string) => void;
@@ -720,13 +741,18 @@ export function NewThreadPanel(props: {
                 id="new-thread-model"
                 label="Model"
                 value={props.model}
-                options={props.modelOptions.map((model) => ({ value: model, label: formatModelLabel(model) }))}
+                options={props.modelOptions}
                 emptyLabel="Default model"
                 onChange={props.onModelChange}
                 disabled={!props.canCallApi || props.modelOptions.length <= 1}
               />
             </div>
           </div>
+          {props.modelUnavailableReason ? (
+            <p className="rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning-foreground dark:text-warning">
+              {props.modelUnavailableReason}
+            </p>
+          ) : null}
           <Textarea
             className="min-h-40"
             value={props.prompt}
@@ -739,7 +765,9 @@ export function NewThreadPanel(props: {
           <Button
             className="justify-self-end"
             type="submit"
-            disabled={!props.canCallApi || props.loading || !props.prompt.trim()}
+            disabled={
+              !props.canCallApi || props.loading || !props.prompt.trim() || Boolean(props.modelUnavailableReason)
+            }
           >
             Start session
           </Button>
@@ -765,7 +793,8 @@ export function MessageComposer(props: {
   branchOptionsError: string;
   model: string;
   inheritedModel: string;
-  modelOptions: string[];
+  modelOptions: ModelOption[];
+  modelUnavailableReason: string;
   onRepositoryChange: (value: string) => void;
   onBranchChange: (value: string) => void;
   onModelChange: (value: string) => void;
@@ -776,7 +805,7 @@ export function MessageComposer(props: {
   const [promptResetKey, setPromptResetKey] = useState(0);
   const submitTouchRef = useRef<{ moved: boolean; x: number; y: number } | null>(null);
 
-  const canSubmit = !props.archived && !props.readOnly && Boolean(prompt.trim());
+  const canSubmit = !props.archived && !props.readOnly && Boolean(prompt.trim()) && !props.modelUnavailableReason;
 
   async function submitPrompt() {
     if (!canSubmit) return;
@@ -877,11 +906,16 @@ export function MessageComposer(props: {
             direction="up"
             label="Model"
             value={props.model}
-            options={props.modelOptions.map((model) => ({ value: model, label: formatModelLabel(model) }))}
+            options={props.modelOptions}
             emptyLabel={props.inheritedModel ? formatModelLabel(props.inheritedModel) : 'Default model'}
             onChange={props.onModelChange}
             disabled={props.archived || props.readOnly || props.modelOptions.length <= 1}
           />
+          {props.modelUnavailableReason ? (
+            <p className="basis-full rounded-md border border-warning/50 bg-warning/10 px-2 py-1.5 text-warning-foreground dark:text-warning">
+              {props.modelUnavailableReason}
+            </p>
+          ) : null}
           <Button
             className="ml-auto shrink-0 whitespace-nowrap"
             type="submit"
@@ -981,7 +1015,7 @@ function OptionPicker(props: {
   direction?: 'up' | 'down';
   label: string;
   value: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; available?: boolean; unavailableReason?: string; action?: string }[];
   emptyLabel: string;
   loading?: boolean;
   error?: string;
@@ -1018,6 +1052,7 @@ function OptionPicker(props: {
   }, [disabled]);
 
   function select(value: string) {
+    if (props.options.find((option) => option.value === value)?.available === false) return;
     props.onChange(value);
     setSearch('');
     setOpen(false);
@@ -1114,16 +1149,24 @@ function OptionPicker(props: {
                 key={option.value}
                 type="button"
                 className={cn(
-                  'block w-full rounded-sm px-2 py-1.5 text-left hover:bg-accent hover:text-accent-foreground',
+                  'block w-full rounded-sm px-2 py-1.5 text-left hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-current',
                   option.value === props.value && 'bg-accent text-accent-foreground',
                 )}
+                disabled={option.available === false}
                 role="option"
                 aria-selected={option.value === props.value}
-                title={option.label}
+                title={option.available === false ? option.unavailableReason : option.label}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => select(option.value)}
               >
                 <span className="block break-words leading-snug">{option.label}</span>
+                {option.available === false ? (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {option.action
+                      ? `${option.unavailableReason ?? 'Unavailable'} ${option.action}`
+                      : (option.unavailableReason ?? 'Unavailable')}
+                  </span>
+                ) : null}
               </button>
             ))}
         </div>

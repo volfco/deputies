@@ -58,6 +58,7 @@ import { SessionService, SessionServiceError } from '../sessions/service.js';
 import { MemoryStore } from '../store/memory.js';
 import type { AppStore, AuthRole, AuthUserRecord, SandboxRecord, SessionRecord } from '../store/types.js';
 import { writeGlobalEventStream, writeSessionEventStream } from './event-stream.js';
+import { configuredModels, ModelAvailabilityService, modelOptions } from './model-availability.js';
 import { buildSetupStatus } from './setup-status.js';
 import {
   getSessionService,
@@ -112,6 +113,7 @@ export type AppServices = {
   githubArchivedSessionNotifier?: Pick<GitHubArchivedSessionNotifier, 'postNotice' | 'postRecoveryAcknowledgement'>;
   githubRepositoryAccess?: Pick<GitHubRepositoryAccessService, 'listRepositories' | 'listBranches'>;
   githubOAuthClient?: GitHubOAuthClient;
+  modelAvailability: ModelAvailabilityService;
 };
 
 export function createServices(
@@ -136,6 +138,7 @@ export function createServices(
       unsafeAllowLocalHttpCallbacks: Boolean(options.unsafeAllowLocalHttpCallbacks),
     }),
     callbacks: new CallbackService(store, events),
+    modelAvailability: new ModelAvailabilityService(),
   };
   if (options.sandboxProvider) {
     services.sandboxProvider = options.sandboxProvider;
@@ -169,16 +172,18 @@ export function createApp(config: AppConfig, services = createServices()) {
 
   app.notFound((c) => c.json({ error: 'not_found', message: 'Route not found' }, 404));
 
-  app.get('/health', (c) =>
-    c.json({
-      status: 'ok',
+  app.get('/health', (c) => {
+    const notices = services.modelAvailability.notices();
+    return c.json({
+      status: notices.length ? 'degraded' : 'ok',
       runMode: config.runMode,
       apiAuthMode: config.apiAuthMode,
       authProvider: config.apiAuthMode === 'session' ? config.authProvider : undefined,
       sandboxProvider: config.sandboxProvider,
       hideSetupPage: config.hideSetupPage,
-    }),
-  );
+      ...(notices.length ? { notices } : {}),
+    });
+  });
 
   app.get('/auth/config', (c) =>
     c.json({
@@ -385,12 +390,12 @@ export function createApp(config: AppConfig, services = createServices()) {
   });
 
   app.get('/models', async (c) => {
-    const models = config.flueModelOptions.length
-      ? config.flueModelOptions
-      : config.flueModel
-        ? [config.flueModel]
-        : [];
-    return c.json({ models, defaultModel: config.flueModel ?? models[0] ?? null });
+    const models = configuredModels(config);
+    return c.json({
+      models,
+      modelOptions: modelOptions(config, services.modelAvailability),
+      defaultModel: config.flueModel ?? models[0] ?? null,
+    });
   });
 
   app.get('/setup/status', async (c) => c.json(await buildSetupStatus(config)));
@@ -615,6 +620,8 @@ export function createApp(config: AppConfig, services = createServices()) {
     try {
       const repository = parseRepositoryBody(body.repository);
       const model = parseModelBody(body.model, config);
+      const unavailable = services.modelAvailability.unavailableFor(model || config.flueModel);
+      if (unavailable) throw new HttpRequestError(409, 'model_unavailable', unavailable.reason);
       const branch = repository ? parseBranchBody(body.branch) : undefined;
       const context = {
         ...(repository ? { repository } : {}),

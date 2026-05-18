@@ -2,12 +2,20 @@ export type ApiAuthMode = 'none' | 'bearer' | 'session';
 export type AuthProvider = 'static' | 'github';
 
 export type Health = {
-  status: 'ok';
+  status: 'ok' | 'degraded';
   runMode: string;
   apiAuthMode: ApiAuthMode;
   authProvider?: AuthProvider;
   sandboxProvider?: string;
   hideSetupPage?: boolean;
+  notices?: AppNotice[];
+};
+
+export type AppNotice = {
+  severity: 'warning' | 'error';
+  code: string;
+  message: string;
+  action?: string;
 };
 
 export type Session = {
@@ -60,7 +68,17 @@ export type BranchOption = { name: string };
 
 export type ModelOptions = {
   models: string[];
+  modelOptions?: ModelOption[];
   defaultModel: string | null;
+};
+
+export type ModelOption = {
+  value: string;
+  label: string;
+  available: boolean;
+  unavailableCode?: string;
+  unavailableReason?: string;
+  action?: string;
 };
 
 export type SetupStatusState = 'configured' | 'limited' | 'missing' | 'warning' | 'error';

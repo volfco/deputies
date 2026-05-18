@@ -25,6 +25,7 @@ export type FlueRunnerOptions = {
   artifactToolMaxBytes?: number;
   sandboxKeepalive?: SandboxKeepaliveService;
   sandboxKeepaliveMaxExtensionMs?: number;
+  modelUnavailableReason?: (model: string | undefined) => string | undefined;
 };
 
 export class FlueRunner implements Runner {
@@ -34,6 +35,9 @@ export class FlueRunner implements Runner {
   ) {}
 
   async run(input: RunnerInput): Promise<RunnerResult> {
+    const unavailableReason = this.options.modelUnavailableReason?.(input.model);
+    if (unavailableReason) throw new Error(unavailableReason);
+
     const pendingEvents: Array<Promise<void>> = [];
     let sawTextDelta = false;
     const repositorySetupInput: Parameters<typeof prepareRepositoryShellSetup>[0] = {

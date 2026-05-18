@@ -1,4 +1,5 @@
 import { AppLifecycle, installProcessShutdownHandlers, type CloseableResource } from './app/lifecycle.js';
+import { configuredModels } from './app/model-availability.js';
 import { createServer, createServices, createWorkerHealthServer } from './app/server.js';
 import { createArtifactObjectStorage } from './artifacts/storage.js';
 import { HttpCompletionCallbackSender, type CompletionCallbackSender } from './callbacks/service.js';
@@ -232,13 +233,24 @@ async function createRunner(): Promise<Runner> {
   const options: RealFlueAgentFactoryOptions = {
     model,
   };
-  if (model.startsWith('openai-codex/')) {
+  if (configuredModels(config).some((configuredModel) => configuredModel.startsWith('openai-codex/'))) {
     const codexAuth = {};
     if (config.flueOpenaiCodexAuthFile) Object.assign(codexAuth, { authFile: config.flueOpenaiCodexAuthFile });
     if (config.flueOpenaiCodexAuthJson) Object.assign(codexAuth, { authJson: config.flueOpenaiCodexAuthJson });
     if (config.flueOpenaiCodexAuthBase64) Object.assign(codexAuth, { authBase64: config.flueOpenaiCodexAuthBase64 });
-    const { apiKey } = await loadOpenAICodexApiKey(codexAuth);
-    options.providers = { 'openai-codex': { apiKey } };
+    try {
+      const { apiKey } = await loadOpenAICodexApiKey(codexAuth);
+      options.providers = { 'openai-codex': { apiKey } };
+      services.modelAvailability.clearPrefix('openai-codex/');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Codex authentication could not be loaded.';
+      services.modelAvailability.setPrefixUnavailable('openai-codex/', {
+        code: 'openai_codex_auth_unavailable',
+        reason: message,
+        action: 'Re-authenticate Codex, then refresh this page.',
+      });
+      console.error(`OpenAI Codex models unavailable: ${message}`);
+    }
   }
   if (config.flueSessionStore === 'postgres') {
     const sessionStore = new PostgresFlueSessionStore(requireDatabaseUrl(config));
@@ -253,5 +265,7 @@ async function createRunner(): Promise<Runner> {
     artifactToolMaxBytes: config.artifactToolMaxBytes,
     ...(services.sandboxKeepalive ? { sandboxKeepalive: services.sandboxKeepalive } : {}),
     sandboxKeepaliveMaxExtensionMs: config.sandboxKeepaliveMaxExtensionMs,
+    modelUnavailableReason: (inputModel) =>
+      services.modelAvailability.unavailableFor(inputModel || config.flueModel)?.reason,
   });
 }

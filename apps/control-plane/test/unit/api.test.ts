@@ -59,6 +59,83 @@ describe('core API', () => {
     await expect(response.json()).resolves.toMatchObject({ status: 'ok', runMode: 'all' });
   });
 
+  it('reports degraded health and unavailable model options', async () => {
+    await closeServer(server);
+    store = new MemoryStore();
+    services = createServices(store);
+    services.modelAvailability.setPrefixUnavailable('openai-codex/', {
+      code: 'openai_codex_auth_unavailable',
+      reason: 'Codex auth expired.',
+      action: 'Re-authenticate Codex, then refresh this page.',
+    });
+    server = createServer(
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        FLUE_MODEL: 'anthropic/claude-sonnet',
+        FLUE_MODEL_OPTIONS: 'anthropic/claude-sonnet,openai-codex/gpt-5.5',
+      }),
+      services,
+    );
+    baseUrl = await listen(server);
+
+    const health = await fetch(`${baseUrl}/health`);
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toMatchObject({
+      status: 'degraded',
+      notices: [{ code: 'openai_codex_auth_unavailable' }],
+    });
+
+    const models = await fetch(`${baseUrl}/models`);
+    expect(models.status).toBe(200);
+    await expect(models.json()).resolves.toMatchObject({
+      models: ['anthropic/claude-sonnet', 'openai-codex/gpt-5.5'],
+      modelOptions: [
+        { value: 'anthropic/claude-sonnet', available: true },
+        {
+          value: 'openai-codex/gpt-5.5',
+          available: false,
+          unavailableCode: 'openai_codex_auth_unavailable',
+          unavailableReason: 'Codex auth expired.',
+        },
+      ],
+    });
+  });
+
+  it('rejects unavailable models without blocking other providers', async () => {
+    await closeServer(server);
+    store = new MemoryStore();
+    services = createServices(store);
+    services.modelAvailability.setPrefixUnavailable('openai-codex/', {
+      code: 'openai_codex_auth_unavailable',
+      reason: 'Codex auth expired.',
+    });
+    server = createServer(
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        FLUE_MODEL: 'anthropic/claude-sonnet',
+        FLUE_MODEL_OPTIONS: 'anthropic/claude-sonnet,openai-codex/gpt-5.5',
+      }),
+      services,
+    );
+    baseUrl = await listen(server);
+    const createSession = await postJson(`${baseUrl}/sessions`, { title: 'Model availability' });
+    const { session } = (await createSession.json()) as { session: { id: string } };
+
+    const codex = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
+      prompt: 'use codex',
+      model: 'openai-codex/gpt-5.5',
+    });
+    expect(codex.status).toBe(409);
+    await expect(codex.json()).resolves.toMatchObject({ error: 'model_unavailable', message: 'Codex auth expired.' });
+
+    const anthropic = await postJson(`${baseUrl}/sessions/${session.id}/messages`, {
+      prompt: 'use anthropic',
+      model: 'anthropic/claude-sonnet',
+    });
+    expect(anthropic.status).toBe(202);
+    expectMessageResponse(await anthropic.json());
+  });
+
   it('maps GitHub branch authorization failures to stable API errors', async () => {
     services.githubRepositoryAccess = {
       async listRepositories() {

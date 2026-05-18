@@ -56,7 +56,7 @@ export const publicApiResponseSchemas = {
   },
   models: {
     description: 'Configured model picker options.',
-    fields: { models: 'array', defaultModel: 'optional:string' },
+    fields: { models: 'array', modelOptions: 'array', defaultModel: 'optional:string' },
   },
   message: {
     description: 'Single message envelope.',

@@ -45,6 +45,7 @@ import {
   type Health,
   type AuthUser,
   type BranchOption,
+  type ModelOption,
   type RepositoryOption,
   type SetupStatus,
   type WorkspaceToolId,
@@ -81,6 +82,7 @@ import {
 } from './app-helpers.js';
 import {
   ArchivedSessionNotice,
+  AppNoticesBanner,
   BearerAuthPanel,
   ConnectionStatusBanner,
   LocalSandboxWarning,
@@ -112,7 +114,7 @@ export function App() {
   const [callbacks, setCallbacks] = useState<CallbackDelivery[]>([]);
   const [repositoryOptions, setRepositoryOptions] = useState<RepositoryOption[]>([]);
   const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
-  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [setupStatusLoading, setSetupStatusLoading] = useState(false);
   const [setupStatusError, setSetupStatusError] = useState('');
@@ -187,7 +189,15 @@ export function App() {
   );
   const selectedRepository = repositoryLabel(selectedSession?.context?.repository);
   const selectedSessionModel = typeof selectedSession?.context?.model === 'string' ? selectedSession.context.model : '';
-  const selectedFollowUpModel = resolveSelectableModel(followUpModel, selectedSessionModel, defaultModel, modelOptions);
+  const availableModelValues = modelOptions.filter((model) => model.available).map((model) => model.value);
+  const selectedFollowUpModel = resolveSelectableModel(
+    followUpModel,
+    selectedSessionModel,
+    defaultModel,
+    availableModelValues,
+  );
+  const newThreadModelUnavailableReason = modelUnavailableReason(newThreadModel || defaultModel, modelOptions);
+  const followUpModelUnavailableReason = modelUnavailableReason(selectedFollowUpModel || defaultModel, modelOptions);
   const selectedSessionBranch =
     typeof selectedSession?.context?.branch === 'string' ? selectedSession.context.branch : '';
   const selectedSessionArchived = selectedSession?.status === 'archived';
@@ -218,11 +228,14 @@ export function App() {
       .then(([repositories, models]) => {
         if (cancelled) return;
         setRepositoryOptions(repositories);
-        setModelOptions(models.models);
+        const options = normalizeModelOptions(models);
+        const availableModels = options.filter((model) => model.available).map((model) => model.value);
+        setModelOptions(options);
         setDefaultModel(models.defaultModel ?? models.models[0] ?? '');
         setNewThreadModel((current) => {
-          if (current && models.models.includes(current)) return current;
-          return models.defaultModel ?? models.models[0] ?? '';
+          if (current && availableModels.includes(current)) return current;
+          if (models.defaultModel && availableModels.includes(models.defaultModel)) return models.defaultModel;
+          return availableModels[0] ?? '';
         });
       })
       .catch((err: unknown) => {
@@ -1244,6 +1257,7 @@ export function App() {
             )}
 
             <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+              <AppNoticesBanner notices={health?.notices ?? []} />
               {health?.sandboxProvider === 'unsafe-local' ? <LocalSandboxWarning /> : null}
               <div className="min-h-0 flex-1 overflow-hidden">
                 {showingSetupGuide ? (
@@ -1271,6 +1285,7 @@ export function App() {
                     branchOptionsError={branchOptionsError}
                     model={newThreadModel}
                     modelOptions={modelOptions}
+                    modelUnavailableReason={newThreadModelUnavailableReason}
                     showOpenSidebar={!sidebarOpen}
                     onOpenSidebar={expandSidebar}
                     onPromptChange={setNewThreadPrompt}
@@ -1375,6 +1390,7 @@ export function App() {
                             model={selectedFollowUpModel}
                             inheritedModel={selectedSessionModel || defaultModel}
                             modelOptions={modelOptions}
+                            modelUnavailableReason={followUpModelUnavailableReason}
                             onBranchChange={setFollowUpBranch}
                             onModelChange={setFollowUpModel}
                             onRepositoryChange={handleFollowUpRepositoryChange}
@@ -1530,6 +1546,25 @@ function resolveSelectableModel(current: string, inherited: string, fallback: st
     if (model && options.includes(model)) return model;
   }
   return options[0] ?? '';
+}
+
+function normalizeModelOptions(models: { models: string[]; modelOptions?: ModelOption[] }): ModelOption[] {
+  return (
+    models.modelOptions ??
+    models.models.map((model) => ({ value: model, label: formatModelLabel(model), available: true }))
+  );
+}
+
+function modelUnavailableReason(model: string, options: ModelOption[]): string {
+  const option = options.find((candidate) => candidate.value === model);
+  if (!option || option.available) return '';
+  return option.action
+    ? `${option.unavailableReason ?? 'This model is unavailable'} ${option.action}`
+    : (option.unavailableReason ?? 'This model is unavailable');
+}
+
+function formatModelLabel(model: string): string {
+  return model.replace(/^[^/]+\//, '').replace(/-/g, ' ');
 }
 
 function titleFromPrompt(prompt: string): string {
