@@ -66,8 +66,11 @@ export type AppConfig = {
   githubAppClientSecret?: string;
   githubAppCallbackUrl?: string;
   githubOAuthBaseUrl: string;
-  authGithubAllowedUsers: string[];
-  authGithubAllowedOrganizations: string[];
+  authGithubAdminUsers: string[];
+  authGithubAdminOrganizations: string[];
+  authGithubViewerUsers: string[];
+  authGithubViewerOrganizations: string[];
+  unsafeAuthGithubAllowAllViewers: boolean;
   databaseUrl?: string;
   flueSessionStore: 'postgres' | 'memory';
   flueModel?: string;
@@ -154,8 +157,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     authCookieSameSite: parseEnum(env.AUTH_COOKIE_SAME_SITE, ['lax', 'none'], 'lax'),
     serviceTrustForwardedHosts: parseBoolean(env.SERVICE_TRUST_FORWARDED_HOSTS, false, 'SERVICE_TRUST_FORWARDED_HOSTS'),
     githubOAuthBaseUrl: env.GITHUB_OAUTH_BASE_URL ?? 'https://github.com',
-    authGithubAllowedUsers: parseStringList(env.AUTH_GITHUB_ALLOWED_USERS),
-    authGithubAllowedOrganizations: parseStringList(env.AUTH_GITHUB_ALLOWED_ORGANIZATIONS),
+    authGithubAdminUsers: parseStringList(env.AUTH_GITHUB_ADMIN_USERS),
+    authGithubAdminOrganizations: parseStringList(env.AUTH_GITHUB_ADMIN_ORGANIZATIONS),
+    authGithubViewerUsers: parseStringList(env.AUTH_GITHUB_VIEWER_USERS),
+    authGithubViewerOrganizations: parseStringList(env.AUTH_GITHUB_VIEWER_ORGANIZATIONS),
+    unsafeAuthGithubAllowAllViewers: parseBoolean(
+      env.UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS,
+      false,
+      'UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS',
+    ),
     flueSessionStore: parseEnum(env.FLUE_SESSION_STORE, ['postgres', 'memory'], 'postgres'),
     flueModelOptions: parseStringList(env.FLUE_MODEL_OPTIONS),
     slackApiBaseUrl: env.SLACK_API_BASE_URL ?? 'https://slack.com/api',

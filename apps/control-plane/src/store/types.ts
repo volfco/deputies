@@ -23,9 +23,12 @@ export type IntegrationDeliveryStatus = 'received' | 'processed' | 'failed';
 export type SandboxStatus = 'ready' | 'stopped' | 'unhealthy' | 'destroyed' | 'failed';
 export type CallbackDeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed';
 
+export type AuthRole = 'admin' | 'viewer';
+
 export type AuthUserRecord = {
   id: string;
   username: string;
+  role: AuthRole;
   displayName?: string;
   avatarUrl?: string;
   createdAt: Date;
@@ -56,6 +59,7 @@ export type UpsertAuthUserForAccountRecord = {
   provider: string;
   providerAccountId: string;
   username: string;
+  role: AuthRole;
   displayName?: string;
   avatarUrl?: string;
   profile: Record<string, unknown>;

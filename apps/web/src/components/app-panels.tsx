@@ -99,6 +99,7 @@ export function ConnectionStatusBanner(props: { status: ConnectionStatus }) {
 export function ThreadSidebar(props: {
   archivedSessionsOpen: boolean;
   authRequired: boolean;
+  canAdmin: boolean;
   canCallApi: boolean;
   connectionStatus: ConnectionStatus;
   health: Health | null;
@@ -153,7 +154,7 @@ export function ThreadSidebar(props: {
         </Button>
         <h2 className="min-w-0 flex-1 text-sm font-semibold">Sessions</h2>
         <div className="flex shrink-0 gap-2">
-          <Button size="icon" onClick={props.onNewThread} disabled={!props.canCallApi} aria-label="New session">
+          <Button size="icon" onClick={props.onNewThread} disabled={!props.canAdmin} aria-label="New session">
             <Plus className="h-4 w-4" />
           </Button>
           <Button
@@ -194,6 +195,7 @@ export function ThreadSidebar(props: {
               key={session.id}
               session={session}
               selected={session.id === props.selectedSessionId}
+              canAdmin={props.canAdmin}
               onArchive={props.onArchive}
               onSelect={props.onSelect}
             />
@@ -217,6 +219,7 @@ export function ThreadSidebar(props: {
                     key={session.id}
                     session={session}
                     selected={session.id === props.selectedSessionId}
+                    canAdmin={props.canAdmin}
                     onSelect={props.onSelect}
                     onUnarchive={props.onUnarchive}
                   />
@@ -231,6 +234,7 @@ export function ThreadSidebar(props: {
       <ThemeToggle preference={props.themePreference} onChange={props.onThemeChange} />
       <ApiStatusFooter
         authRequired={props.authRequired}
+        canAdmin={props.canAdmin}
         connectionStatus={props.connectionStatus}
         health={props.health}
         token={props.token}
@@ -300,6 +304,7 @@ export function StartupLoadingPanel(props: { connectionStatus: ConnectionStatus 
 }
 
 export function SetupGuidePanel(props: {
+  canStartNewThread: boolean;
   loading: boolean;
   setupStatus: SetupStatus | null;
   setupError: string;
@@ -325,7 +330,9 @@ export function SetupGuidePanel(props: {
             <Button variant="secondary" onClick={props.onRefresh} disabled={props.loading}>
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
-            <Button onClick={props.onStartNewThread}>New session</Button>
+            <Button onClick={props.onStartNewThread} disabled={!props.canStartNewThread}>
+              New session
+            </Button>
           </div>
         </div>
 
@@ -409,6 +416,7 @@ function SetupStatusCard(props: { item: SetupStatusItem }) {
 
 function ApiStatusFooter(props: {
   authRequired: boolean;
+  canAdmin: boolean;
   connectionStatus: ConnectionStatus;
   health: Health | null;
   token: string;
@@ -430,9 +438,11 @@ function ApiStatusFooter(props: {
         </p>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" onClick={props.onOpenSetup}>
-          Setup
-        </Button>
+        {props.canAdmin ? (
+          <Button variant="secondary" size="sm" onClick={props.onOpenSetup}>
+            Setup
+          </Button>
+        ) : null}
         {props.authRequired && (props.token || props.health?.apiAuthMode === 'session') ? (
           <Button variant="secondary" size="sm" onClick={props.onSignOut}>
             {props.health?.apiAuthMode === 'session' ? 'Sign out' : 'Clear token'}
@@ -444,6 +454,7 @@ function ApiStatusFooter(props: {
 }
 
 function SessionButton(props: {
+  canAdmin: boolean;
   session: Session;
   selected: boolean;
   onSelect: (sessionId: string) => void;
@@ -473,7 +484,7 @@ function SessionButton(props: {
           {formatDate(props.session.updatedAt)}
         </span>
       </button>
-      {props.onArchive ? (
+      {props.canAdmin && props.onArchive ? (
         <Button
           className="w-8 shrink-0 p-0 md:w-auto md:px-2.5 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
           variant="ghost"
@@ -485,7 +496,7 @@ function SessionButton(props: {
           <Archive className="h-3.5 w-3.5" />
         </Button>
       ) : null}
-      {props.onUnarchive ? (
+      {props.canAdmin && props.onUnarchive ? (
         <Button
           className="w-8 shrink-0 p-0 md:w-auto md:px-2.5 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
           variant="ghost"
@@ -621,6 +632,7 @@ export function SessionAuthPanel(props: {
 
 export function NewThreadPanel(props: {
   canCallApi: boolean;
+  readOnly: boolean;
   loading: boolean;
   prompt: string;
   repository: string;
@@ -663,6 +675,11 @@ export function NewThreadPanel(props: {
         <p className="mt-2 text-sm text-muted-foreground">
           Assign work, track each step, and inspect the final output.
         </p>
+        {props.readOnly ? (
+          <p className="mt-4 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+            You have read-only access. You can inspect existing sessions, but only admins can start new work.
+          </p>
+        ) : null}
         <h2 className="mt-6 text-xl font-semibold">What needs doing?</h2>
         <form className="mt-4 grid gap-3" onSubmit={props.onSubmit}>
           <div className="grid gap-2 sm:grid-cols-[minmax(16rem,1fr)_minmax(8rem,12rem)_minmax(8rem,14rem)]">
@@ -734,6 +751,7 @@ export function NewThreadPanel(props: {
 
 export function MessageComposer(props: {
   archived: boolean;
+  readOnly: boolean;
   hasSelectedRepository: boolean;
   repository: string;
   inheritedRepository: string;
@@ -758,7 +776,7 @@ export function MessageComposer(props: {
   const [promptResetKey, setPromptResetKey] = useState(0);
   const submitTouchRef = useRef<{ moved: boolean; x: number; y: number } | null>(null);
 
-  const canSubmit = !props.archived && Boolean(prompt.trim());
+  const canSubmit = !props.archived && !props.readOnly && Boolean(prompt.trim());
 
   async function submitPrompt() {
     if (!canSubmit) return;
@@ -822,9 +840,11 @@ export function MessageComposer(props: {
           placeholder={
             props.archived
               ? 'Restore this archived session before sending new work.'
-              : 'Ask your deputy to investigate, change code, or follow up...'
+              : props.readOnly
+                ? 'You have read-only access to this session.'
+                : 'Ask your deputy to investigate, change code, or follow up...'
           }
-          disabled={props.archived}
+          disabled={props.archived || props.readOnly}
         />
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
           <RepositoryPicker
@@ -837,7 +857,7 @@ export function MessageComposer(props: {
             error={props.repositoryOptionsError}
             onChange={props.onRepositoryChange}
             placeholder={props.inheritedRepository || 'GitHub repo, e.g. owner/repo'}
-            disabled={props.archived}
+            disabled={props.archived || props.readOnly}
           />
           <BranchPicker
             className="min-w-0 flex-[1_2_8rem]"
@@ -848,7 +868,7 @@ export function MessageComposer(props: {
             loading={props.branchOptionsLoading}
             error={props.branchOptionsError}
             onChange={props.onBranchChange}
-            disabled={props.archived || (!props.repository && !props.hasSelectedRepository)}
+            disabled={props.archived || props.readOnly || (!props.repository && !props.hasSelectedRepository)}
             placeholder={props.inheritedBranch || 'Branch'}
           />
           <OptionPicker
@@ -860,12 +880,15 @@ export function MessageComposer(props: {
             options={props.modelOptions.map((model) => ({ value: model, label: formatModelLabel(model) }))}
             emptyLabel={props.inheritedModel ? formatModelLabel(props.inheritedModel) : 'Default model'}
             onChange={props.onModelChange}
-            disabled={props.archived || props.modelOptions.length <= 1}
+            disabled={props.archived || props.readOnly || props.modelOptions.length <= 1}
           />
           {props.archived ? (
             <span className="min-w-full text-center sm:min-w-0 sm:flex-1 sm:text-left">
               Archived sessions are read-only until restored.
             </span>
+          ) : null}
+          {props.readOnly ? (
+            <span className="min-w-full text-center sm:min-w-0 sm:flex-1 sm:text-left">You have read-only access.</span>
           ) : null}
           <Button
             className="ml-auto shrink-0 whitespace-nowrap"
@@ -1128,6 +1151,7 @@ function workspaceToolUnavailableReason(session: Session): string {
 }
 
 type ThreadHeaderProps = {
+  canAdmin: boolean;
   selectedSession: Session;
   showOpenSidebar: boolean;
   onArchive: () => void;
@@ -1175,6 +1199,7 @@ export function ThreadHeader(props: ThreadHeaderProps) {
   }, [toolsOpen]);
 
   function startEditingTitle() {
+    if (!props.canAdmin) return;
     setTitleDraft(props.selectedSession.title ?? '');
     setEditingTitle(true);
   }
@@ -1187,6 +1212,7 @@ export function ThreadHeader(props: ThreadHeaderProps) {
 
   async function openWorkspaceTool(toolId: WorkspaceToolId) {
     setToolsOpen(false);
+    if (!props.canAdmin) return;
     setOpeningWorkspaceTool(toolId);
     try {
       await props.onOpenWorkspaceTool(toolId);
@@ -1197,6 +1223,7 @@ export function ThreadHeader(props: ThreadHeaderProps) {
 
   function archiveSession() {
     setToolsOpen(false);
+    if (!props.canAdmin) return;
     props.onArchive();
   }
 
@@ -1237,17 +1264,19 @@ export function ThreadHeader(props: ThreadHeaderProps) {
               <h2 className="min-w-0 truncate text-base font-semibold text-foreground">
                 {props.selectedSession.title || 'Untitled session'}
               </h2>
-              <Button
-                className="h-7 w-7 shrink-0 p-0"
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={startEditingTitle}
-                aria-label="Edit title"
-                title="Edit title"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
+              {props.canAdmin ? (
+                <Button
+                  className="h-7 w-7 shrink-0 p-0"
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={startEditingTitle}
+                  aria-label="Edit title"
+                  title="Edit title"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
             </div>
           )}
           <p className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">{props.selectedSession.id}</p>
@@ -1261,63 +1290,65 @@ export function ThreadHeader(props: ThreadHeaderProps) {
           {sessionDisplayStatus(props.selectedSession)}
         </Badge>
         <div className="col-start-2 flex justify-end gap-2">
-          <div className="relative" ref={toolsRef}>
-            <Button
-              className="h-9 gap-2"
-              type="button"
-              variant="secondary"
-              onClick={() => setToolsOpen((open) => !open)}
-              aria-expanded={toolsOpen}
-              aria-haspopup="menu"
-              title="Tools"
-            >
-              <Wrench className="h-4 w-4" />
-              <span className="hidden sm:inline">Tools</span>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </Button>
-            {toolsOpen ? (
-              <div
-                className="absolute right-0 top-11 z-30 w-56 rounded-md border border-border bg-card p-1 text-sm text-card-foreground shadow-lg"
-                role="menu"
+          {props.canAdmin ? (
+            <div className="relative" ref={toolsRef}>
+              <Button
+                className="h-9 gap-2"
+                type="button"
+                variant="secondary"
+                onClick={() => setToolsOpen((open) => !open)}
+                aria-expanded={toolsOpen}
+                aria-haspopup="menu"
+                title="Tools"
               >
-                <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Workspace Tools</p>
-                {workspaceUnavailableReason ? (
-                  <p className="px-2 py-2 text-muted-foreground">{workspaceUnavailableReason}</p>
-                ) : (
-                  workspaceToolOptions.map(({ id, label, Icon }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={Boolean(openingWorkspaceTool)}
-                      role="menuitem"
-                      onClick={() => openWorkspaceTool(id)}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="min-w-0 flex-1">{label}</span>
-                      {openingWorkspaceTool === id ? (
-                        <span className="text-xs text-muted-foreground">Opening...</span>
-                      ) : null}
-                    </button>
-                  ))
-                )}
-                {props.selectedSession.status !== 'archived' ? (
-                  <>
-                    <div className="my-1 h-px bg-border" />
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
-                      role="menuitem"
-                      onClick={archiveSession}
-                    >
-                      <Archive className="h-4 w-4" />
-                      <span className="min-w-0 flex-1">Archive session</span>
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+                <Wrench className="h-4 w-4" />
+                <span className="hidden sm:inline">Tools</span>
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+              {toolsOpen ? (
+                <div
+                  className="absolute right-0 top-11 z-30 w-56 rounded-md border border-border bg-card p-1 text-sm text-card-foreground shadow-lg"
+                  role="menu"
+                >
+                  <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Workspace Tools</p>
+                  {workspaceUnavailableReason ? (
+                    <p className="px-2 py-2 text-muted-foreground">{workspaceUnavailableReason}</p>
+                  ) : (
+                    workspaceToolOptions.map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={Boolean(openingWorkspaceTool)}
+                        role="menuitem"
+                        onClick={() => openWorkspaceTool(id)}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="min-w-0 flex-1">{label}</span>
+                        {openingWorkspaceTool === id ? (
+                          <span className="text-xs text-muted-foreground">Opening...</span>
+                        ) : null}
+                      </button>
+                    ))
+                  )}
+                  {props.selectedSession.status !== 'archived' ? (
+                    <>
+                      <div className="my-1 h-px bg-border" />
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        role="menuitem"
+                        onClick={archiveSession}
+                      >
+                        <Archive className="h-4 w-4" />
+                        <span className="min-w-0 flex-1">Archive session</span>
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

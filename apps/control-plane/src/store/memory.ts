@@ -54,6 +54,7 @@ export class MemoryStore implements AppStore {
     const user: AuthUserRecord = {
       id: existingUser?.id ?? record.userId,
       username: record.username,
+      role: record.role,
       createdAt: existingUser?.createdAt ?? record.now,
       updatedAt: record.now,
       ...(record.displayName ? { displayName: record.displayName } : {}),

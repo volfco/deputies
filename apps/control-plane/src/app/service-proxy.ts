@@ -73,8 +73,7 @@ export async function proxyService(
   port: number,
   preview: SandboxPreviewUrl,
 ): Promise<Response> {
-  const isHostPreview = Boolean(parseServiceHostFromRequest(config, c));
-  const target = previewTargetUrl(c, sessionId, port, preview.targetUrl, isHostPreview);
+  const target = previewTargetUrl(c, preview.targetUrl);
   const request = c.req.raw;
   const response = await fetch(target, {
     method: request.method,
@@ -83,15 +82,7 @@ export async function proxyService(
     redirect: 'manual',
     duplex: 'half',
   } as RequestInit & { duplex: 'half' });
-  const headers = previewResponseHeaders(response.headers, sessionId, port, !isHostPreview);
-  if (!isHostPreview && isHtmlResponse(headers)) {
-    const text = rewritePreviewHtml(await response.text(), previewBasePath(sessionId, port));
-    return new Response(text, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  }
+  const headers = previewResponseHeaders(response.headers);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -103,12 +94,18 @@ export function parseServiceHostFromRequest(config: AppConfig, c: Context): { se
   return parsePreviewHostFromHosts(previewRequestHosts(config, c), previewAllowedDomains(config, c));
 }
 
-export async function isAuthorizedRequest(config: AppConfig, store: AppStore, c: Context): Promise<boolean> {
+export async function isAuthorizedRequest(
+  config: AppConfig,
+  store: AppStore,
+  c: Context,
+  options: { role?: 'admin' } = {},
+): Promise<boolean> {
   if (config.apiAuthMode === 'none') return true;
   if (config.apiAuthMode === 'bearer')
     return c.req.header('authorization') === `Bearer ${requireApiBearerToken(config)}`;
   const authSessionId = readSessionId(c);
-  return Boolean(authSessionId && (await store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() })));
+  const user = authSessionId ? await store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() }) : null;
+  return Boolean(user && (!options.role || user.role === options.role));
 }
 
 export async function handleServiceUpgrade(
@@ -120,15 +117,13 @@ export async function handleServiceUpgrade(
 ): Promise<void> {
   const incoming = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const hostPreview = parsePreviewHostFromNodeRequest(config, request);
-  const pathMatch = incoming.pathname.match(/^\/sessions\/([^/]+)\/services\/(\d+)(?:\/.*)?$/);
-  if (!hostPreview && !pathMatch) {
+  if (!hostPreview) {
     socket.destroy();
     return;
   }
 
-  const sessionId = hostPreview?.sessionId ?? decodeURIComponent(pathMatch?.[1] ?? '');
-  const port = hostPreview?.port ?? parseServicePort(pathMatch?.[2]);
-  if (!port || !(await isAuthorizedUpgrade(config, services, request))) {
+  const { sessionId, port } = hostPreview;
+  if (!(await isAuthorizedUpgrade(config, services, request, { role: 'admin' }))) {
     socket.destroy();
     return;
   }
@@ -154,8 +149,8 @@ export async function handleServiceUpgrade(
     request,
     socket,
     head,
-    targetUrl: previewTargetUrlFromUrl(incoming, Boolean(hostPreview), sessionId, port, preview.targetUrl),
-    preserveOrigin: Boolean(hostPreview),
+    targetUrl: previewTargetUrlFromUrl(incoming, preview.targetUrl),
+    preserveOrigin: true,
   };
   if (preview.targetHeaders) upgradeInput.targetHeaders = preview.targetHeaders;
   proxyPreviewUpgrade(upgradeInput);
@@ -201,30 +196,12 @@ function isLocalOrPrivateHostname(hostname: string): boolean {
   return host === '::1' || host.startsWith('fc') || host.startsWith('fd');
 }
 
-function previewTargetUrl(
-  c: Context,
-  sessionId: string,
-  port: number,
-  targetUrl: string,
-  isHostPreview: boolean,
-): string {
-  return previewTargetUrlFromUrl(new URL(c.req.url), isHostPreview, sessionId, port, targetUrl);
+function previewTargetUrl(c: Context, targetUrl: string): string {
+  return previewTargetUrlFromUrl(new URL(c.req.url), targetUrl);
 }
 
-function previewTargetUrlFromUrl(
-  incoming: URL,
-  isHostPreview: boolean,
-  sessionId: string,
-  port: number,
-  targetUrl: string,
-): string {
-  const prefix = `/sessions/${sessionId}/services/${port}`;
-  let suffix = '/';
-  if (isHostPreview) {
-    suffix = incoming.pathname || '/';
-  } else if (incoming.pathname.startsWith(prefix)) {
-    suffix = incoming.pathname.slice(prefix.length) || '/';
-  }
+function previewTargetUrlFromUrl(incoming: URL, targetUrl: string): string {
+  const suffix = incoming.pathname || '/';
   const target = new URL(targetUrl);
   target.pathname = joinUrlPath(target.pathname, suffix);
   target.search = incoming.search;
@@ -239,7 +216,7 @@ function previewUrl(c: Context, config: AppConfig, sessionId: string, port: numb
     baseUrl?.protocol.replace(/:$/, '') ?? c.req.header('x-forwarded-proto') ?? requestUrl.protocol.replace(/:$/, '');
   const domain = config.serviceBaseDomain ?? previewDomainFromHost(requestHost);
   const suffix = path.startsWith('/') ? path.slice(1) : path;
-  if (!domain) return `${previewBasePath(sessionId, port)}${suffix}`;
+  if (!domain) throw new Error('SERVICE_BASE_DOMAIN is required for service previews');
   return `${protocol}://${previewHostLabel(sessionId, port)}.${domain}/${suffix}`;
 }
 
@@ -364,14 +341,16 @@ async function isAuthorizedUpgrade(
   config: AppConfig,
   services: ServiceProxyServices,
   request: IncomingMessage,
+  options: { role?: 'admin' } = {},
 ): Promise<boolean> {
   if (config.apiAuthMode === 'none') return true;
   if (config.apiAuthMode === 'bearer')
     return request.headers.authorization === `Bearer ${requireApiBearerToken(config)}`;
   const authSessionId = parseCookieHeader(request.headers.cookie ?? '')[sessionCookieName];
-  return Boolean(
-    authSessionId && (await services.store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() })),
-  );
+  const user = authSessionId
+    ? await services.store.getAuthUserBySession({ sessionId: authSessionId, now: new Date() })
+    : null;
+  return Boolean(user && (!options.role || user.role === options.role));
 }
 
 function proxyPreviewUpgrade(input: {
@@ -477,42 +456,13 @@ function previewRequestHeaders(input: Headers, injected: Record<string, string> 
   return headers;
 }
 
-function previewResponseHeaders(input: Headers, sessionId: string, port: number, rewriteLocations: boolean): Headers {
+function previewResponseHeaders(input: Headers): Headers {
   const headers = new Headers();
   for (const [key, value] of input.entries()) {
     const lower = key.toLowerCase();
     if (['connection', 'content-encoding', 'content-length', 'set-cookie', 'transfer-encoding'].includes(lower))
       continue;
-    headers.set(key, lower === 'location' && rewriteLocations ? rewritePreviewLocation(value, sessionId, port) : value);
+    headers.set(key, value);
   }
   return headers;
-}
-
-function isHtmlResponse(headers: Headers): boolean {
-  return headers.get('content-type')?.toLowerCase().includes('text/html') ?? false;
-}
-
-function rewritePreviewHtml(html: string, basePath: string): string {
-  return html
-    .replace(/(\s(?:src|href|action)=['"])\/(?!\/)/gi, `$1${basePath}`)
-    .replace(/(\s(?:srcset)=['"])([^'"]*)(['"])/gi, (_match, prefix: string, value: string, suffix: string) => {
-      return `${prefix}${rewriteSrcSet(value, basePath)}${suffix}`;
-    })
-    .replace(/([\s(['"])(\/(?!\/)[^\s)'"<]+)/g, `$1${basePath}$2`);
-}
-
-function rewriteSrcSet(value: string, basePath: string): string {
-  return value
-    .split(',')
-    .map((part) => part.trimStart().replace(/^\/(?!\/)/, basePath))
-    .join(', ');
-}
-
-function rewritePreviewLocation(location: string, sessionId: string, port: number): string {
-  if (!location.startsWith('/')) return location;
-  return `${previewBasePath(sessionId, port)}${location.replace(/^\//, '')}`;
-}
-
-function previewBasePath(sessionId: string, port: number): string {
-  return `/sessions/${sessionId}/services/${port}/`;
 }

@@ -278,15 +278,16 @@ export class PostgresStore implements AppStore {
       );
       const userId = existing.rows[0]?.user_id ?? record.userId;
       const userResult = await client.query<AuthUserRow>(
-        `INSERT INTO auth_users (id, username, display_name, avatar_url, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $5)
+        `INSERT INTO auth_users (id, username, role, display_name, avatar_url, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $6)
          ON CONFLICT (id) DO UPDATE
          SET username = EXCLUDED.username,
+             role = EXCLUDED.role,
              display_name = EXCLUDED.display_name,
              avatar_url = EXCLUDED.avatar_url,
              updated_at = EXCLUDED.updated_at
-         RETURNING id, username, display_name, avatar_url, created_at, updated_at`,
-        [userId, record.username, record.displayName ?? null, record.avatarUrl ?? null, record.now],
+          RETURNING id, username, role, display_name, avatar_url, created_at, updated_at`,
+        [userId, record.username, record.role, record.displayName ?? null, record.avatarUrl ?? null, record.now],
       );
       await client.query(
         `INSERT INTO auth_accounts (id, user_id, provider, provider_account_id, username, profile, created_at, updated_at)
@@ -327,7 +328,7 @@ export class PostgresStore implements AppStore {
 
   async getAuthUserBySession(input: { sessionId: string; now: Date }): Promise<AuthUserRecord | null> {
     const result = await this.pool.query<AuthUserRow>(
-      `SELECT u.id, u.username, u.display_name, u.avatar_url, u.created_at, u.updated_at
+      `SELECT u.id, u.username, u.role, u.display_name, u.avatar_url, u.created_at, u.updated_at
        FROM auth_sessions s
        JOIN auth_users u ON u.id = s.user_id
        WHERE s.id = $1 AND s.expires_at > $2`,
@@ -1457,6 +1458,7 @@ function toAuthUser(row: AuthUserRow): AuthUserRecord {
   const user: AuthUserRecord = {
     id: row.id,
     username: row.username,
+    role: row.role,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

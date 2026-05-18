@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { requireApiBearerToken } from '../config/index.js';
 import type { AppConfig } from '../config/index.js';
-import type { AppStore } from '../store/types.js';
+import type { AppStore, AuthUserRecord } from '../store/types.js';
 import { readSessionId } from './session.js';
 
 const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -15,8 +15,7 @@ export function apiAuthMiddleware(config: AppConfig, store: AppStore): Middlewar
     }
 
     if (config.apiAuthMode === 'session') {
-      const sessionId = readSessionId(c);
-      const user = sessionId ? await store.getAuthUserBySession({ sessionId, now: new Date() }) : null;
+      const user = await readAuthUser(c, store);
       if (!user) return writeAuthError(c, 'Missing or invalid session');
       if (!isTrustedCookieAuthRequest(c, config)) return writeCsrfError(c);
       await next();
@@ -30,6 +29,35 @@ export function apiAuthMiddleware(config: AppConfig, store: AppStore): Middlewar
 
     await next();
   };
+}
+
+export function apiAdminMiddleware(config: AppConfig, store: AppStore): MiddlewareHandler {
+  return async (c, next) => {
+    if (config.apiAuthMode !== 'session') {
+      await next();
+      return;
+    }
+
+    const user = await readAuthUser(c, store);
+    if (!user) return writeAuthError(c, 'Missing or invalid session');
+    if (user.role !== 'admin') return c.json({ error: 'forbidden', message: 'Admin access is required' }, 403);
+    await next();
+  };
+}
+
+export function apiUnsafeMethodAdminMiddleware(config: AppConfig, store: AppStore): MiddlewareHandler {
+  return async (c, next) => {
+    if (!unsafeMethods.has(c.req.method.toUpperCase())) {
+      await next();
+      return;
+    }
+    return apiAdminMiddleware(config, store)(c, next);
+  };
+}
+
+async function readAuthUser(c: Context, store: AppStore): Promise<AuthUserRecord | null> {
+  const sessionId = readSessionId(c);
+  return sessionId ? await store.getAuthUserBySession({ sessionId, now: new Date() }) : null;
 }
 
 function writeAuthError(c: Context, message: string) {

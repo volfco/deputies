@@ -7,7 +7,12 @@ import { cors } from 'hono/cors';
 import { ArtifactService, ArtifactServiceError } from '../artifacts/service.js';
 import type { ArtifactObjectStorage } from '../artifacts/storage.js';
 import { FetchGitHubOAuthClient, type GitHubOAuthClient } from '../auth/github.js';
-import { apiAuthMiddleware, isTrustedCookieAuthRequest } from '../auth/middleware.js';
+import {
+  apiAdminMiddleware,
+  apiAuthMiddleware,
+  apiUnsafeMethodAdminMiddleware,
+  isTrustedCookieAuthRequest,
+} from '../auth/middleware.js';
 import { oauthSuccessHtml } from '../auth/oauth-success-page.js';
 import {
   clearSessionCookie,
@@ -51,7 +56,7 @@ import type { SandboxProvider } from '../sandbox/types.js';
 import { readServices } from '../sessions/services.js';
 import { SessionService, SessionServiceError } from '../sessions/service.js';
 import { MemoryStore } from '../store/memory.js';
-import type { AppStore, AuthUserRecord, SandboxRecord, SessionRecord } from '../store/types.js';
+import type { AppStore, AuthRole, AuthUserRecord, SandboxRecord, SessionRecord } from '../store/types.js';
 import { writeGlobalEventStream, writeSessionEventStream } from './event-stream.js';
 import { buildSetupStatus } from './setup-status.js';
 import {
@@ -201,6 +206,7 @@ export function createApp(config: AppConfig, services = createServices()) {
       provider: 'static',
       providerAccountId: username,
       username,
+      role: 'admin',
       profile: {},
       now: new Date(),
     });
@@ -245,10 +251,9 @@ export function createApp(config: AppConfig, services = createServices()) {
       });
     const accessToken = await client.exchangeCode({ code, redirectUri: githubOAuthCallbackUrl(c, config) });
     const githubUser = await client.getUser(accessToken);
-    const organizations = config.authGithubAllowedOrganizations.length
-      ? await client.listOrganizations(accessToken)
-      : [];
-    if (!isAllowedGitHubLogin(githubUser.login, organizations, config)) {
+    const organizations = hasGitHubOrganizationRoleAllowlist(config) ? await client.listOrganizations(accessToken) : [];
+    const role = githubAuthRole(githubUser.login, organizations, config);
+    if (!role) {
       return writeError(c, 403, 'forbidden', 'GitHub user is not allowed');
     }
 
@@ -258,6 +263,7 @@ export function createApp(config: AppConfig, services = createServices()) {
       provider: 'github',
       providerAccountId: String(githubUser.id),
       username: githubUser.login,
+      role,
       ...(githubUser.name ? { displayName: githubUser.name } : {}),
       ...(githubUser.avatar_url ? { avatarUrl: githubUser.avatar_url } : {}),
       profile: { login: githubUser.login, id: githubUser.id },
@@ -307,14 +313,21 @@ export function createApp(config: AppConfig, services = createServices()) {
   app.use('/events/*', apiAuthMiddleware(config, services.store));
   app.use('/events', apiAuthMiddleware(config, services.store));
 
+  app.use('/sessions/:sessionId/sandbox/*', apiAdminMiddleware(config, services.store));
+  app.use('/sessions/:sessionId/workspace-tools/*', apiAdminMiddleware(config, services.store));
+  app.use('/sessions/*', apiUnsafeMethodAdminMiddleware(config, services.store));
+  app.use('/sessions', apiUnsafeMethodAdminMiddleware(config, services.store));
+  app.use('/setup/*', apiAdminMiddleware(config, services.store));
+  app.use('/setup', apiAdminMiddleware(config, services.store));
+
   app.use('*', async (c, next) => {
     const serviceHost = parseServiceHostFromRequest(config, c);
     if (!serviceHost) {
       await next();
       return;
     }
-    if (!(await isAuthorizedRequest(config, services.store, c)))
-      return writeError(c, 401, 'unauthorized', 'Missing or invalid session');
+    const serviceAuthorized = await isAuthorizedRequest(config, services.store, c, { role: 'admin' });
+    if (!serviceAuthorized) return writeError(c, 403, 'forbidden', 'Admin access is required');
     const session = await services.sessions.get(serviceHost.sessionId);
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
     const service = await getSessionService(config, services, serviceHost.sessionId, serviceHost.port);
@@ -767,7 +780,8 @@ export function createApp(config: AppConfig, services = createServices()) {
     const session = await services.sessions.get(sessionId);
     if (!session) return writeError(c, 404, 'not_found', 'Session not found');
 
-    const requestedPort = parseServicePort(c.req.query('port'));
+    const isAdmin = await isAdminRequest(config, services.store, c);
+    const requestedPort = isAdmin ? parseServicePort(c.req.query('port')) : undefined;
     const published = readServices(session.context ?? {});
     const requested = requestedPort ? [{ port: requestedPort }] : published;
     const liveServices = [];
@@ -893,22 +907,6 @@ export function createApp(config: AppConfig, services = createServices()) {
       session: await serializeSessionWithSandbox(config, services, updatedSession),
     });
   });
-
-  const handleServiceProxy = async (c: Context) => {
-    const sessionId = c.req.param('sessionId');
-    if (!sessionId) return writeError(c, 400, 'invalid_request', 'Missing session ID');
-    const session = await services.sessions.get(sessionId);
-    if (!session) return writeError(c, 404, 'not_found', 'Session not found');
-
-    const port = parseServicePort(c.req.param('port'));
-    if (!port) return writeError(c, 400, 'invalid_request', 'Invalid service port');
-    const service = await getSessionService(config, services, sessionId, port);
-    if (!service) return writeError(c, 404, 'not_found', 'Service URL is not available for this sandbox');
-    return proxyService(c, config, sessionId, port, service);
-  };
-
-  app.all('/sessions/:sessionId/services/:port', handleServiceProxy);
-  app.all('/sessions/:sessionId/services/:port/*', handleServiceProxy);
 
   app.get('/sessions/:sessionId/callbacks', async (c) => {
     const sessionId = c.req.param('sessionId');
@@ -1176,9 +1174,17 @@ function serializeAuthUser(user: AuthUserRecord) {
   return {
     id: user.id,
     username: user.username,
+    role: user.role,
     ...(user.displayName ? { displayName: user.displayName } : {}),
     ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
   };
+}
+
+async function isAdminRequest(config: AppConfig, store: AppStore, c: Context): Promise<boolean> {
+  if (config.apiAuthMode !== 'session') return true;
+  const sessionId = readSessionId(c);
+  const user = sessionId ? await store.getAuthUserBySession({ sessionId, now: new Date() }) : null;
+  return user?.role === 'admin';
 }
 
 function githubOAuthCallbackUrl(c: Context, config: AppConfig): string {
@@ -1186,12 +1192,40 @@ function githubOAuthCallbackUrl(c: Context, config: AppConfig): string {
   return new URL('/auth/oauth/github/callback', c.req.url).toString();
 }
 
-function isAllowedGitHubLogin(username: string, organizations: string[], config: AppConfig): boolean {
-  const allowedUsers = new Set(config.authGithubAllowedUsers.map((user) => user.toLowerCase()));
-  const allowedOrganizations = new Set(config.authGithubAllowedOrganizations.map((org) => org.toLowerCase()));
-  if (!allowedUsers.size && !allowedOrganizations.size) return true;
-  if (allowedUsers.has(username.toLowerCase())) return true;
-  return organizations.some((org) => allowedOrganizations.has(org.toLowerCase()));
+function githubAuthRole(username: string, organizations: string[], config: AppConfig): AuthRole | null {
+  const adminUsers = config.authGithubAdminUsers;
+  const adminOrganizations = config.authGithubAdminOrganizations;
+  if (matchesGitHubAllowlist(username, organizations, adminUsers, adminOrganizations)) return 'admin';
+  if (
+    config.unsafeAuthGithubAllowAllViewers ||
+    matchesGitHubAllowlist(username, organizations, config.authGithubViewerUsers, config.authGithubViewerOrganizations)
+  ) {
+    return 'viewer';
+  }
+
+  const hasAnyRoleAllowlist = Boolean(
+    adminUsers.length ||
+    adminOrganizations.length ||
+    config.authGithubViewerUsers.length ||
+    config.authGithubViewerOrganizations.length,
+  );
+  return hasAnyRoleAllowlist ? null : 'admin';
+}
+
+function hasGitHubOrganizationRoleAllowlist(config: AppConfig): boolean {
+  return Boolean(config.authGithubAdminOrganizations.length || config.authGithubViewerOrganizations.length);
+}
+
+function matchesGitHubAllowlist(
+  username: string,
+  organizations: string[],
+  allowedUsers: string[],
+  allowedOrganizations: string[],
+): boolean {
+  const users = new Set(allowedUsers.map((user) => user.toLowerCase()));
+  const orgs = new Set(allowedOrganizations.map((org) => org.toLowerCase()));
+  if (users.has(username.toLowerCase())) return true;
+  return organizations.some((org) => orgs.has(org.toLowerCase()));
 }
 
 function safeStringEqual(a: string, b: string): boolean {

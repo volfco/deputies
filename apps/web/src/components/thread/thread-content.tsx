@@ -21,6 +21,7 @@ import { cn } from '../../lib/utils.js';
 
 export function ChatPanel(props: {
   artifacts: Artifact[];
+  canAdmin: boolean;
   services: SandboxService[];
   canRetryMessages: boolean;
   editingMessageId: string;
@@ -66,13 +67,16 @@ export function ChatPanel(props: {
                       onRetry={() => props.onRetryFailedMessages(failedMessages.map((message) => message.id))}
                     />
                   ) : null}
-                  {activeRun ? <CancelRunButton cancelling={cancellingRun} onCancelRun={props.onCancelRun} /> : null}
+                  {activeRun && props.canAdmin ? (
+                    <CancelRunButton cancelling={cancellingRun} onCancelRun={props.onCancelRun} />
+                  ) : null}
                 </div>
               </div>
             ) : null}
             {group.messages.map((message) => (
               <UserMessageCard
                 canRetryMessages={props.canRetryMessages}
+                canAdmin={props.canAdmin}
                 editingMessageId={props.editingMessageId}
                 key={message.id}
                 message={message}
@@ -101,7 +105,11 @@ export function ChatPanel(props: {
               <InlineArtifacts artifacts={inlineArtifacts} onLoadArtifactPreview={props.onLoadArtifactPreview} />
             ) : null}
             {props.services.length > 0 && group.key === groups.at(-1)?.key ? (
-              <InlineServices services={props.services} onExtendSandbox={props.onExtendSandbox} />
+              <InlineServices
+                services={props.services}
+                canAdmin={props.canAdmin}
+                onExtendSandbox={props.onExtendSandbox}
+              />
             ) : null}
             <Diagnostics events={groupDiagnostics} />
           </div>
@@ -112,11 +120,21 @@ export function ChatPanel(props: {
   );
 }
 
-function InlineServices(props: { services: SandboxService[]; onExtendSandbox: (port?: number) => void }) {
+function InlineServices(props: {
+  services: SandboxService[];
+  canAdmin: boolean;
+  onExtendSandbox: (port?: number) => void;
+}) {
   return (
     <div className="grid gap-2" aria-label="Inline services">
       {props.services.map((service) => (
-        <ServiceCard compact key={service.port} service={service} onExtendSandbox={props.onExtendSandbox} />
+        <ServiceCard
+          compact
+          key={service.port}
+          service={service}
+          canAdmin={props.canAdmin}
+          onExtendSandbox={props.onExtendSandbox}
+        />
       ))}
     </div>
   );
@@ -141,6 +159,7 @@ function InlineArtifacts(props: {
 }
 
 function UserMessageCard(props: {
+  canAdmin: boolean;
   canRetryMessages: boolean;
   editingMessageId: string;
   message: Message;
@@ -165,7 +184,7 @@ function UserMessageCard(props: {
           {message.authorName ? ` from ${message.authorName}` : ''}{' '}
           <Badge className={statusTextClass(message.status)}>{messageStatusLabel(message)}</Badge>
         </h3>
-        {message.status === 'pending' && props.editingMessageId !== message.id ? (
+        {props.canAdmin && message.status === 'pending' && props.editingMessageId !== message.id ? (
           <div className="flex gap-1">
             <Button className="h-7 px-2" variant="ghost" size="sm" onClick={() => props.onEditMessage(message)}>
               Edit
@@ -186,7 +205,7 @@ function UserMessageCard(props: {
             onRetry={() => props.onRetryFailedMessages([message.id])}
           />
         ) : null}
-        {props.showRunCancel ? (
+        {props.canAdmin && props.showRunCancel ? (
           <CancelRunButton cancelling={props.runCancelling} onCancelRun={props.onCancelRun} />
         ) : null}
       </div>
@@ -846,6 +865,7 @@ function humanizeEventName(value: string): string {
 }
 
 export function MobileContextPanel(props: {
+  canAdmin: boolean;
   repository: string | null;
   branch: string | null;
   artifacts: Artifact[];
@@ -864,6 +884,7 @@ export function MobileContextPanel(props: {
 }
 
 export function DesktopContextPanel(props: {
+  canAdmin: boolean;
   repository: string | null;
   branch: string | null;
   artifacts: Artifact[];
@@ -886,6 +907,7 @@ export function DesktopContextPanel(props: {
 }
 
 function ContextPanelContent(props: {
+  canAdmin: boolean;
   repository: string | null;
   branch: string | null;
   artifacts: Artifact[];
@@ -913,7 +935,9 @@ function ContextPanelContent(props: {
               <span className="mt-1 block text-xs text-muted-foreground">Branch: {props.branch}</span>
             ) : null}
             <span className="mt-1 block text-xs">
-              Follow-ups inherit this repo. Enter another repo in the composer to switch.
+              {props.canAdmin
+                ? 'Follow-ups inherit this repo. Enter another repo in the composer to switch.'
+                : 'Admin follow-ups inherit this repo.'}
             </span>
           </>
         ) : (
@@ -922,11 +946,20 @@ function ContextPanelContent(props: {
       </div>
       <div className="mt-3 border-b border-border pb-3 text-sm text-muted-foreground">
         <strong className="block font-medium text-foreground">Live services</strong>
-        <span>Authenticated links to HTTP services running inside the sandbox.</span>
+        <span>
+          {props.canAdmin
+            ? 'Authenticated links to HTTP services running inside the sandbox.'
+            : 'Service metadata is visible, but sandbox access is admin-only.'}
+        </span>
       </div>
       <div className="mt-3 grid gap-2">
         {props.services.map((service) => (
-          <ServiceCard key={service.port} service={service} onExtendSandbox={props.onExtendSandbox} />
+          <ServiceCard
+            key={service.port}
+            service={service}
+            canAdmin={props.canAdmin}
+            onExtendSandbox={props.onExtendSandbox}
+          />
         ))}
         {!props.services.length ? <p className="text-sm text-muted-foreground">No live services available.</p> : null}
       </div>
@@ -987,7 +1020,7 @@ function ContextPanelContent(props: {
                 {callback.lastError ? <div className="text-destructive">Last error: {callback.lastError}</div> : null}
                 <div className="truncate">ID: {callback.id}</div>
               </dl>
-              {callback.status === 'failed' ? (
+              {props.canAdmin && callback.status === 'failed' ? (
                 <Button
                   className="mt-2 h-7 px-2"
                   size="sm"
@@ -1014,7 +1047,12 @@ type ArtifactPreviewCardProps = {
   onLoadArtifactPreview?: (artifact: Artifact) => Promise<ArtifactPreview>;
 };
 
-function ServiceCard(props: { service: SandboxService; compact?: boolean; onExtendSandbox: (port?: number) => void }) {
+function ServiceCard(props: {
+  service: SandboxService;
+  canAdmin: boolean;
+  compact?: boolean;
+  onExtendSandbox: (port?: number) => void;
+}) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!props.service.shutdownAt) return;
@@ -1041,11 +1079,17 @@ function ServiceCard(props: { service: SandboxService; compact?: boolean; onExte
           <strong className="min-w-0 text-sm leading-5 text-foreground">
             {props.service.label ?? 'Sandbox service'}
           </strong>
-          <Button asChild className="shrink-0" size="sm" variant="secondary">
-            <a href={props.service.url} target="_blank" rel="noreferrer">
+          {props.canAdmin ? (
+            <Button asChild className="shrink-0" size="sm" variant="secondary">
+              <a href={props.service.url} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" /> Open
+              </a>
+            </Button>
+          ) : (
+            <Button className="shrink-0" size="sm" variant="secondary" disabled title="Admin access is required">
               <ExternalLink className="h-3.5 w-3.5" /> Open
-            </a>
-          </Button>
+            </Button>
+          )}
         </div>
         <div className="min-w-0 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1056,7 +1100,9 @@ function ServiceCard(props: { service: SandboxService; compact?: boolean; onExte
           {shutdownLabel ? (
             <p className="mt-1 text-xs text-muted-foreground">
               Shuts down {shutdownLabel}.{' '}
-              {extensionAtMax ? (
+              {!props.canAdmin ? (
+                <span className="text-muted-foreground">Admin access is required to extend.</span>
+              ) : extensionAtMax ? (
                 <span className="text-muted-foreground">{extensionLabel}</span>
               ) : (
                 <button

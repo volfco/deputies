@@ -175,8 +175,9 @@ export function App() {
   const waitingForAuth = !healthChecked || (health && sessionAuthRequired && !authChecked);
   const canCallApi =
     Boolean(health) && (!bearerAuthRequired || Boolean(token)) && (!sessionAuthRequired || Boolean(currentUser));
+  const canAdmin = canCallApi && (!sessionAuthRequired || currentUser?.role === 'admin');
   const defaultSetupGuidePending = Boolean(
-    canCallApi && health && !health.hideSetupPage && !defaultSetupGuideOpenedRef.current,
+    canAdmin && health && !health.hideSetupPage && !defaultSetupGuideOpenedRef.current,
   );
   const showingSetupGuide = setupGuideOpen || defaultSetupGuidePending;
   const startupLoading = waitingForAuth || (canCallApi && !sessionsLoaded);
@@ -237,15 +238,15 @@ export function App() {
   }, [canCallApi, token]);
 
   useEffect(() => {
-    if (!canCallApi || !health || health.hideSetupPage || defaultSetupGuideOpenedRef.current) return;
+    if (!canAdmin || !health || health.hideSetupPage || defaultSetupGuideOpenedRef.current) return;
     defaultSetupGuideOpenedRef.current = true;
     setSetupGuideOpen(true);
-  }, [canCallApi, health]);
+  }, [canAdmin, health]);
 
   useEffect(() => {
-    if (!canCallApi || !showingSetupGuide) return;
+    if (!canAdmin || !showingSetupGuide) return;
     void refreshSetupStatus();
-  }, [canCallApi, showingSetupGuide, token]);
+  }, [canAdmin, showingSetupGuide, token]);
 
   useEffect(() => {
     const repository =
@@ -630,7 +631,7 @@ export function App() {
   async function handleCreateThread(event: FormEvent) {
     event.preventDefault();
     const firstPrompt = newThreadPrompt.trim();
-    if (createSessionInFlightRef.current || !firstPrompt) return;
+    if (createSessionInFlightRef.current || !canAdmin || !firstPrompt) return;
     createSessionInFlightRef.current = true;
     const firstRepository = newThreadRepository.trim();
     blurFocusedTextControl();
@@ -673,7 +674,8 @@ export function App() {
 
   async function handleSendMessage(input: { prompt: string }): Promise<boolean> {
     const messagePrompt = input.prompt.trim();
-    if (sendMessageInFlightRef.current || !selectedSessionId || selectedSessionArchived || !messagePrompt) return false;
+    if (sendMessageInFlightRef.current || !canAdmin || !selectedSessionId || selectedSessionArchived || !messagePrompt)
+      return false;
     sendMessageInFlightRef.current = true;
     setError('');
     try {
@@ -713,7 +715,7 @@ export function App() {
 
   async function handleUpdateTitle(title: string): Promise<boolean> {
     const nextTitle = title.trim();
-    if (!selectedSessionId || !nextTitle) return false;
+    if (!canAdmin || !selectedSessionId || !nextTitle) return false;
     setError('');
     try {
       const session = await updateSession({ sessionId: selectedSessionId, title: nextTitle, token });
@@ -726,7 +728,7 @@ export function App() {
   }
 
   async function handleArchiveSession() {
-    if (!selectedSessionId) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     const rollback = archiveOptimistically(selectedSessionId);
     try {
@@ -739,7 +741,7 @@ export function App() {
   }
 
   async function startEditingMessage(message: Message) {
-    if (!selectedSessionId || message.status !== 'pending') return;
+    if (!canAdmin || !selectedSessionId || message.status !== 'pending') return;
     setError('');
     try {
       const session = await pauseQueue({ sessionId: selectedSessionId, token });
@@ -752,7 +754,7 @@ export function App() {
   }
 
   async function finishEditingMessage(resume: boolean) {
-    if (!selectedSessionId || !editingMessageId) return;
+    if (!canAdmin || !selectedSessionId || !editingMessageId) return;
     setError('');
     try {
       if (resume) {
@@ -767,7 +769,7 @@ export function App() {
   }
 
   async function saveMessageEdit() {
-    if (!selectedSessionId || !editingMessageId || !messageDraft.trim()) return;
+    if (!canAdmin || !selectedSessionId || !editingMessageId || !messageDraft.trim()) return;
     setError('');
     try {
       const message = await updateMessage({
@@ -784,7 +786,7 @@ export function App() {
   }
 
   async function cancelQueuedMessage(messageId: string) {
-    if (!selectedSessionId) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     try {
       const message = await cancelMessage({ sessionId: selectedSessionId, messageId, token });
@@ -795,7 +797,7 @@ export function App() {
   }
 
   async function retryFailedMessages(messageIds: string[]) {
-    if (!selectedSessionId || selectedSessionArchived || !messageIds.length) return;
+    if (!canAdmin || !selectedSessionId || selectedSessionArchived || !messageIds.length) return;
     setLoading(true);
     setError('');
     try {
@@ -815,7 +817,7 @@ export function App() {
   }
 
   async function cancelRun() {
-    if (!selectedSessionId) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     try {
       const cancelledMessages = await cancelCurrentRun({ sessionId: selectedSessionId, token });
@@ -878,6 +880,7 @@ export function App() {
   }
 
   function startNewThread() {
+    if (!canAdmin) return;
     setSetupGuideOpen(false);
     setSidebarOpen(false);
     setSidebarCollapsed(false);
@@ -918,7 +921,7 @@ export function App() {
   }
 
   async function refreshSetupStatus() {
-    if (!canCallApi || setupStatusLoading) return;
+    if (!canAdmin || setupStatusLoading) return;
     setSetupStatusLoading(true);
     setSetupStatusError('');
     try {
@@ -1065,6 +1068,7 @@ export function App() {
   }
 
   async function archiveFromList(sessionId: string) {
+    if (!canAdmin) return;
     setError('');
     const rollback = archiveOptimistically(sessionId);
     try {
@@ -1077,6 +1081,7 @@ export function App() {
   }
 
   async function unarchiveFromList(sessionId: string) {
+    if (!canAdmin) return;
     setError('');
     const rollback = unarchiveOptimistically(sessionId);
     try {
@@ -1089,7 +1094,8 @@ export function App() {
   }
 
   async function restoreSelectedSession() {
-    if (!selectedSessionId) return;
+    if (!canAdmin) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     const rollback = unarchiveOptimistically(selectedSessionId);
     try {
@@ -1102,7 +1108,8 @@ export function App() {
   }
 
   async function handleReplayCallback(callbackId: string) {
-    if (!selectedSessionId) return;
+    if (!canAdmin) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     try {
       const callback = await replayCallback({ sessionId: selectedSessionId, callbackId, token });
@@ -1114,7 +1121,8 @@ export function App() {
   }
 
   async function handleExtendSandbox(port?: number) {
-    if (!selectedSessionId) return;
+    if (!canAdmin) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     try {
       await extendSandbox({ sessionId: selectedSessionId, token, seconds: 600, ...(port ? { port } : {}) });
@@ -1125,7 +1133,8 @@ export function App() {
   }
 
   async function handleOpenWorkspaceTool(toolId: WorkspaceToolId) {
-    if (!selectedSessionId) return;
+    if (!canAdmin) return;
+    if (!canAdmin || !selectedSessionId) return;
     setError('');
     const opened = window.open('about:blank', '_blank');
     writeWorkspaceToolTabMessage(
@@ -1211,6 +1220,7 @@ export function App() {
                   archivedSessionsOpen={archivedSessionsOpen || Boolean(selectedSessionArchived)}
                   authRequired={bearerAuthRequired || sessionAuthRequired}
                   canCallApi={canCallApi}
+                  canAdmin={canAdmin}
                   health={health}
                   connectionStatus={connectionStatus}
                   loading={loading}
@@ -1242,10 +1252,12 @@ export function App() {
                     setupError={setupStatusError}
                     onRefresh={refreshSetupStatus}
                     onStartNewThread={startNewThread}
+                    canStartNewThread={canAdmin}
                   />
                 ) : isCreatingThread || !selectedSession ? (
                   <NewThreadPanel
-                    canCallApi={canCallApi}
+                    canCallApi={canAdmin}
+                    readOnly={!canAdmin}
                     loading={loading}
                     prompt={newThreadPrompt}
                     repository={newThreadRepository}
@@ -1270,6 +1282,7 @@ export function App() {
                   <section className="flex h-full min-h-0 flex-col">
                     <ThreadHeader
                       selectedSession={selectedSession}
+                      canAdmin={canAdmin}
                       showOpenSidebar={!sidebarOpen}
                       onArchive={handleArchiveSession}
                       onOpenSidebar={expandSidebar}
@@ -1297,6 +1310,7 @@ export function App() {
                                   services={services}
                                   externalResources={externalResources}
                                   callbacks={callbacks}
+                                  canAdmin={canAdmin}
                                   onExtendSandbox={handleExtendSandbox}
                                   onReplayCallback={handleReplayCallback}
                                 />
@@ -1307,7 +1321,8 @@ export function App() {
                                   events={events}
                                   messageDraft={messageDraft}
                                   messages={messages}
-                                  canRetryMessages={!selectedSessionArchived}
+                                  canRetryMessages={canAdmin && !selectedSessionArchived}
+                                  canAdmin={canAdmin}
                                   onCancelEdit={() => finishEditingMessage(true)}
                                   onCancelQueuedMessage={cancelQueuedMessage}
                                   onCancelRun={cancelRun}
@@ -1344,6 +1359,7 @@ export function App() {
                           <MessageComposer
                             key={selectedSession.id}
                             archived={selectedSessionArchived}
+                            readOnly={!canAdmin}
                             hasSelectedRepository={Boolean(selectedRepository)}
                             repository={followUpRepository}
                             inheritedRepository={selectedRepository || ''}
@@ -1374,6 +1390,7 @@ export function App() {
                           services={services}
                           externalResources={externalResources}
                           callbacks={callbacks}
+                          canAdmin={canAdmin}
                           onExtendSandbox={handleExtendSandbox}
                           onReplayCallback={handleReplayCallback}
                         />

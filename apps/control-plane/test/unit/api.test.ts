@@ -235,7 +235,7 @@ describe('core API', () => {
         GITHUB_APP_CLIENT_ID: 'client-id',
         GITHUB_APP_CLIENT_SECRET: 'client-secret',
         GITHUB_OAUTH_BASE_URL: 'https://github.example',
-        AUTH_GITHUB_ALLOWED_USERS: 'octocat',
+        AUTH_GITHUB_ADMIN_USERS: 'octocat',
       }),
       {
         ...createServices(store),
@@ -280,6 +280,70 @@ describe('core API', () => {
     const me = await fetch(`${baseUrl}/auth/me`, { headers: { cookie: cookie! } });
     expect(me.status).toBe(200);
     await expect(me.json()).resolves.toMatchObject({ user: { username: 'octocat', displayName: 'The Octocat' } });
+  });
+
+  it('allows GitHub viewers to read but blocks writes', async () => {
+    await closeServer(server);
+    store = new MemoryStore();
+    services = createServices(store);
+    server = createServer(
+      loadConfig({
+        API_AUTH_MODE: 'session',
+        AUTH_PROVIDER: 'github',
+        AUTH_SESSION_SECRET: 'test-secret',
+        GITHUB_APP_CLIENT_ID: 'client-id',
+        GITHUB_APP_CLIENT_SECRET: 'client-secret',
+        GITHUB_OAUTH_BASE_URL: 'https://github.example',
+        UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS: 'true',
+      }),
+      {
+        ...services,
+        githubOAuthClient: {
+          async exchangeCode() {
+            return 'github-access-token';
+          },
+          async getUser() {
+            return { id: 1, login: 'viewer' };
+          },
+          async listOrganizations() {
+            return [];
+          },
+        },
+      },
+    );
+    baseUrl = await listen(server);
+
+    const start = await fetch(`${baseUrl}/auth/oauth/github/start`, { redirect: 'manual' });
+    const state = new URL(start.headers.get('location')!).searchParams.get('state');
+    const callback = await fetch(
+      `${baseUrl}/auth/oauth/github/callback?code=oauth-code&state=${encodeURIComponent(state!)}`,
+      { redirect: 'manual' },
+    );
+    const cookie = callback.headers.get('set-cookie');
+
+    const me = await fetch(`${baseUrl}/auth/me`, { headers: { cookie: cookie! } });
+    expect(me.status).toBe(200);
+    await expect(me.json()).resolves.toMatchObject({ user: { username: 'viewer', role: 'viewer' } });
+
+    const listSessions = await fetch(`${baseUrl}/sessions`, { headers: { cookie: cookie! } });
+    expect(listSessions.status).toBe(200);
+
+    const session = await services.sessions.create({ title: 'Existing session' });
+    const listServices = await fetch(`${baseUrl}/sessions/${session.id}/services`, { headers: { cookie: cookie! } });
+    expect(listServices.status).toBe(200);
+    await expect(listServices.json()).resolves.toEqual({ services: [] });
+
+    const createSession = await fetch(`${baseUrl}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: cookie! },
+      body: JSON.stringify({ title: 'Viewer write' }),
+    });
+    expect(createSession.status).toBe(403);
+
+    const openSandbox = await fetch(`${baseUrl}/sessions/${session.id}/services/3000`, {
+      headers: { cookie: cookie! },
+    });
+    expect(openSandbox.status).toBe(404);
   });
 
   it('allows PATCH session title updates through CORS preflight', async () => {
@@ -701,7 +765,7 @@ describe('core API', () => {
     ]);
   });
 
-  it('proxies service HTML and rewrites root-relative Vite asset paths', async () => {
+  it('proxies service hosts without path rewriting', async () => {
     const upstream = createPreviewUpstream();
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
@@ -749,7 +813,7 @@ describe('core API', () => {
         updatedAt: now,
       });
 
-      const serviceRoot = `${baseUrl}/sessions/${session.id}/services/3000/`;
+      const serviceHost = `s-3000-${session.id}.deputies.localhost`;
       await expect((await fetch(`${baseUrl}/sessions/${session.id}/services`)).json()).resolves.toMatchObject({
         services: [
           {
@@ -760,26 +824,24 @@ describe('core API', () => {
           },
         ],
       });
-      const html = await (await fetch(serviceRoot)).text();
+      const html = await (await fetch(`${baseUrl}/`, { headers: { 'x-forwarded-host': serviceHost } })).text();
 
-      expect(html).toContain(`/sessions/${session.id}/services/3000/@vite/client`);
-      expect(html).toContain(`/sessions/${session.id}/services/3000/src/main.tsx`);
-      await expect((await fetch(`${serviceRoot}@vite/client`)).text()).resolves.toBe('vite client');
-      await expect((await fetch(`${serviceRoot}src/main.tsx`)).text()).resolves.toBe('main');
+      expect(html).toContain('/@vite/client');
+      expect(html).toContain('/src/main.tsx');
       await expect(
-        (
-          await fetch(`${serviceRoot}@vite/client`, {
-            headers: { host: `s-3000-${session.id}.evil.localhost` },
-          })
-        ).text(),
+        (await fetch(`${baseUrl}/@vite/client`, { headers: { 'x-forwarded-host': serviceHost } })).text(),
       ).resolves.toBe('vite client');
-
-      const pathRedirect = await fetch(`${serviceRoot}redirect`, { redirect: 'manual' });
-      expect(pathRedirect.headers.get('location')).toBe(`/sessions/${session.id}/services/3000/dashboard`);
+      await expect(
+        (await fetch(`${baseUrl}/src/main.tsx`, { headers: { 'x-forwarded-host': serviceHost } })).text(),
+      ).resolves.toBe('main');
+      const invalidHost = await fetch(`${baseUrl}/@vite/client`, {
+        headers: { 'x-forwarded-host': `s-3000-${session.id}.evil.localhost` },
+      });
+      expect(invalidHost.status).toBe(404);
 
       const hostRedirect = await fetch(`${baseUrl}/redirect`, {
         redirect: 'manual',
-        headers: { 'x-forwarded-host': `s-3000-${session.id}.deputies.localhost` },
+        headers: { 'x-forwarded-host': serviceHost },
       });
       expect(hostRedirect.headers.get('location')).toBe('/dashboard');
     } finally {
@@ -792,7 +854,10 @@ describe('core API', () => {
     const upstreamBaseUrl = await listen(upstream);
     await closeServer(server);
     const provider = new ServiceSandboxProvider(upstreamBaseUrl);
-    server = createServer(loadConfig({ API_AUTH_MODE: 'none' }), createServices(store, { sandboxProvider: provider }));
+    server = createServer(
+      loadConfig({ API_AUTH_MODE: 'none', SERVICE_BASE_DOMAIN: 'deputies.localhost' }),
+      createServices(store, { sandboxProvider: provider }),
+    );
     baseUrl = await listen(server);
 
     try {
@@ -835,6 +900,7 @@ describe('core API', () => {
         API_AUTH_MODE: 'none',
         SANDBOX_STOP_DELAY_SECONDS: '60',
         SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS: '600',
+        SERVICE_BASE_DOMAIN: 'deputies.localhost',
       }),
       createServices(store, { sandboxProvider: provider }),
     );
@@ -902,7 +968,11 @@ describe('core API', () => {
     await closeServer(server);
     const provider = new ServiceSandboxProvider(upstreamBaseUrl);
     server = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS: '600' }),
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        SANDBOX_KEEPALIVE_MAX_EXTENSION_SECONDS: '600',
+        SERVICE_BASE_DOMAIN: 'deputies.localhost',
+      }),
       createServices(store, { sandboxProvider: provider }),
     );
     baseUrl = await listen(server);

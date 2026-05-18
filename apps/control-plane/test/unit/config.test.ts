@@ -32,8 +32,11 @@ describe('loadConfig', () => {
       authCookieSameSite: 'lax',
       serviceTrustForwardedHosts: false,
       githubOAuthBaseUrl: 'https://github.com',
-      authGithubAllowedUsers: [],
-      authGithubAllowedOrganizations: [],
+      authGithubAdminUsers: [],
+      authGithubAdminOrganizations: [],
+      authGithubViewerUsers: [],
+      authGithubViewerOrganizations: [],
+      unsafeAuthGithubAllowAllViewers: false,
       flueSessionStore: 'postgres',
       flueModelOptions: [],
       slackApiBaseUrl: 'https://slack.com/api',
@@ -54,6 +57,7 @@ describe('loadConfig', () => {
       artifactStorageS3CreateBucket: false,
       artifactToolMaxBytes: 26_214_400,
       unsafeAllowLocalHttpCallbacks: false,
+      hideSetupPage: false,
     });
   });
 
@@ -94,8 +98,11 @@ describe('loadConfig', () => {
         AUTH_COOKIE_SAME_SITE: 'none',
         AUTH_SUCCESS_REDIRECT_URL: 'https://deputies.example',
         WEB_BASE_URL: 'https://deputies.example/app',
-        AUTH_GITHUB_ALLOWED_USERS: 'octocat, monalisa',
-        AUTH_GITHUB_ALLOWED_ORGANIZATIONS: 'acme, octo',
+        AUTH_GITHUB_ADMIN_USERS: 'admin1, admin2',
+        AUTH_GITHUB_ADMIN_ORGANIZATIONS: 'admins',
+        AUTH_GITHUB_VIEWER_USERS: 'viewer1, viewer2',
+        AUTH_GITHUB_VIEWER_ORGANIZATIONS: 'viewers',
+        UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS: 'true',
         DATABASE_URL: 'postgres://example',
         FLUE_MODEL: 'anthropic/claude-haiku-4-5',
         FLUE_OPENAI_CODEX_AUTH_FILE: '/tmp/pi-auth.json',
@@ -173,8 +180,11 @@ describe('loadConfig', () => {
       authCookieSameSite: 'none',
       authSuccessRedirectUrl: 'https://deputies.example',
       webBaseUrl: 'https://deputies.example/app',
-      authGithubAllowedUsers: ['octocat', 'monalisa'],
-      authGithubAllowedOrganizations: ['acme', 'octo'],
+      authGithubAdminUsers: ['admin1', 'admin2'],
+      authGithubAdminOrganizations: ['admins'],
+      authGithubViewerUsers: ['viewer1', 'viewer2'],
+      authGithubViewerOrganizations: ['viewers'],
+      unsafeAuthGithubAllowAllViewers: true,
       databaseUrl: 'postgres://example',
       flueModel: 'anthropic/claude-haiku-4-5',
       flueOpenaiCodexAuthFile: '/tmp/pi-auth.json',
@@ -419,6 +429,9 @@ describe('loadConfig', () => {
     );
     expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'yes' })).toThrow(
       'UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS must be true or false',
+    );
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS: 'yes' })).toThrow(
+      'UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS must be true or false',
     );
     expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_LOCAL_HTTP_CALLBACKS: 'yes' })).toThrow(
       'UNSAFE_ALLOW_LOCAL_HTTP_CALLBACKS must be true or false',

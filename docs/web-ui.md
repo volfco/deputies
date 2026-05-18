@@ -49,7 +49,7 @@ set -a; . ./.env.local; set +a; pnpm control-plane:dev
 pnpm web:dev
 ```
 
-Open the app at `https://deputies.localhost`. Published services are listed from `GET /sessions/:sessionId/services`; no service is shown until the agent publishes one with the service tool.
+Open the app at `https://deputies.localhost`. Published services are listed from `GET /sessions/:sessionId/services`; no service is shown until the agent publishes one with the service tool. Service previews use wildcard hosts such as `s-<port>-<session>.deputies.localhost`, not path-based proxy URLs.
 
 For portless local development, use these `.env.local` values:
 
@@ -63,7 +63,7 @@ SERVICE_BASE_DOMAIN=deputies.localhost
 SERVICE_TRUST_FORWARDED_HOSTS=true
 ```
 
-Service links are browser navigations. They work with `API_AUTH_MODE=none` or session-cookie auth. They do not work with bearer-token-only auth because the browser cannot attach the UI's localStorage bearer token to a new tab.
+Service links are browser navigations to wildcard service hosts. They work with `API_AUTH_MODE=none` or session-cookie auth. They do not work with bearer-token-only auth because the browser cannot attach the UI's localStorage bearer token to a new tab.
 
 For production-like deployments, configure real DNS records so the app hostname and wildcard service hostname point to the deployed web/API entrypoint. Prefer a first-level wildcard such as `*.example.com`; nested wildcards like `*.app.example.com` may require provider-specific certificate upgrades such as Cloudflare Advanced Certificate Manager. For example, use `app.example.com` for the UI and `s-<port>-<session>.example.com` for services, then set:
 
@@ -121,10 +121,16 @@ WEB_BASE_URL=http://localhost:5173
 GITHUB_APP_CLIENT_ID=Iv1.example
 GITHUB_APP_CLIENT_SECRET=github-app-client-secret
 GITHUB_APP_CALLBACK_URL=http://localhost:5173/auth/oauth/github/callback
-AUTH_GITHUB_ALLOWED_USERS=your-github-login
+AUTH_GITHUB_ADMIN_USERS=your-github-login
+# Optional read-only viewers:
+# AUTH_GITHUB_VIEWER_USERS=teammate-login
+# AUTH_GITHUB_VIEWER_ORGANIZATIONS=your-org
+# UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS=false
 ```
 
 For GitHub App login, configure the GitHub App's callback URL to exactly match `GITHUB_APP_CALLBACK_URL`. The same GitHub App can also provide runtime repository access through `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`; those are separate values from the app's user-authorization client ID and client secret.
+
+GitHub users in `AUTH_GITHUB_ADMIN_*` allowlists are admins. Users in `AUTH_GITHUB_VIEWER_*` are read-only and cannot mutate sessions or access sandbox services. `UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS=true` allows any GitHub account to log in as read-only.
 
 Set `WEB_BASE_URL` to the externally reachable web UI origin when Slack/GitHub callbacks should include an “open session” link. The API appends `?session=<id>` to that URL, and the web UI opens the matching session when present.
 

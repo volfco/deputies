@@ -182,6 +182,7 @@ export type CallbackDelivery = {
 export type AuthUser = {
   id: string;
   username: string;
+  role: 'admin' | 'viewer';
   displayName?: string;
   avatarUrl?: string;
 };
