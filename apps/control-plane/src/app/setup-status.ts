@@ -186,7 +186,9 @@ function objectStoreStatus(config: AppConfig): SetupStatusItem {
     summary:
       config.artifactStorage === 'disabled'
         ? 'Object storage is disabled.'
-        : `${config.artifactStorage} artifact storage configured.`,
+        : config.artifactStorage === 's3'
+          ? 's3 compatible artifact storage configured.'
+          : `${config.artifactStorage} artifact storage configured.`,
     guidance:
       config.artifactStorage === 'disabled'
         ? 'Set ARTIFACT_STORAGE_PROVIDER=s3 and provide the S3 bucket and credentials to persist downloadable artifacts.'
