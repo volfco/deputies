@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PanelLeftOpen } from 'lucide-react';
-import type { ArtifactPreview, Session } from '../api.js';
-import { ThreadHeader, ThreadSidebar } from '../components/app-panels.js';
+import type { ArtifactPreview, ModelOption, Session } from '../api.js';
+import { MessageComposer, ThreadHeader, ThreadSidebar } from '../components/app-panels.js';
 import type { ThemePreference } from '../components/app-panels.js';
 import { ChatPanel, DesktopContextPanel, MobileContextPanel } from '../components/thread/thread-content.js';
 import { Button } from '../components/ui/button.js';
@@ -139,6 +139,8 @@ function StaticSessionView(props: { demoSession: StaticDemoSession; onOpenSideba
   const { session } = props.demoSession;
   const repository = repositoryLabel(session.context?.repository);
   const branch = typeof session.context?.branch === 'string' ? session.context.branch : null;
+  const model = typeof session.context?.model === 'string' ? session.context.model : '';
+  const modelOptions = model ? [modelOption(model)] : [];
   const services = props.demoSession.services ?? [];
 
   return (
@@ -186,6 +188,31 @@ function StaticSessionView(props: { demoSession: StaticDemoSession; onOpenSideba
               onLoadArtifactPreview={loadStaticArtifactPreview}
             />
           </div>
+          <MessageComposer
+            key={session.id}
+            archived={session.status === 'archived'}
+            readOnly
+            hasSelectedRepository={Boolean(repository)}
+            repository=""
+            inheritedRepository={repository ?? ''}
+            repositoryOptions={[]}
+            repositoryOptionsLoading={false}
+            repositoryOptionsError=""
+            branch=""
+            inheritedBranch={branch ?? ''}
+            branchOptions={[]}
+            branchOptionsLoading={false}
+            branchOptionsError=""
+            model={model}
+            inheritedModel={model}
+            modelOptions={modelOptions}
+            modelUnavailableReason=""
+            onBranchChange={() => undefined}
+            onModelChange={() => undefined}
+            onRepositoryChange={() => undefined}
+            onFocusChange={() => undefined}
+            onSubmit={async () => false}
+          />
         </section>
         <DesktopContextPanel
           repository={repository}
@@ -227,6 +254,10 @@ function repositoryLabel(value: unknown): string | null {
   const owner = typeof repository.owner === 'string' ? repository.owner : '';
   const repo = typeof repository.repo === 'string' ? repository.repo : '';
   return owner && repo ? `${owner}/${repo}` : null;
+}
+
+function modelOption(model: string): ModelOption {
+  return { value: model, label: model.replace(/^[^/]+\//, '').replace(/-/g, ' '), available: true };
 }
 
 function resolveThemePreference(theme: ThemePreference): 'light' | 'dark' {
