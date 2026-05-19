@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PanelLeftOpen } from 'lucide-react';
 import type { ArtifactPreview, Session } from '../api.js';
-import { ThreadSidebar } from '../components/app-panels.js';
+import { ThreadHeader, ThreadSidebar } from '../components/app-panels.js';
 import type { ThemePreference } from '../components/app-panels.js';
 import { ChatPanel, DesktopContextPanel, MobileContextPanel } from '../components/thread/thread-content.js';
 import { Button } from '../components/ui/button.js';
@@ -69,22 +69,6 @@ export function StaticDemoApp() {
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex items-center gap-3 border-b border-border bg-card/90 px-4 py-3">
-        <Button
-          className="h-9 w-9 shrink-0 p-0 md:hidden"
-          variant="secondary"
-          size="icon"
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Open sessions"
-          title="Open sessions"
-        >
-          <PanelLeftOpen className="h-4 w-4" />
-        </Button>
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">Static demo</p>
-          <h1 className="mt-1 text-lg font-semibold">Real Deputies sessions, exported read-only</h1>
-        </div>
-      </div>
       <section
         className={
           sidebarCollapsed
@@ -145,70 +129,76 @@ export function StaticDemoApp() {
             />
           </aside>
         )}
-        <StaticSessionView demoSession={selected} />
+        <StaticSessionView demoSession={selected} onOpenSidebar={() => setSidebarOpen(true)} />
       </section>
     </main>
   );
 }
 
-function StaticSessionView(props: { demoSession: StaticDemoSession }) {
+function StaticSessionView(props: { demoSession: StaticDemoSession; onOpenSidebar: () => void }) {
   const { session } = props.demoSession;
   const repository = repositoryLabel(session.context?.repository);
   const branch = typeof session.context?.branch === 'string' ? session.context.branch : null;
   const services = props.demoSession.services ?? [];
 
   return (
-    <section className="grid min-h-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden px-3 pt-4 md:px-8 xl:px-16">
-        <div className="mb-4 rounded-md border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{session.status}</p>
-          <h2 className="mt-1 text-xl font-semibold">{session.title || titleFromSession(session)}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Updated {formatDate(session.updatedAt)}</p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto pb-5" role="log" aria-label="Static demo session messages">
-          <MobileContextPanel
-            repository={repository}
-            branch={branch}
-            artifacts={props.demoSession.artifacts}
-            services={services}
-            externalResources={props.demoSession.externalResources}
-            callbacks={props.demoSession.callbacks}
-            canAdmin={false}
-            onExtendSandbox={() => undefined}
-            onReplayCallback={() => undefined}
-          />
-          <ChatPanel
-            artifacts={props.demoSession.artifacts}
-            canAdmin={false}
-            services={services}
-            canRetryMessages={false}
-            editingMessageId=""
-            events={props.demoSession.events}
-            messageDraft=""
-            messages={props.demoSession.messages}
-            onCancelEdit={() => undefined}
-            onCancelQueuedMessage={() => undefined}
-            onCancelRun={() => undefined}
-            onEditMessage={() => undefined}
-            onMessageDraftChange={() => undefined}
-            onRetryFailedMessages={() => undefined}
-            onSaveEdit={() => undefined}
-            onExtendSandbox={() => undefined}
-            onLoadArtifactPreview={loadStaticArtifactPreview}
-          />
-        </div>
-      </section>
-      <DesktopContextPanel
-        repository={repository}
-        branch={branch}
-        artifacts={props.demoSession.artifacts}
-        services={services}
-        externalResources={props.demoSession.externalResources}
-        callbacks={props.demoSession.callbacks}
+    <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <ThreadHeader
+        selectedSession={session}
         canAdmin={false}
-        onExtendSandbox={() => undefined}
-        onReplayCallback={() => undefined}
+        showOpenSidebar
+        onArchive={() => undefined}
+        onOpenSidebar={props.onOpenSidebar}
+        onUpdateTitle={async () => false}
+        onOpenWorkspaceTool={async () => undefined}
       />
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden px-3 pt-4 md:px-8 xl:px-16">
+          <div className="min-h-0 flex-1 overflow-auto pb-5" role="log" aria-label="Static demo session messages">
+            <MobileContextPanel
+              repository={repository}
+              branch={branch}
+              artifacts={props.demoSession.artifacts}
+              services={services}
+              externalResources={props.demoSession.externalResources}
+              callbacks={props.demoSession.callbacks}
+              canAdmin={false}
+              onExtendSandbox={() => undefined}
+              onReplayCallback={() => undefined}
+            />
+            <ChatPanel
+              artifacts={props.demoSession.artifacts}
+              canAdmin={false}
+              services={services}
+              canRetryMessages={false}
+              editingMessageId=""
+              events={props.demoSession.events}
+              messageDraft=""
+              messages={props.demoSession.messages}
+              onCancelEdit={() => undefined}
+              onCancelQueuedMessage={() => undefined}
+              onCancelRun={() => undefined}
+              onEditMessage={() => undefined}
+              onMessageDraftChange={() => undefined}
+              onRetryFailedMessages={() => undefined}
+              onSaveEdit={() => undefined}
+              onExtendSandbox={() => undefined}
+              onLoadArtifactPreview={loadStaticArtifactPreview}
+            />
+          </div>
+        </section>
+        <DesktopContextPanel
+          repository={repository}
+          branch={branch}
+          artifacts={props.demoSession.artifacts}
+          services={services}
+          externalResources={props.demoSession.externalResources}
+          callbacks={props.demoSession.callbacks}
+          canAdmin={false}
+          onExtendSandbox={() => undefined}
+          onReplayCallback={() => undefined}
+        />
+      </div>
     </section>
   );
 }
@@ -237,15 +227,6 @@ function repositoryLabel(value: unknown): string | null {
   const owner = typeof repository.owner === 'string' ? repository.owner : '';
   const repo = typeof repository.repo === 'string' ? repository.repo : '';
   return owner && repo ? `${owner}/${repo}` : null;
-}
-
-function titleFromSession(session: Session): string {
-  const title = typeof session.context?.title === 'string' ? session.context.title : '';
-  return title || 'Deputies session';
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 function resolveThemePreference(theme: ThemePreference): 'light' | 'dark' {
