@@ -341,7 +341,7 @@ async function startServer(extraEnv: Record<string, string> = {}): Promise<void>
     cwd: process.cwd(),
     env: {
       ...process.env,
-      APP_STORE: 'postgres',
+      APP_DATA_STORE: 'postgres',
       DATABASE_URL: testDatabaseUrl!,
       PORT: String(uatPort),
       RUN_MODE: 'all',
@@ -360,7 +360,7 @@ async function startWorker(extraEnv: Record<string, string> = {}): Promise<void>
     cwd: process.cwd(),
     env: {
       ...process.env,
-      APP_STORE: 'postgres',
+      APP_DATA_STORE: 'postgres',
       DATABASE_URL: testDatabaseUrl!,
       PORT: String(workerHealthPort),
       RUN_MODE: 'worker',

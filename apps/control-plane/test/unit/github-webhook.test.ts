@@ -601,9 +601,9 @@ describe('GitHub webhook integration', () => {
         API_AUTH_MODE: 'bearer',
         API_BEARER_TOKEN: 'secret',
         GITHUB_WEBHOOK_SECRET: secret,
-        GITHUB_ALLOWED_USERS: 'octocat',
-        GITHUB_ALLOWED_ORGANIZATIONS: 'acme',
-        GITHUB_TRIGGER_PHRASES: '/deputies',
+        GITHUB_WEBHOOK_ALLOWED_USERS: 'octocat',
+        GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS: 'acme',
+        GITHUB_WEBHOOK_TRIGGER_PHRASES: '/deputies',
       }),
       createServices(store),
     );

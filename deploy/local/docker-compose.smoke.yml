@@ -6,7 +6,7 @@ services:
     environment:
       API_AUTH_MODE: none
       AUTH_PROVIDER: static
-      APP_STORE: postgres
+      APP_DATA_STORE: postgres
       DATABASE_URL: postgres://flue:flue@postgres:5432/flue
       RUNNER: fake
       SANDBOX_PROVIDER: fake
@@ -19,8 +19,8 @@ services:
       DAYTONA_API_KEY: ''
       GITHUB_APP_ID: ''
       GITHUB_APP_PRIVATE_KEY: ''
-      GITHUB_APP_CLIENT_ID: ''
-      GITHUB_APP_CLIENT_SECRET: ''
+      GITHUB_OAUTH_CLIENT_ID: ''
+      GITHUB_OAUTH_CLIENT_SECRET: ''
       GITHUB_WEBHOOK_SECRET: ''
       SLACK_SIGNING_SECRET: ''
       SLACK_BOT_TOKEN: ''
@@ -30,7 +30,7 @@ services:
     environment:
       API_AUTH_MODE: none
       AUTH_PROVIDER: static
-      APP_STORE: postgres
+      APP_DATA_STORE: postgres
       RUNNER: fake
       SANDBOX_PROVIDER: fake
       FAKE_RUNNER_ARTIFACT_JSON: '{"type":"file","title":"Smoke Artifact","content":"hello artifact storage","contentType":"text/plain","fileName":"smoke-artifact.txt"}'
@@ -42,8 +42,8 @@ services:
       DAYTONA_API_KEY: ''
       GITHUB_APP_ID: ''
       GITHUB_APP_PRIVATE_KEY: ''
-      GITHUB_APP_CLIENT_ID: ''
-      GITHUB_APP_CLIENT_SECRET: ''
+      GITHUB_OAUTH_CLIENT_ID: ''
+      GITHUB_OAUTH_CLIENT_SECRET: ''
       GITHUB_WEBHOOK_SECRET: ''
       GITHUB_ALLOWED_REPOSITORIES: acme/widget,acme/api
       SLACK_SIGNING_SECRET: ''

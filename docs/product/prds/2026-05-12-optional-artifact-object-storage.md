@@ -72,7 +72,7 @@ The system also needs to remain easy to run locally. Local development should no
 - S3-compatible storage requires `ARTIFACT_STORAGE_S3_BUCKET`, `ARTIFACT_STORAGE_S3_ACCESS_KEY_ID`, and `ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY`; `ARTIFACT_STORAGE_S3_ENDPOINT`, `ARTIFACT_STORAGE_S3_REGION`, `ARTIFACT_STORAGE_S3_FORCE_PATH_STYLE`, and `ARTIFACT_STORAGE_S3_CREATE_BUCKET` configure compatible local or hosted stores.
 - Local Compose runs SeaweedFS S3 and configures both all-in-one and split stacks to use it.
 - Flue runs receive an `artifact` tool. The current `create` action publishes a file from the sandbox as a durable artifact; supported types are `file`, `log`, `screenshot`, `report`, and `image`.
-- The artifact tool enforces `ARTIFACT_TOOL_MAX_BYTES`, default 25 MiB, before reading the sandbox file.
+- The artifact tool enforces `ARTIFACT_CREATE_MAX_BYTES`, default 25 MiB, before reading the sandbox file.
 - Stored artifact metadata includes `storage: "internal"`, `sizeBytes`, `checksumSha256`, optional `contentType`, optional `fileName`, and `sourcePath` for tool-created artifacts.
 - Stored artifact objects are keyed as `artifacts/:createdAtTimestamp/sessions/:sessionId/runs/:runId/:artifactId[-fileName]`, where `createdAtTimestamp` is a compact UTC timestamp such as `20260514T024500123Z`.
 - Product API routes are `GET /sessions/:sessionId/artifacts`, `GET /sessions/:sessionId/artifacts/:artifactId/download`, and `GET /sessions/:sessionId/artifacts/:artifactId/preview`.

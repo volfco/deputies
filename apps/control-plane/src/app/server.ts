@@ -275,7 +275,7 @@ export function createApp(config: AppConfig, services = createServices()) {
       now: new Date(),
     });
     await setAuthSessionCookie(c, config, services.store, user.id);
-    return c.html(oauthSuccessHtml(config.authSuccessRedirectUrl ?? '/'));
+    return c.html(oauthSuccessHtml(config.webBaseUrl ?? '/'));
   });
 
   app.post('/auth/logout', async (c) => {
@@ -291,7 +291,7 @@ export function createApp(config: AppConfig, services = createServices()) {
   });
 
   app.get('/auth/logout', async (c) => {
-    return c.redirect(config.authSuccessRedirectUrl ?? '/', 302);
+    return c.redirect(config.webBaseUrl ?? '/', 302);
   });
 
   app.get('/auth/me', async (c) => {
@@ -506,10 +506,10 @@ export function createApp(config: AppConfig, services = createServices()) {
     if (event) headers.event = event;
 
     const result = await new GitHubWebhookService(services.store, services.sessions, services.messages, {
-      allowedUsers: config.githubAllowedUsers,
-      allowedOrganizations: config.githubAllowedOrganizations,
+      allowedUsers: config.githubWebhookAllowedUsers,
+      allowedOrganizations: config.githubWebhookAllowedOrganizations,
       allowedRepositories: config.githubAllowedRepositories,
-      triggerPhrases: config.githubTriggerPhrases,
+      triggerPhrases: config.githubWebhookTriggerPhrases,
       ...(services.githubReactionSender ? { reactionSender: services.githubReactionSender } : {}),
       ...(services.githubIssueContextFetcher ? { issueContextFetcher: services.githubIssueContextFetcher } : {}),
       ...(services.githubArchivedSessionNotifier
@@ -1190,7 +1190,7 @@ async function isAdminRequest(config: AppConfig, store: AppStore, c: Context): P
 }
 
 function githubOAuthCallbackUrl(c: Context, config: AppConfig): string {
-  if (config.githubAppCallbackUrl) return config.githubAppCallbackUrl;
+  if (config.githubOAuthCallbackUrl) return config.githubOAuthCallbackUrl;
   return new URL('/auth/oauth/github/callback', c.req.url).toString();
 }
 

@@ -25,7 +25,7 @@ describe('loadConfig', () => {
       dockerSandboxImage: 'deputies-sandbox:local',
       dockerSandboxBridgeHost: '127.0.0.1',
       dockerCliTimeoutMs: 30_000,
-      appStore: 'memory',
+      appDataStore: 'memory',
       apiAuthMode: 'none',
       authProvider: 'static',
       authCookieSecure: false,
@@ -37,25 +37,25 @@ describe('loadConfig', () => {
       authGithubViewerUsers: [],
       authGithubViewerOrganizations: [],
       unsafeAuthGithubAllowAllViewers: false,
-      flueSessionStore: 'postgres',
+      flueStateStore: 'postgres',
       flueModelOptions: [],
       slackApiBaseUrl: 'https://slack.com/api',
-      unsafeAllowAllSlackIds: false,
+      unsafeSlackWebhookAllowAllIds: false,
       slackAllowedTeamIds: [],
       slackAllowedChannelIds: [],
       slackAllowedUserIds: [],
-      unsafeAllowAllGithubUsersAndOrgs: false,
+      unsafeGithubWebhookAllowAllUsersAndOrgs: false,
       githubApiBaseUrl: 'https://api.github.com',
       githubCloneBaseUrl: 'https://github.com',
       githubAllowedRepositories: [],
-      githubAllowedUsers: [],
-      githubAllowedOrganizations: [],
-      githubTriggerPhrases: [],
+      githubWebhookAllowedUsers: [],
+      githubWebhookAllowedOrganizations: [],
+      githubWebhookTriggerPhrases: [],
       artifactStorage: 'disabled',
       artifactStorageS3Region: 'us-east-1',
       artifactStorageS3ForcePathStyle: true,
       artifactStorageS3CreateBucket: false,
-      artifactToolMaxBytes: 26_214_400,
+      artifactCreateMaxBytes: 26_214_400,
       unsafeAllowLocalHttpCallbacks: false,
       hideSetupPage: false,
     });
@@ -87,7 +87,7 @@ describe('loadConfig', () => {
         DOCKER_SANDBOX_MEMORY: '2g',
         DOCKER_SANDBOX_CPUS: '2',
         DOCKER_CLI_TIMEOUT_MS: '45000',
-        APP_STORE: 'postgres',
+        APP_DATA_STORE: 'postgres',
         API_AUTH_MODE: 'session',
         API_BEARER_TOKEN: 'api-token',
         AUTH_PROVIDER: 'github',
@@ -96,7 +96,6 @@ describe('loadConfig', () => {
         AUTH_SESSION_SECRET: 'session-secret',
         AUTH_COOKIE_SECURE: 'true',
         AUTH_COOKIE_SAME_SITE: 'none',
-        AUTH_SUCCESS_REDIRECT_URL: 'https://deputies.example',
         WEB_BASE_URL: 'https://deputies.example/app',
         AUTH_GITHUB_ADMIN_USERS: 'admin1, admin2',
         AUTH_GITHUB_ADMIN_ORGANIZATIONS: 'admins',
@@ -108,7 +107,7 @@ describe('loadConfig', () => {
         FLUE_OPENAI_CODEX_AUTH_FILE: '/tmp/pi-auth.json',
         FLUE_OPENAI_CODEX_AUTH_BASE64: 'eyJvcGVuYWktY29kZXgiOnsidHlwZSI6Im9hdXRoIn19',
         FLUE_OPENAI_CODEX_AUTH_JSON: '{"openai-codex":{"type":"oauth"}}',
-        FLUE_SESSION_STORE: 'memory',
+        FLUE_STATE_STORE: 'memory',
         DAYTONA_API_KEY: 'daytona-key',
         DAYTONA_API_URL: 'https://daytona.example',
         DAYTONA_TARGET: 'eu',
@@ -120,20 +119,20 @@ describe('loadConfig', () => {
         SLACK_ALLOWED_TEAM_IDS: 'T123, T456',
         SLACK_ALLOWED_CHANNEL_IDS: 'C123,C456',
         SLACK_ALLOWED_USER_IDS: 'U123, U456',
-        UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'true',
+        UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS: 'true',
         GITHUB_API_BASE_URL: 'https://github.emulate.localhost/api',
         GITHUB_OAUTH_BASE_URL: 'https://github.example',
         GITHUB_CLONE_BASE_URL: 'https://github.emulate.localhost',
         GITHUB_APP_ID: '12345',
-        GITHUB_APP_CLIENT_ID: 'oauth-client',
-        GITHUB_APP_CLIENT_SECRET: 'oauth-secret',
-        GITHUB_APP_CALLBACK_URL: 'https://deputies.example/auth/oauth/github/callback',
+        GITHUB_OAUTH_CLIENT_ID: 'oauth-client',
+        GITHUB_OAUTH_CLIENT_SECRET: 'oauth-secret',
+        GITHUB_OAUTH_CALLBACK_URL: 'https://deputies.example/auth/oauth/github/callback',
         GITHUB_APP_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----',
         GITHUB_WEBHOOK_SECRET: 'github-secret',
         GITHUB_ALLOWED_REPOSITORIES: 'acme/widget, octo/*',
-        GITHUB_ALLOWED_USERS: 'octocat,hubot',
-        GITHUB_ALLOWED_ORGANIZATIONS: 'acme,octo',
-        GITHUB_TRIGGER_PHRASES: '/deputies, deputies:, @acme/deputies',
+        GITHUB_WEBHOOK_ALLOWED_USERS: 'octocat,hubot',
+        GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS: 'acme,octo',
+        GITHUB_WEBHOOK_TRIGGER_PHRASES: '/deputies, deputies:, @acme/deputies',
         ARTIFACT_STORAGE_PROVIDER: 's3',
         ARTIFACT_STORAGE_S3_ENDPOINT: 'http://seaweedfs:8333',
         ARTIFACT_STORAGE_S3_REGION: 'local',
@@ -142,7 +141,7 @@ describe('loadConfig', () => {
         ARTIFACT_STORAGE_S3_SECRET_ACCESS_KEY: 'seaweed-secret',
         ARTIFACT_STORAGE_S3_FORCE_PATH_STYLE: 'false',
         ARTIFACT_STORAGE_S3_CREATE_BUCKET: 'true',
-        ARTIFACT_TOOL_MAX_BYTES: '1024',
+        ARTIFACT_CREATE_MAX_BYTES: '1024',
         UNSAFE_ALLOW_LOCAL_HTTP_CALLBACKS: 'true',
       }),
     ).toMatchObject({
@@ -169,7 +168,7 @@ describe('loadConfig', () => {
       dockerSandboxMemory: '2g',
       dockerSandboxCpus: '2',
       dockerCliTimeoutMs: 45_000,
-      appStore: 'postgres',
+      appDataStore: 'postgres',
       apiAuthMode: 'session',
       apiBearerToken: 'api-token',
       authProvider: 'github',
@@ -178,7 +177,6 @@ describe('loadConfig', () => {
       authSessionSecret: 'session-secret',
       authCookieSecure: true,
       authCookieSameSite: 'none',
-      authSuccessRedirectUrl: 'https://deputies.example',
       webBaseUrl: 'https://deputies.example/app',
       authGithubAdminUsers: ['admin1', 'admin2'],
       authGithubAdminOrganizations: ['admins'],
@@ -190,7 +188,7 @@ describe('loadConfig', () => {
       flueOpenaiCodexAuthFile: '/tmp/pi-auth.json',
       flueOpenaiCodexAuthBase64: 'eyJvcGVuYWktY29kZXgiOnsidHlwZSI6Im9hdXRoIn19',
       flueOpenaiCodexAuthJson: '{"openai-codex":{"type":"oauth"}}',
-      flueSessionStore: 'memory',
+      flueStateStore: 'memory',
       daytonaApiKey: 'daytona-key',
       daytonaApiUrl: 'https://daytona.example',
       daytonaTarget: 'eu',
@@ -199,24 +197,24 @@ describe('loadConfig', () => {
       slackApiBaseUrl: 'https://slack.emulate.localhost/api',
       slackSigningSecret: 'slack-secret',
       slackBotToken: 'xoxb-token',
-      unsafeAllowAllSlackIds: false,
+      unsafeSlackWebhookAllowAllIds: false,
       slackAllowedTeamIds: ['T123', 'T456'],
       slackAllowedChannelIds: ['C123', 'C456'],
       slackAllowedUserIds: ['U123', 'U456'],
-      unsafeAllowAllGithubUsersAndOrgs: true,
+      unsafeGithubWebhookAllowAllUsersAndOrgs: true,
       githubApiBaseUrl: 'https://github.emulate.localhost/api',
       githubOAuthBaseUrl: 'https://github.example',
       githubCloneBaseUrl: 'https://github.emulate.localhost',
       githubAppId: '12345',
-      githubAppClientId: 'oauth-client',
-      githubAppClientSecret: 'oauth-secret',
-      githubAppCallbackUrl: 'https://deputies.example/auth/oauth/github/callback',
+      githubOAuthClientId: 'oauth-client',
+      githubOAuthClientSecret: 'oauth-secret',
+      githubOAuthCallbackUrl: 'https://deputies.example/auth/oauth/github/callback',
       githubAppPrivateKey: '-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----',
       githubWebhookSecret: 'github-secret',
       githubAllowedRepositories: ['acme/widget', 'octo/*'],
-      githubAllowedUsers: ['octocat', 'hubot'],
-      githubAllowedOrganizations: ['acme', 'octo'],
-      githubTriggerPhrases: ['/deputies', 'deputies:', '@acme/deputies'],
+      githubWebhookAllowedUsers: ['octocat', 'hubot'],
+      githubWebhookAllowedOrganizations: ['acme', 'octo'],
+      githubWebhookTriggerPhrases: ['/deputies', 'deputies:', '@acme/deputies'],
       artifactStorage: 's3',
       artifactStorageS3Endpoint: 'http://seaweedfs:8333',
       artifactStorageS3Region: 'local',
@@ -225,7 +223,7 @@ describe('loadConfig', () => {
       artifactStorageS3SecretAccessKey: 'seaweed-secret',
       artifactStorageS3ForcePathStyle: false,
       artifactStorageS3CreateBucket: true,
-      artifactToolMaxBytes: 1024,
+      artifactCreateMaxBytes: 1024,
       unsafeAllowLocalHttpCallbacks: true,
     });
   });
@@ -234,19 +232,19 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({
         API_AUTH_MODE: 'none',
-        APP_STORE: 'postgres',
+        APP_DATA_STORE: 'postgres',
         SANDBOX_PROVIDER: 'docker',
       }),
-    ).toThrow('APP_SECRET_ENCRYPTION_KEY is required');
+    ).toThrow('SANDBOX_SECRET_ENCRYPTION_KEY is required');
   });
 
   it('allows the app secret placeholder locally but rejects it in production', () => {
     expect(() =>
       loadConfig({
         API_AUTH_MODE: 'none',
-        APP_STORE: 'postgres',
+        APP_DATA_STORE: 'postgres',
         SANDBOX_PROVIDER: 'docker',
-        APP_SECRET_ENCRYPTION_KEY: 'replace-with-random-app-secret',
+        SANDBOX_SECRET_ENCRYPTION_KEY: 'replace-with-random-sandbox-secret',
       }),
     ).not.toThrow();
 
@@ -254,11 +252,11 @@ describe('loadConfig', () => {
       loadConfig({
         NODE_ENV: 'production',
         API_AUTH_MODE: 'none',
-        APP_STORE: 'postgres',
+        APP_DATA_STORE: 'postgres',
         SANDBOX_PROVIDER: 'docker',
-        APP_SECRET_ENCRYPTION_KEY: 'replace-with-random-app-secret',
+        SANDBOX_SECRET_ENCRYPTION_KEY: 'replace-with-random-sandbox-secret',
       }),
-    ).toThrow('APP_SECRET_ENCRYPTION_KEY must not use the .env.example placeholder in production');
+    ).toThrow('SANDBOX_SECRET_ENCRYPTION_KEY must not use the .env.example placeholder in production');
   });
 
   it('validates artifact storage provider requirements', () => {
@@ -282,10 +280,14 @@ describe('loadConfig', () => {
       'Slack allowlists are required',
     );
     expect(
-      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }),
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        SLACK_SIGNING_SECRET: 'slack-secret',
+        UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS: 'true',
+      }),
     ).toMatchObject({
       slackSigningSecret: 'slack-secret',
-      unsafeAllowAllSlackIds: true,
+      unsafeSlackWebhookAllowAllIds: true,
       slackAllowedTeamIds: [],
       slackAllowedChannelIds: [],
       slackAllowedUserIds: [],
@@ -294,7 +296,7 @@ describe('loadConfig', () => {
       loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: 'slack-secret', SLACK_ALLOWED_TEAM_IDS: 'T123' }),
     ).toMatchObject({
       slackSigningSecret: 'slack-secret',
-      unsafeAllowAllSlackIds: false,
+      unsafeSlackWebhookAllowAllIds: false,
       slackAllowedTeamIds: ['T123'],
     });
   });
@@ -304,47 +306,51 @@ describe('loadConfig', () => {
       'GitHub webhook allowlists are required',
     );
     expect(() =>
-      loadConfig({ API_AUTH_MODE: 'none', GITHUB_WEBHOOK_SECRET: 'github-secret', GITHUB_ALLOWED_USERS: 'octocat' }),
-    ).toThrow('GITHUB_TRIGGER_PHRASES is required');
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        GITHUB_WEBHOOK_SECRET: 'github-secret',
+        GITHUB_WEBHOOK_ALLOWED_USERS: 'octocat',
+      }),
+    ).toThrow('GITHUB_WEBHOOK_TRIGGER_PHRASES is required');
     expect(
       loadConfig({
         API_AUTH_MODE: 'none',
         GITHUB_WEBHOOK_SECRET: 'github-secret',
-        UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'true',
-        GITHUB_TRIGGER_PHRASES: 'deputies:',
+        UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS: 'true',
+        GITHUB_WEBHOOK_TRIGGER_PHRASES: 'deputies:',
       }),
     ).toMatchObject({
       githubWebhookSecret: 'github-secret',
-      unsafeAllowAllGithubUsersAndOrgs: true,
-      githubAllowedUsers: [],
-      githubAllowedOrganizations: [],
-      githubTriggerPhrases: ['deputies:'],
+      unsafeGithubWebhookAllowAllUsersAndOrgs: true,
+      githubWebhookAllowedUsers: [],
+      githubWebhookAllowedOrganizations: [],
+      githubWebhookTriggerPhrases: ['deputies:'],
     });
     expect(
       loadConfig({
         API_AUTH_MODE: 'none',
         GITHUB_WEBHOOK_SECRET: 'github-secret',
-        GITHUB_ALLOWED_USERS: 'octocat',
-        GITHUB_TRIGGER_PHRASES: '/deputies',
+        GITHUB_WEBHOOK_ALLOWED_USERS: 'octocat',
+        GITHUB_WEBHOOK_TRIGGER_PHRASES: '/deputies',
       }),
     ).toMatchObject({
       githubWebhookSecret: 'github-secret',
-      unsafeAllowAllGithubUsersAndOrgs: false,
-      githubAllowedUsers: ['octocat'],
-      githubTriggerPhrases: ['/deputies'],
+      unsafeGithubWebhookAllowAllUsersAndOrgs: false,
+      githubWebhookAllowedUsers: ['octocat'],
+      githubWebhookTriggerPhrases: ['/deputies'],
     });
     expect(
       loadConfig({
         API_AUTH_MODE: 'none',
         GITHUB_WEBHOOK_SECRET: 'github-secret',
-        GITHUB_ALLOWED_ORGANIZATIONS: 'acme',
-        GITHUB_TRIGGER_PHRASES: '@acme/deputies',
+        GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS: 'acme',
+        GITHUB_WEBHOOK_TRIGGER_PHRASES: '@acme/deputies',
       }),
     ).toMatchObject({
       githubWebhookSecret: 'github-secret',
-      unsafeAllowAllGithubUsersAndOrgs: false,
-      githubAllowedOrganizations: ['acme'],
-      githubTriggerPhrases: ['@acme/deputies'],
+      unsafeGithubWebhookAllowAllUsersAndOrgs: false,
+      githubWebhookAllowedOrganizations: ['acme'],
+      githubWebhookTriggerPhrases: ['@acme/deputies'],
     });
   });
 
@@ -385,21 +391,21 @@ describe('loadConfig', () => {
         AUTH_PROVIDER: 'github',
         AUTH_SESSION_SECRET: 'secret',
       }),
-    ).toThrow('GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET are required');
+    ).toThrow('GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET are required');
     expect(
       loadConfig({
         API_AUTH_MODE: 'session',
         AUTH_PROVIDER: 'github',
         AUTH_SESSION_SECRET: 'secret',
-        GITHUB_APP_CLIENT_ID: 'client-id',
-        GITHUB_APP_CLIENT_SECRET: 'client-secret',
+        GITHUB_OAUTH_CLIENT_ID: 'client-id',
+        GITHUB_OAUTH_CLIENT_SECRET: 'client-secret',
       }),
     ).toMatchObject({
       apiAuthMode: 'session',
       authProvider: 'github',
       authSessionSecret: 'secret',
-      githubAppClientId: 'client-id',
-      githubAppClientSecret: 'client-secret',
+      githubOAuthClientId: 'client-id',
+      githubOAuthClientSecret: 'client-secret',
     });
   });
 
@@ -455,11 +461,11 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ API_AUTH_MODE: 'none', AUTH_COOKIE_SECURE: 'yes' })).toThrow(
       'AUTH_COOKIE_SECURE must be true or false',
     );
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_SLACK_IDS: 'yes' })).toThrow(
-      'UNSAFE_ALLOW_ALL_SLACK_IDS must be true or false',
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS: 'yes' })).toThrow(
+      'UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS must be true or false',
     );
-    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS: 'yes' })).toThrow(
-      'UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS must be true or false',
+    expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS: 'yes' })).toThrow(
+      'UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS must be true or false',
     );
     expect(() => loadConfig({ API_AUTH_MODE: 'none', UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS: 'yes' })).toThrow(
       'UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS must be true or false',

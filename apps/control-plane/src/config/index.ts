@@ -23,7 +23,7 @@ const OPENAI_CODEX_FLUE_MODELS = [
   'openai-codex/gpt-5.3-codex-spark',
   'openai-codex/gpt-5.5',
 ];
-const appSecretEncryptionKeyPlaceholder = 'replace-with-random-app-secret';
+const sandboxSecretEncryptionKeyPlaceholder = 'replace-with-random-sandbox-secret';
 
 export type AppConfig = {
   port: number;
@@ -49,8 +49,8 @@ export type AppConfig = {
   dockerSandboxMemory?: string;
   dockerSandboxCpus?: string;
   dockerCliTimeoutMs: number;
-  appSecretEncryptionKey?: string;
-  appStore: AppStoreKind;
+  sandboxSecretEncryptionKey?: string;
+  appDataStore: AppStoreKind;
   apiAuthMode: ApiAuthMode;
   apiBearerToken?: string;
   authProvider: AuthProviderKind;
@@ -60,13 +60,12 @@ export type AppConfig = {
   authCookieSecure: boolean;
   authCookieSameSite: AuthCookieSameSite;
   authCookieDomain?: string;
-  authSuccessRedirectUrl?: string;
   webBaseUrl?: string;
   serviceBaseDomain?: string;
   serviceTrustForwardedHosts: boolean;
-  githubAppClientId?: string;
-  githubAppClientSecret?: string;
-  githubAppCallbackUrl?: string;
+  githubOAuthClientId?: string;
+  githubOAuthClientSecret?: string;
+  githubOAuthCallbackUrl?: string;
   githubOAuthBaseUrl: string;
   authGithubAdminUsers: string[];
   authGithubAdminOrganizations: string[];
@@ -74,7 +73,7 @@ export type AppConfig = {
   authGithubViewerOrganizations: string[];
   unsafeAuthGithubAllowAllViewers: boolean;
   databaseUrl?: string;
-  flueSessionStore: 'postgres' | 'memory';
+  flueStateStore: 'postgres' | 'memory';
   flueModel?: string;
   flueModelOptions: string[];
   flueOpenaiCodexAuthFile?: string;
@@ -89,17 +88,17 @@ export type AppConfig = {
   slackApiBaseUrl: string;
   slackSigningSecret?: string;
   slackBotToken?: string;
-  unsafeAllowAllSlackIds: boolean;
+  unsafeSlackWebhookAllowAllIds: boolean;
   slackAllowedTeamIds: string[];
   slackAllowedChannelIds: string[];
   slackAllowedUserIds: string[];
-  unsafeAllowAllGithubUsersAndOrgs: boolean;
+  unsafeGithubWebhookAllowAllUsersAndOrgs: boolean;
   githubApiBaseUrl: string;
   githubCloneBaseUrl: string;
   githubAllowedRepositories: string[];
-  githubAllowedUsers: string[];
-  githubAllowedOrganizations: string[];
-  githubTriggerPhrases: string[];
+  githubWebhookAllowedUsers: string[];
+  githubWebhookAllowedOrganizations: string[];
+  githubWebhookTriggerPhrases: string[];
   githubAppId?: string;
   githubAppPrivateKey?: string;
   githubWebhookSecret?: string;
@@ -112,7 +111,7 @@ export type AppConfig = {
   artifactStorageS3SecretAccessKey?: string;
   artifactStorageS3ForcePathStyle: boolean;
   artifactStorageS3CreateBucket: boolean;
-  artifactToolMaxBytes: number;
+  artifactCreateMaxBytes: number;
   unsafeAllowLocalHttpCallbacks: boolean;
   hideSetupPage: boolean;
 };
@@ -152,7 +151,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     dockerSandboxImage: env.DOCKER_SANDBOX_IMAGE ?? 'deputies-sandbox:local',
     dockerSandboxBridgeHost: env.DOCKER_SANDBOX_BRIDGE_HOST ?? '127.0.0.1',
     dockerCliTimeoutMs: parsePositiveInteger(env.DOCKER_CLI_TIMEOUT_MS, 30_000, 'DOCKER_CLI_TIMEOUT_MS'),
-    appStore: parseEnum(env.APP_STORE, ['memory', 'postgres'], 'memory'),
+    appDataStore: parseEnum(env.APP_DATA_STORE, ['memory', 'postgres'], 'memory'),
     apiAuthMode: parseRequiredEnum(env.API_AUTH_MODE, ['none', 'bearer', 'session'], 'API_AUTH_MODE'),
     authProvider: parseEnum(env.AUTH_PROVIDER, ['static', 'github'], 'static'),
     authCookieSecure: parseBoolean(env.AUTH_COOKIE_SECURE, false, 'AUTH_COOKIE_SECURE'),
@@ -168,24 +167,28 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       false,
       'UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS',
     ),
-    flueSessionStore: parseEnum(env.FLUE_SESSION_STORE, ['postgres', 'memory'], 'postgres'),
+    flueStateStore: parseEnum(env.FLUE_STATE_STORE, ['postgres', 'memory'], 'postgres'),
     flueModelOptions: parseStringList(env.FLUE_MODEL_OPTIONS),
     slackApiBaseUrl: env.SLACK_API_BASE_URL ?? 'https://slack.com/api',
-    unsafeAllowAllSlackIds: parseBoolean(env.UNSAFE_ALLOW_ALL_SLACK_IDS, false, 'UNSAFE_ALLOW_ALL_SLACK_IDS'),
+    unsafeSlackWebhookAllowAllIds: parseBoolean(
+      env.UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS,
+      false,
+      'UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS',
+    ),
     slackAllowedTeamIds: parseStringList(env.SLACK_ALLOWED_TEAM_IDS),
     slackAllowedChannelIds: parseStringList(env.SLACK_ALLOWED_CHANNEL_IDS),
     slackAllowedUserIds: parseStringList(env.SLACK_ALLOWED_USER_IDS),
-    unsafeAllowAllGithubUsersAndOrgs: parseBoolean(
-      env.UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS,
+    unsafeGithubWebhookAllowAllUsersAndOrgs: parseBoolean(
+      env.UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS,
       false,
-      'UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS',
+      'UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS',
     ),
     githubApiBaseUrl: env.GITHUB_API_BASE_URL ?? 'https://api.github.com',
     githubCloneBaseUrl: env.GITHUB_CLONE_BASE_URL ?? 'https://github.com',
     githubAllowedRepositories: parseStringList(env.GITHUB_ALLOWED_REPOSITORIES),
-    githubAllowedUsers: parseStringList(env.GITHUB_ALLOWED_USERS),
-    githubAllowedOrganizations: parseStringList(env.GITHUB_ALLOWED_ORGANIZATIONS),
-    githubTriggerPhrases: parseStringList(env.GITHUB_TRIGGER_PHRASES),
+    githubWebhookAllowedUsers: parseStringList(env.GITHUB_WEBHOOK_ALLOWED_USERS),
+    githubWebhookAllowedOrganizations: parseStringList(env.GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS),
+    githubWebhookTriggerPhrases: parseStringList(env.GITHUB_WEBHOOK_TRIGGER_PHRASES),
     artifactStorage: parseEnum(env.ARTIFACT_STORAGE_PROVIDER, ['disabled', 'filesystem', 's3'], 'disabled'),
     artifactStorageS3Region: env.ARTIFACT_STORAGE_S3_REGION ?? 'us-east-1',
     artifactStorageS3ForcePathStyle: parseBoolean(
@@ -198,10 +201,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       false,
       'ARTIFACT_STORAGE_S3_CREATE_BUCKET',
     ),
-    artifactToolMaxBytes: parsePositiveInteger(
-      env.ARTIFACT_TOOL_MAX_BYTES,
+    artifactCreateMaxBytes: parsePositiveInteger(
+      env.ARTIFACT_CREATE_MAX_BYTES,
       25 * 1024 * 1024,
-      'ARTIFACT_TOOL_MAX_BYTES',
+      'ARTIFACT_CREATE_MAX_BYTES',
     ),
     unsafeAllowLocalHttpCallbacks: parseBoolean(
       env.UNSAFE_ALLOW_LOCAL_HTTP_CALLBACKS,
@@ -216,12 +219,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.AUTH_STATIC_PASSWORD) config.authStaticPassword = env.AUTH_STATIC_PASSWORD;
   if (env.AUTH_SESSION_SECRET) config.authSessionSecret = env.AUTH_SESSION_SECRET;
   if (env.AUTH_COOKIE_DOMAIN) config.authCookieDomain = env.AUTH_COOKIE_DOMAIN;
-  if (env.AUTH_SUCCESS_REDIRECT_URL) config.authSuccessRedirectUrl = env.AUTH_SUCCESS_REDIRECT_URL;
   if (env.WEB_BASE_URL) config.webBaseUrl = env.WEB_BASE_URL;
   if (env.SERVICE_BASE_DOMAIN) config.serviceBaseDomain = env.SERVICE_BASE_DOMAIN;
-  if (env.GITHUB_APP_CLIENT_ID) config.githubAppClientId = env.GITHUB_APP_CLIENT_ID;
-  if (env.GITHUB_APP_CLIENT_SECRET) config.githubAppClientSecret = env.GITHUB_APP_CLIENT_SECRET;
-  if (env.GITHUB_APP_CALLBACK_URL) config.githubAppCallbackUrl = env.GITHUB_APP_CALLBACK_URL;
+  if (env.GITHUB_OAUTH_CLIENT_ID) config.githubOAuthClientId = env.GITHUB_OAUTH_CLIENT_ID;
+  if (env.GITHUB_OAUTH_CLIENT_SECRET) config.githubOAuthClientSecret = env.GITHUB_OAUTH_CLIENT_SECRET;
+  if (env.GITHUB_OAUTH_CALLBACK_URL) config.githubOAuthCallbackUrl = env.GITHUB_OAUTH_CALLBACK_URL;
   if (env.DATABASE_URL) config.databaseUrl = env.DATABASE_URL;
   if (env.FLUE_MODEL) config.flueModel = env.FLUE_MODEL;
   if (env.FLUE_OPENAI_CODEX_AUTH_FILE) config.flueOpenaiCodexAuthFile = env.FLUE_OPENAI_CODEX_AUTH_FILE;
@@ -235,7 +237,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.DOCKER_SANDBOX_NETWORK) config.dockerSandboxNetwork = env.DOCKER_SANDBOX_NETWORK;
   if (env.DOCKER_SANDBOX_MEMORY) config.dockerSandboxMemory = env.DOCKER_SANDBOX_MEMORY;
   if (env.DOCKER_SANDBOX_CPUS) config.dockerSandboxCpus = env.DOCKER_SANDBOX_CPUS;
-  if (env.APP_SECRET_ENCRYPTION_KEY) config.appSecretEncryptionKey = env.APP_SECRET_ENCRYPTION_KEY;
+  if (env.SANDBOX_SECRET_ENCRYPTION_KEY) config.sandboxSecretEncryptionKey = env.SANDBOX_SECRET_ENCRYPTION_KEY;
   if (env.DAYTONA_API_KEY) config.daytonaApiKey = env.DAYTONA_API_KEY;
   if (env.DAYTONA_API_URL) config.daytonaApiUrl = env.DAYTONA_API_URL;
   if (env.DAYTONA_TARGET) config.daytonaTarget = env.DAYTONA_TARGET;
@@ -260,19 +262,23 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   validateArtifactStorageConfig(config);
   validateSandboxSecretConfig(config, env);
 
-  if (config.slackSigningSecret && !config.unsafeAllowAllSlackIds && !hasAnySlackAllowlist(config)) {
+  if (config.slackSigningSecret && !config.unsafeSlackWebhookAllowAllIds && !hasAnySlackAllowlist(config)) {
     throw new Error(
-      'Slack allowlists are required when SLACK_SIGNING_SECRET is set. Configure SLACK_ALLOWED_TEAM_IDS, SLACK_ALLOWED_CHANNEL_IDS, or SLACK_ALLOWED_USER_IDS, or set UNSAFE_ALLOW_ALL_SLACK_IDS=true for unrestricted Slack access.',
+      'Slack allowlists are required when SLACK_SIGNING_SECRET is set. Configure SLACK_ALLOWED_TEAM_IDS, SLACK_ALLOWED_CHANNEL_IDS, or SLACK_ALLOWED_USER_IDS, or set UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS=true for unrestricted Slack access.',
     );
   }
-  if (config.githubWebhookSecret && !config.unsafeAllowAllGithubUsersAndOrgs && !hasAnyGitHubWebhookAllowlist(config)) {
+  if (
+    config.githubWebhookSecret &&
+    !config.unsafeGithubWebhookAllowAllUsersAndOrgs &&
+    !hasAnyGitHubWebhookAllowlist(config)
+  ) {
     throw new Error(
-      'GitHub webhook allowlists are required when GITHUB_WEBHOOK_SECRET is set. Configure GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_ORGANIZATIONS, or set UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true for unrestricted GitHub webhook access.',
+      'GitHub webhook allowlists are required when GITHUB_WEBHOOK_SECRET is set. Configure GITHUB_WEBHOOK_ALLOWED_USERS or GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS, or set UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS=true for unrestricted GitHub webhook access.',
     );
   }
-  if (config.githubWebhookSecret && !config.githubTriggerPhrases.length) {
+  if (config.githubWebhookSecret && !config.githubWebhookTriggerPhrases.length) {
     throw new Error(
-      'GITHUB_TRIGGER_PHRASES is required when GITHUB_WEBHOOK_SECRET is set so GitHub webhooks only process explicitly triggered requests.',
+      'GITHUB_WEBHOOK_TRIGGER_PHRASES is required when GITHUB_WEBHOOK_SECRET is set so GitHub webhooks only process explicitly triggered requests.',
     );
   }
 
@@ -280,11 +286,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
 }
 
 function validateSandboxSecretConfig(config: AppConfig, env: NodeJS.ProcessEnv): void {
-  if (config.appStore === 'postgres' && config.sandboxProvider === 'docker' && !config.appSecretEncryptionKey) {
-    throw new Error('APP_SECRET_ENCRYPTION_KEY is required when APP_STORE=postgres and SANDBOX_PROVIDER=docker');
+  if (config.appDataStore === 'postgres' && config.sandboxProvider === 'docker' && !config.sandboxSecretEncryptionKey) {
+    throw new Error(
+      'SANDBOX_SECRET_ENCRYPTION_KEY is required when APP_DATA_STORE=postgres and SANDBOX_PROVIDER=docker',
+    );
   }
-  if (env.NODE_ENV === 'production' && config.appSecretEncryptionKey === appSecretEncryptionKeyPlaceholder) {
-    throw new Error('APP_SECRET_ENCRYPTION_KEY must not use the .env.example placeholder in production');
+  if (env.NODE_ENV === 'production' && config.sandboxSecretEncryptionKey === sandboxSecretEncryptionKeyPlaceholder) {
+    throw new Error('SANDBOX_SECRET_ENCRYPTION_KEY must not use the .env.example placeholder in production');
   }
 }
 
@@ -330,9 +338,9 @@ function hasAnySlackAllowlist(
 }
 
 function hasAnyGitHubWebhookAllowlist(
-  config: Pick<AppConfig, 'githubAllowedUsers' | 'githubAllowedOrganizations'>,
+  config: Pick<AppConfig, 'githubWebhookAllowedUsers' | 'githubWebhookAllowedOrganizations'>,
 ): boolean {
-  return Boolean(config.githubAllowedUsers.length || config.githubAllowedOrganizations.length);
+  return Boolean(config.githubWebhookAllowedUsers.length || config.githubWebhookAllowedOrganizations.length);
 }
 
 export function requireApiBearerToken(config: AppConfig): string {
@@ -352,11 +360,11 @@ export function requireAuthSessionSecret(config: AppConfig): string {
 }
 
 export function requireGitHubOAuthCredentials(config: AppConfig): { clientId: string; clientSecret: string } {
-  if (!config.githubAppClientId || !config.githubAppClientSecret) {
-    throw new Error('GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET are required when AUTH_PROVIDER=github');
+  if (!config.githubOAuthClientId || !config.githubOAuthClientSecret) {
+    throw new Error('GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET are required when AUTH_PROVIDER=github');
   }
 
-  return { clientId: config.githubAppClientId, clientSecret: config.githubAppClientSecret };
+  return { clientId: config.githubOAuthClientId, clientSecret: config.githubOAuthClientSecret };
 }
 
 export function requireStaticCredentials(config: AppConfig): { username: string; password: string } {
@@ -393,7 +401,7 @@ export function requireFlueModel(config: AppConfig): string {
 
 export function requireDatabaseUrl(config: AppConfig): string {
   if (!config.databaseUrl) {
-    throw new Error('DATABASE_URL is required when APP_STORE=postgres');
+    throw new Error('DATABASE_URL is required when APP_DATA_STORE=postgres');
   }
 
   return config.databaseUrl;

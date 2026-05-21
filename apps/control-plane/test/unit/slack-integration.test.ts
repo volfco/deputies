@@ -1115,7 +1115,11 @@ describe('Slack integration', () => {
 
   it('handles signed Slack webhook challenges through the API route', async () => {
     const server = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }),
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        SLACK_SIGNING_SECRET: signingSecret,
+        UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS: 'true',
+      }),
       createServices(new MemoryStore()),
     );
     const baseUrl = await listen(server);
@@ -1131,7 +1135,11 @@ describe('Slack integration', () => {
 
   it('rejects unsigned Slack webhook requests', async () => {
     const server = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', SLACK_SIGNING_SECRET: signingSecret, UNSAFE_ALLOW_ALL_SLACK_IDS: 'true' }),
+      loadConfig({
+        API_AUTH_MODE: 'none',
+        SLACK_SIGNING_SECRET: signingSecret,
+        UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS: 'true',
+      }),
       createServices(new MemoryStore()),
     );
     const baseUrl = await listen(server);

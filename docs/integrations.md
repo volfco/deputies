@@ -143,7 +143,7 @@ Current runtime access support includes GitHub App JWT signing, repository insta
 Credential handling:
 
 - `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_ID` stay in service environment/secrets and are used only server-side to sign GitHub App JWTs.
-- `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET` are the same GitHub App's user-authorization credentials. They are used only for product UI login when `API_AUTH_MODE=session` and `AUTH_PROVIDER=github`.
+- `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` are the same GitHub App's user-authorization credentials. They are used only for product UI login when `API_AUTH_MODE=session` and `AUTH_PROVIDER=github`.
 - Installation tokens are minted in memory, scoped to the requested repository, cached per repository until near expiry, and are not persisted in messages, events, artifacts, callbacks, or prompts.
 - Git clone/fetch auth is passed to Flue `session.shell` as command-scoped env: `GITHUB_AUTH_HEADER=Authorization: Basic base64(x-access-token:<installation-token>)`.
 - Shell commands reference only `$GITHUB_AUTH_HEADER`; token values are not embedded in command strings. Flue shell history records env variable names, not values.
@@ -152,10 +152,10 @@ Credential handling:
 - The agent `gh` tool runs in trusted worker code with `GH_TOKEN` for `github.com` or `GH_ENTERPRISE_TOKEN` plus `GH_HOST` for GitHub Enterprise hosts, `GH_REPO`, a temporary `GH_CONFIG_DIR`, disabled prompts, token redaction, and blocked auth/config/extension/clone escape hatches. It resolves the active repo at call time, blocks direct issue/PR comment posting so callbacks own final replies, and blocks GitHub Git Database API routes so sandbox-local commits are published through git, not remote object surgery.
 - The agent `git` tool runs the git process inside the prepared remote sandbox repository through Flue agent-level `shell` with command-scoped `GITHUB_AUTH_HEADER`. Agents should use it for authenticated push/fetch/pull operations, not for GitHub issue/comment/PR API work. Risky push forms such as force, mirror, delete, and force refspecs are blocked.
 - `repository_ready` events contain repository identity, workspace path, and expiry metadata only.
-- GitHub webhooks fail closed when `GITHUB_WEBHOOK_SECRET` is set. Configure `GITHUB_ALLOWED_USERS` or `GITHUB_ALLOWED_ORGANIZATIONS`, or explicitly set `UNSAFE_ALLOW_ALL_GITHUB_USERS_AND_ORGS=true`, and configure at least one `GITHUB_TRIGGER_PHRASES` value.
-- `GITHUB_ALLOWED_USERS` gates the webhook sender login. `GITHUB_ALLOWED_ORGANIZATIONS` gates the repository owner. Empty means unrestricted for that dimension only after at least one webhook allowlist exists, or after unsafe allow-all is enabled. Configured lists are matched case-insensitively. Non-matching deliveries are recorded as failed integration deliveries and no session/message is created.
+- GitHub webhooks fail closed when `GITHUB_WEBHOOK_SECRET` is set. Configure `GITHUB_WEBHOOK_ALLOWED_USERS` or `GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS`, or explicitly set `UNSAFE_GITHUB_WEBHOOK_ALLOW_ALL_USERS_AND_ORGS=true`, and configure at least one `GITHUB_WEBHOOK_TRIGGER_PHRASES` value.
+- `GITHUB_WEBHOOK_ALLOWED_USERS` gates the webhook sender login. `GITHUB_WEBHOOK_ALLOWED_ORGANIZATIONS` gates the repository owner. Empty means unrestricted for that dimension only after at least one webhook allowlist exists, or after unsafe allow-all is enabled. Configured lists are matched case-insensitively. Non-matching deliveries are recorded as failed integration deliveries and no session/message is created.
 - `GITHUB_ALLOWED_REPOSITORIES` is optional but, when configured, additionally gates inbound GitHub webhooks and runtime repository access. Entries are matched case-insensitively and support exact `owner/repo` entries plus `owner/*` owner-wide patterns.
-- `GITHUB_TRIGGER_PHRASES` replaces trigger handles. Issue/PR/comment/review text must include one configured activation phrase, such as `/deputies`, `deputies:`, `@deputies`, or an org team mention like `@acme/deputies`. Bare values like `deputies` match `@deputies`, `/deputies`, `deputies:`, and standalone boundary-delimited `deputies`.
+- `GITHUB_WEBHOOK_TRIGGER_PHRASES` replaces trigger handles. Issue/PR/comment/review text must include one configured activation phrase, such as `/deputies`, `deputies:`, `@deputies`, or an org team mention like `@acme/deputies`. Bare values like `deputies` match `@deputies`, `/deputies`, `deputies:`, and standalone boundary-delimited `deputies`.
 
 The intended runtime model is snapshot-friendly: Daytona images/snapshots may pre-bake common repos and build artifacts, but every Flue run still refreshes or repairs the requested repository as its first sandbox shell step so reused/stale sandboxes get current code and fresh credentials.
 
@@ -458,7 +458,7 @@ Current implementation:
 
 - `POST /webhooks/slack/events` handles Slack Events API payloads.
 - `url_verification` returns the Slack challenge after signature verification.
-- Optional `SLACK_ALLOWED_TEAM_IDS`, `SLACK_ALLOWED_CHANNEL_IDS`, and `SLACK_ALLOWED_USER_IDS` comma-separated allowlists reject unauthorized events before session/message creation. Slack is fail-closed when `SLACK_SIGNING_SECRET` is set: at least one allowlist is required unless `UNSAFE_ALLOW_ALL_SLACK_IDS=true` is explicitly configured.
+- Optional `SLACK_ALLOWED_TEAM_IDS`, `SLACK_ALLOWED_CHANNEL_IDS`, and `SLACK_ALLOWED_USER_IDS` comma-separated allowlists reject unauthorized events before session/message creation. Slack is fail-closed when `SLACK_SIGNING_SECRET` is set: at least one allowlist is required unless `UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS=true` is explicitly configured.
 - `app_mention` creates or reuses a session keyed by `team_id:channel:thread_ts`.
 - `message` events are accepted only as follow-ups in already mapped threads, not as new top-level sessions.
 - Thread follow-ups mapped to archived sessions are acknowledged and recorded as transcript-only cancelled entries. When Slack replies are configured, the bot posts an in-thread notice explaining that the session must be restored first. Replying with `unarchive and proceed` restores the session and queues recovery work for archived transcript messages, or only records a recovery acknowledgement if no work is pending.

@@ -21,11 +21,10 @@ services:
       DOCKER_ORCHESTRATOR_MODE: in-process
       DOCKER_SANDBOX_BRIDGE_HOST: host.docker.internal
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
-      AUTH_SUCCESS_REDIRECT_URL: ${AUTH_SUCCESS_REDIRECT_URL:-https://deputies.localhost}
       WEB_BASE_URL: ${WEB_BASE_URL:-https://deputies.localhost}
-      GITHUB_APP_CALLBACK_URL: ${GITHUB_APP_CALLBACK_URL:-https://deputies.localhost/auth/oauth/github/callback}
-      PREVIEW_BASE_DOMAIN: ${PREVIEW_BASE_DOMAIN:-deputies.localhost}
-      PREVIEW_TRUST_FORWARDED_HOSTS: ${PREVIEW_TRUST_FORWARDED_HOSTS:-true}
+      GITHUB_OAUTH_CALLBACK_URL: ${GITHUB_OAUTH_CALLBACK_URL:-https://deputies.localhost/auth/oauth/github/callback}
+      SERVICE_BASE_DOMAIN: ${SERVICE_BASE_DOMAIN:-deputies.localhost}
+      SERVICE_TRUST_FORWARDED_HOSTS: ${SERVICE_TRUST_FORWARDED_HOSTS:-true}
       ARTIFACT_STORAGE_PROVIDER: s3
       ARTIFACT_STORAGE_S3_ENDPOINT: http://seaweedfs:8333
       ARTIFACT_STORAGE_S3_BUCKET: deputies-artifacts

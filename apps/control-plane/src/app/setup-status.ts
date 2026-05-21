@@ -95,7 +95,7 @@ function githubWebhookStatus(config: AppConfig): SetupStatusItem {
     state: configured ? 'configured' : 'missing',
     summary: configured ? 'GitHub webhook intake is configured.' : 'GitHub webhook intake is not configured.',
     guidance: configured ? undefined : 'Set the webhook secret and trigger phrases to receive GitHub issue/PR work.',
-    guidanceItems: configured ? undefined : ['GITHUB_WEBHOOK_SECRET', 'GITHUB_TRIGGER_PHRASES'],
+    guidanceItems: configured ? undefined : ['GITHUB_WEBHOOK_SECRET', 'GITHUB_WEBHOOK_TRIGGER_PHRASES'],
     details: [`GitHub webhooks: ${configured ? 'configured' : 'missing'}`],
     docsPath: 'README.md',
   };
@@ -303,13 +303,13 @@ function objectStoreErrorStatus(config: AppConfig, error: unknown, summary: stri
 }
 
 async function postgresStatus(config: AppConfig): Promise<SetupStatusItem> {
-  if (config.appStore !== 'postgres') {
+  if (config.appDataStore !== 'postgres') {
     return {
       id: 'postgres',
       label: 'Postgres',
       state: 'warning',
-      summary: `App store is ${config.appStore}; Postgres is not enabled.`,
-      guidance: 'Set APP_STORE=postgres and DATABASE_URL for durable storage.',
+      summary: `App data store is ${config.appDataStore}; Postgres is not enabled.`,
+      guidance: 'Set APP_DATA_STORE=postgres and DATABASE_URL for durable storage.',
       docsPath: 'README.md',
     };
   }

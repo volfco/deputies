@@ -41,15 +41,15 @@ SLACK_SIGNING_SECRET=<from Slack app Basic Information>
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_API_BASE_URL=https://slack.com/api
 # Slack is fail-closed when SLACK_SIGNING_SECRET is set. Configure at least one
-# allowlist, or explicitly set UNSAFE_ALLOW_ALL_SLACK_IDS=true for local tests.
-UNSAFE_ALLOW_ALL_SLACK_IDS=false
+# allowlist, or explicitly set UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS=true for local tests.
+UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS=false
 # Optional comma-separated allowlists. Empty means unrestricted for that dimension.
 SLACK_ALLOWED_TEAM_IDS=T...
 SLACK_ALLOWED_CHANNEL_IDS=C...
 SLACK_ALLOWED_USER_IDS=U...
 ```
 
-Authorization allowlists are evaluated after Slack signature verification. If a list is non-empty, the incoming Slack event must match one of its values. At least one allowlist is required when `SLACK_SIGNING_SECRET` is set unless `UNSAFE_ALLOW_ALL_SLACK_IDS=true`. Unauthorized events return `200 { "ok": true, "type": "ignored" }` so Slack does not retry, and no product session/message is created.
+Authorization allowlists are evaluated after Slack signature verification. If a list is non-empty, the incoming Slack event must match one of its values. At least one allowlist is required when `SLACK_SIGNING_SECRET` is set unless `UNSAFE_SLACK_WEBHOOK_ALLOW_ALL_IDS=true`. Unauthorized events return `200 { "ok": true, "type": "ignored" }` so Slack does not retry, and no product session/message is created.
 
 Manual test:
 

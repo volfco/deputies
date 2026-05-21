@@ -25,13 +25,13 @@ describe.skipIf(!enabled || !hasRequiredEnv)('real Daytona + Flue UAT', () => {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        APP_STORE: 'postgres',
+        APP_DATA_STORE: 'postgres',
         DATABASE_URL: testDatabaseUrl!,
         PORT: String(uatPort),
         RUN_MODE: 'all',
         RUNNER: 'flue',
         SANDBOX_PROVIDER: 'daytona',
-        FLUE_SESSION_STORE: 'postgres',
+        FLUE_STATE_STORE: 'postgres',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });

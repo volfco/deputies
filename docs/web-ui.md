@@ -14,7 +14,7 @@ set -a; . ./.env.local; set +a; pnpm control-plane:dev
 pnpm web:dev
 ```
 
-For quick UI experiments that do not need durable state, you can instead run the API with `APP_STORE=memory`.
+For quick UI experiments that do not need durable state, you can instead run the API with `APP_DATA_STORE=memory`.
 
 The web app uses same-origin API requests by default. In Vite dev mode, `apps/web/vite.config.ts` proxies `/health`, `/auth`, `/sessions`, `/events`, `/repositories`, `/models`, and `/webhooks` to the API at `VITE_API_PROXY_TARGET` or `http://localhost:3583`.
 
@@ -56,7 +56,6 @@ For portless local development, use these `.env.local` values:
 ```sh
 VITE_API_BASE_URL=
 WEB_BASE_URL=https://deputies.localhost
-AUTH_SUCCESS_REDIRECT_URL=https://deputies.localhost
 AUTH_COOKIE_DOMAIN=.deputies.localhost
 AUTH_COOKIE_SECURE=true
 SERVICE_BASE_DOMAIN=deputies.localhost
@@ -70,7 +69,6 @@ For production-like deployments, configure real DNS records so the app hostname 
 ```sh
 VITE_API_BASE_URL=
 WEB_BASE_URL=https://app.example.com
-AUTH_SUCCESS_REDIRECT_URL=https://app.example.com
 AUTH_COOKIE_DOMAIN=.example.com
 AUTH_COOKIE_SECURE=true
 SERVICE_BASE_DOMAIN=example.com
@@ -83,7 +81,7 @@ After changing `AUTH_COOKIE_DOMAIN`, existing browser sessions may still hold an
 
 The Deputies web dev server moves its own Vite HMR socket to `/__deputies_vite_hmr` so sandbox service WebSocket upgrades on `/` can pass through the service proxy. For Vite apps running inside a sandbox, avoid hard-coding `server.hmr.host`, `server.hmr.clientPort`, or `server.hmr.protocol` to `localhost`; let Vite infer the browser URL.
 
-If you keep using plain Vite without a wildcard proxy, keep `AUTH_COOKIE_SECURE=false` and use an HTTP `WEB_BASE_URL`/`AUTH_SUCCESS_REDIRECT_URL` instead.
+If you keep using plain Vite without a wildcard proxy, keep `AUTH_COOKIE_SECURE=false` and use an HTTP `WEB_BASE_URL` instead.
 
 ## Auth
 
@@ -91,7 +89,7 @@ The UI supports all product API auth modes exposed by `/health`:
 
 - `none`: the UI calls the API without credentials.
 - `bearer`: the user enters the API bearer token in the browser. The token is stored in `localStorage` and sent as `Authorization: Bearer <token>`.
-- `session`: the user signs in through the configured provider. The API sets an opaque `dev_deputies_session` HTTP-only cookie backed by the configured `AppStore` (`auth_sessions` in Postgres for durable deployments), and the UI sends requests with `credentials: include`.
+- `session`: the user signs in through the configured provider. The API sets an opaque `dev_deputies_session` HTTP-only cookie backed by the configured app data store (`auth_sessions` in Postgres for durable deployments), and the UI sends requests with `credentials: include`.
 
 `API_AUTH_MODE` is required. Use `API_AUTH_MODE=none` only for intentional local or test no-auth runs; production-like deployments should use `bearer` or `session`.
 
@@ -116,11 +114,10 @@ API_AUTH_MODE=session
 AUTH_PROVIDER=github
 AUTH_SESSION_SECRET=replace-with-random-local-secret
 AUTH_COOKIE_SECURE=false
-AUTH_SUCCESS_REDIRECT_URL=http://localhost:5173
 WEB_BASE_URL=http://localhost:5173
-GITHUB_APP_CLIENT_ID=Iv1.example
-GITHUB_APP_CLIENT_SECRET=github-app-client-secret
-GITHUB_APP_CALLBACK_URL=http://localhost:5173/auth/oauth/github/callback
+GITHUB_OAUTH_CLIENT_ID=Iv1.example
+GITHUB_OAUTH_CLIENT_SECRET=github-app-client-secret
+GITHUB_OAUTH_CALLBACK_URL=http://localhost:5173/auth/oauth/github/callback
 AUTH_GITHUB_ADMIN_USERS=your-github-login
 # Optional read-only viewers:
 # AUTH_GITHUB_VIEWER_USERS=teammate-login
@@ -128,7 +125,7 @@ AUTH_GITHUB_ADMIN_USERS=your-github-login
 # UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS=false
 ```
 
-For GitHub App login, configure the GitHub App's callback URL to exactly match `GITHUB_APP_CALLBACK_URL`. The same GitHub App can also provide runtime repository access through `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`; those are separate values from the app's user-authorization client ID and client secret.
+For GitHub App login, configure the GitHub App's callback URL to exactly match `GITHUB_OAUTH_CALLBACK_URL`. The same GitHub App can also provide runtime repository access through `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`; those are separate values from the app's user-authorization client ID and client secret.
 
 GitHub users in `AUTH_GITHUB_ADMIN_*` allowlists are admins. Users in `AUTH_GITHUB_VIEWER_*` are read-only and cannot mutate sessions or access sandbox services. `UNSAFE_AUTH_GITHUB_ALLOW_ALL_VIEWERS=true` allows any GitHub account to log in as read-only.
 

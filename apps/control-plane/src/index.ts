@@ -38,7 +38,7 @@ import { startWorkerLoop, WorkerService, type WorkerLoopHandle } from './worker/
 
 const config = loadConfig(process.env);
 const store =
-  config.appStore === 'postgres'
+  config.appDataStore === 'postgres'
     ? new PostgresStore(requireDatabaseUrl(config), postgresStoreOptions())
     : new MemoryStore();
 const sandboxProvider = createSandboxProvider();
@@ -227,9 +227,9 @@ function optional<T extends Record<string, unknown>>(input: T): T {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
 }
 
-function postgresStoreOptions(): { appSecretEncryptionKey?: string } {
-  const options: { appSecretEncryptionKey?: string } = {};
-  if (config.appSecretEncryptionKey) options.appSecretEncryptionKey = config.appSecretEncryptionKey;
+function postgresStoreOptions(): { sandboxSecretEncryptionKey?: string } {
+  const options: { sandboxSecretEncryptionKey?: string } = {};
+  if (config.sandboxSecretEncryptionKey) options.sandboxSecretEncryptionKey = config.sandboxSecretEncryptionKey;
   return options;
 }
 
@@ -261,7 +261,7 @@ async function createRunner(): Promise<Runner> {
       console.error(`OpenAI Codex models unavailable: ${message}`);
     }
   }
-  if (config.flueSessionStore === 'postgres') {
+  if (config.flueStateStore === 'postgres') {
     const sessionStore = new PostgresFlueSessionStore(requireDatabaseUrl(config));
     resources.push(sessionStore);
     options.sessionStore = sessionStore;
@@ -271,7 +271,7 @@ async function createRunner(): Promise<Runner> {
     repositoryAccess: createRepositoryAccess(),
     ...(artifactObjectStorage ? { artifacts: services.artifacts } : {}),
     externalResources: services.externalResources,
-    artifactToolMaxBytes: config.artifactToolMaxBytes,
+    artifactToolMaxBytes: config.artifactCreateMaxBytes,
     ...(services.sandboxKeepalive ? { sandboxKeepalive: services.sandboxKeepalive } : {}),
     sandboxKeepaliveMaxExtensionMs: config.sandboxKeepaliveMaxExtensionMs,
     modelUnavailableReason: (inputModel) =>

@@ -688,7 +688,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
   it('processes an HTTP-created message through the worker using Postgres', async () => {
     const services = createServices(store);
     const server = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      loadConfig({ API_AUTH_MODE: 'none', APP_DATA_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
       services,
     );
     const baseUrl = await listen(server);
@@ -734,11 +734,11 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     const replicaStoreA = new PostgresStore(testDatabaseUrl!);
     const replicaStoreB = new PostgresStore(testDatabaseUrl!);
     const serverA = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      loadConfig({ API_AUTH_MODE: 'none', APP_DATA_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
       createServices(replicaStoreA),
     );
     const serverB = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      loadConfig({ API_AUTH_MODE: 'none', APP_DATA_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
       createServices(replicaStoreB),
     );
     const [baseUrlA, baseUrlB] = await Promise.all([listen(serverA), listen(serverB)]);
@@ -869,7 +869,7 @@ describe.skipIf(!testDatabaseUrl)('PostgresStore', () => {
     });
 
     const server = createServer(
-      loadConfig({ API_AUTH_MODE: 'none', APP_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
+      loadConfig({ API_AUTH_MODE: 'none', APP_DATA_STORE: 'postgres', DATABASE_URL: testDatabaseUrl! }),
       services,
     );
     const baseUrl = await listen(server);

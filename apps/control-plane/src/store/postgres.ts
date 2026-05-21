@@ -207,10 +207,10 @@ export class PostgresStore implements AppStore {
   private readonly pool: Pool;
   private readonly secretCipher?: SecretCipher;
 
-  constructor(databaseUrl: string | Pool, options: { appSecretEncryptionKey?: string } = {}) {
+  constructor(databaseUrl: string | Pool, options: { sandboxSecretEncryptionKey?: string } = {}) {
     this.pool = typeof databaseUrl === 'string' ? new Pool({ connectionString: databaseUrl }) : databaseUrl;
-    if (options.appSecretEncryptionKey)
-      this.secretCipher = new SecretCipher(options.appSecretEncryptionKey, 'sandbox-secrets');
+    if (options.sandboxSecretEncryptionKey)
+      this.secretCipher = new SecretCipher(options.sandboxSecretEncryptionKey, 'sandbox-secrets');
   }
 
   async close(): Promise<void> {
@@ -991,7 +991,7 @@ export class PostgresStore implements AppStore {
   }
 
   private requireSandboxSecretCipher(): SecretCipher {
-    if (!this.secretCipher) throw new Error('APP_SECRET_ENCRYPTION_KEY is required for sandbox secrets');
+    if (!this.secretCipher) throw new Error('SANDBOX_SECRET_ENCRYPTION_KEY is required for sandbox secrets');
     return this.secretCipher;
   }
 
