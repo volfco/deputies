@@ -29,6 +29,7 @@ import { PostgresFlueSessionStore } from './runner-flue/session-store.js';
 import { DaytonaSandboxProvider } from './sandbox/daytona.js';
 import { DockerSandboxProvider, HttpDockerOrchestratorClient, InProcessDockerOrchestrator } from './sandbox/docker.js';
 import { FakeSandboxProvider } from './sandbox/fake.js';
+import { KubernetesSandboxProvider } from './sandbox/kubernetes.js';
 import { LocalSandboxProvider } from './sandbox/local.js';
 import { startSandboxReaper } from './sandbox/reaper.js';
 import type { SandboxProvider } from './sandbox/types.js';
@@ -218,6 +219,17 @@ function createSandboxProvider(): SandboxProvider {
     if (config.daytonaSnapshot) Object.assign(options, { snapshot: config.daytonaSnapshot });
     Object.assign(options, { workspacePath: config.sandboxWorkspacePath });
     return new DaytonaSandboxProvider(options);
+  }
+
+  if (config.sandboxProvider === 'kubernetes') {
+    const k8sOptions: import('./sandbox/kubernetes.js').KubernetesSandboxProviderOptions = {
+      image: config.kubernetesSandboxImage,
+      workspacePath: config.sandboxWorkspacePath,
+    };
+    if (config.kubernetesNamespace) k8sOptions.namespace = config.kubernetesNamespace;
+    if (config.kubernetesSandboxCpu) k8sOptions.podCpu = config.kubernetesSandboxCpu;
+    if (config.kubernetesSandboxMemory) k8sOptions.podMemory = config.kubernetesSandboxMemory;
+    return new KubernetesSandboxProvider(k8sOptions);
   }
 
   throw new Error(`SANDBOX_PROVIDER=${config.sandboxProvider} is not wired yet`);

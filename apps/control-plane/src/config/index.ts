@@ -49,6 +49,10 @@ export type AppConfig = {
   dockerSandboxMemory?: string;
   dockerSandboxCpus?: string;
   dockerCliTimeoutMs: number;
+  kubernetesNamespace?: string;
+  kubernetesSandboxImage: string;
+  kubernetesSandboxCpu?: string;
+  kubernetesSandboxMemory?: string;
   sandboxSecretEncryptionKey?: string;
   appDataStore: AppStoreKind;
   apiAuthMode: ApiAuthMode;
@@ -151,6 +155,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     dockerSandboxImage: env.DOCKER_SANDBOX_IMAGE ?? 'deputies-sandbox:local',
     dockerSandboxBridgeHost: env.DOCKER_SANDBOX_BRIDGE_HOST ?? '127.0.0.1',
     dockerCliTimeoutMs: parsePositiveInteger(env.DOCKER_CLI_TIMEOUT_MS, 30_000, 'DOCKER_CLI_TIMEOUT_MS'),
+    kubernetesSandboxImage: env.KUBERNETES_SANDBOX_IMAGE ?? 'ghcr.io/sidpalas/deputies-docker-sandbox:latest',
     appDataStore: parseEnum(env.APP_DATA_STORE, ['memory', 'postgres'], 'memory'),
     apiAuthMode: parseRequiredEnum(env.API_AUTH_MODE, ['none', 'bearer', 'session'], 'API_AUTH_MODE'),
     authProvider: parseEnum(env.AUTH_PROVIDER, ['static', 'github'], 'static'),
@@ -237,6 +242,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (env.DOCKER_SANDBOX_NETWORK) config.dockerSandboxNetwork = env.DOCKER_SANDBOX_NETWORK;
   if (env.DOCKER_SANDBOX_MEMORY) config.dockerSandboxMemory = env.DOCKER_SANDBOX_MEMORY;
   if (env.DOCKER_SANDBOX_CPUS) config.dockerSandboxCpus = env.DOCKER_SANDBOX_CPUS;
+  if (env.KUBERNETES_NAMESPACE) config.kubernetesNamespace = env.KUBERNETES_NAMESPACE;
+  if (env.KUBERNETES_SANDBOX_CPU) config.kubernetesSandboxCpu = env.KUBERNETES_SANDBOX_CPU;
+  if (env.KUBERNETES_SANDBOX_MEMORY) config.kubernetesSandboxMemory = env.KUBERNETES_SANDBOX_MEMORY;
   if (env.SANDBOX_SECRET_ENCRYPTION_KEY) config.sandboxSecretEncryptionKey = env.SANDBOX_SECRET_ENCRYPTION_KEY;
   if (env.DAYTONA_API_KEY) config.daytonaApiKey = env.DAYTONA_API_KEY;
   if (env.DAYTONA_API_URL) config.daytonaApiUrl = env.DAYTONA_API_URL;
@@ -286,9 +294,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
 }
 
 function validateSandboxSecretConfig(config: AppConfig, env: NodeJS.ProcessEnv): void {
-  if (config.appDataStore === 'postgres' && config.sandboxProvider === 'docker' && !config.sandboxSecretEncryptionKey) {
+  if (
+    config.appDataStore === 'postgres' &&
+    ['docker', 'kubernetes'].includes(config.sandboxProvider) &&
+    !config.sandboxSecretEncryptionKey
+  ) {
     throw new Error(
-      'SANDBOX_SECRET_ENCRYPTION_KEY is required when APP_DATA_STORE=postgres and SANDBOX_PROVIDER=docker',
+      `SANDBOX_SECRET_ENCRYPTION_KEY is required when APP_DATA_STORE=postgres and SANDBOX_PROVIDER=${config.sandboxProvider}`,
     );
   }
   if (env.NODE_ENV === 'production' && config.sandboxSecretEncryptionKey === sandboxSecretEncryptionKeyPlaceholder) {

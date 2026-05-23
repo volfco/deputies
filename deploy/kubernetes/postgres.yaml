@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: deputies-postgres
+  namespace: deputies
+spec:
+  serviceName: deputies-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deputies-postgres
+  template:
+    metadata:
+      labels:
+        app: deputies-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "flue"
+            - name: POSTGRES_PASSWORD
+              value: "flue"
+            - name: POSTGRES_DB
+              value: "flue"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deputies-postgres
+  namespace: deputies
+spec:
+  selector:
+    app: deputies-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

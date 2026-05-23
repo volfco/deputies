@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: deputies
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - postgres.yaml
+  - control-plane.yaml
+
+# Run DB migrations as a pre-deploy Job.
+# After applying, run:
+#   kubectl -n deputies apply -f job-migrate.yaml
+# Or use an init container (see job-migrate.yaml).

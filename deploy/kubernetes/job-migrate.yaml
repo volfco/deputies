@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deputies-db-migrate
+  namespace: deputies
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/sidpalas/deputies-control-plane:latest
+          command: ["node", "dist/db/migrate.js"]
+          env:
+            - name: DATABASE_URL
+              value: "postgres://flue:flue@deputies-postgres:5432/flue"

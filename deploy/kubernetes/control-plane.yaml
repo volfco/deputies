@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deputies-control-plane
+  namespace: deputies
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deputies-control-plane
+  template:
+    metadata:
+      labels:
+        app: deputies-control-plane
+    spec:
+      serviceAccountName: deputies-control-plane
+      containers:
+        - name: control-plane
+          image: ghcr.io/sidpalas/deputies-control-plane:latest
+          ports:
+            - containerPort: 3583
+          env:
+            - name: PORT
+              value: "3583"
+            - name: RUN_MODE
+              value: "all"
+            - name: RUNNER
+              value: "flue"
+            - name: SANDBOX_PROVIDER
+              value: "kubernetes"
+            - name: KUBERNETES_SANDBOX_IMAGE
+              value: "ghcr.io/sidpalas/deputies-docker-sandbox:latest"
+            - name: KUBERNETES_NAMESPACE
+              value: "deputies"
+            - name: SANDBOX_WORKSPACE_PATH
+              value: "/workspace"
+            - name: APP_DATA_STORE
+              value: "postgres"
+            - name: DATABASE_URL
+              value: "postgres://flue:flue@deputies-postgres:5432/flue"
+            - name: API_AUTH_MODE
+              value: "none"
+            - name: ARTIFACT_STORAGE_PROVIDER
+              value: "disabled"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deputies-control-plane
+  namespace: deputies
+spec:
+  selector:
+    app: deputies-control-plane
+  ports:
+    - port: 3583
+      targetPort: 3583
