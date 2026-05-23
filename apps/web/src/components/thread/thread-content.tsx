@@ -668,7 +668,7 @@ function DiagnosticText(props: { text: string; tone?: 'error' }) {
   return (
     <div
       className={cn(
-        'mt-2 max-h-56 min-w-0 overflow-auto rounded-md border p-2 overscroll-contain',
+        'mt-2 max-h-56 min-w-0 overflow-auto rounded-md border p-2',
         props.tone === 'error' ? 'border-destructive/40 bg-destructive/10' : 'border-border bg-muted/30',
       )}
       aria-label={props.tone === 'error' ? 'Scrollable diagnostic error' : 'Scrollable diagnostic output'}
@@ -682,7 +682,7 @@ function DiagnosticText(props: { text: string; tone?: 'error' }) {
 function DiagnosticCode(props: { code: string; language: string; label: string }) {
   return (
     <div
-      className="mt-2 max-h-56 min-w-0 overflow-auto rounded-md border border-border bg-muted/30 overscroll-contain"
+      className="mt-2 max-h-56 min-w-0 overflow-auto rounded-md border border-border bg-muted/30"
       aria-label={props.label}
       role="region"
     >

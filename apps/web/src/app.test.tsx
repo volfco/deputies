@@ -1883,6 +1883,7 @@ function mockApi(options: MockApiOptions = {}) {
         runMode: 'all',
         apiAuthMode: options.authMode ?? 'none',
         sandboxProvider: options.sandboxProvider ?? 'fake',
+        hideSetupPage: true,
       });
     }
 
