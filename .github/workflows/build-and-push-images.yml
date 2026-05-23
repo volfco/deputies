@@ -28,8 +28,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  SANDBOX_BASE_IMAGE: ghcr.io/sidpalas/deputies-sandbox-base
-  SANDBOX_BASE_REF: ghcr.io/sidpalas/deputies-sandbox-base:sha-${{ github.sha }}
+  SANDBOX_BASE_IMAGE: ghcr.io/volfco/deputies-sandbox-base
+  SANDBOX_BASE_REF: ghcr.io/volfco/deputies-sandbox-base:sha-${{ github.sha }}
 
 jobs:
   validate:
@@ -54,25 +54,25 @@ jobs:
           - name: web
             input: web
             dockerfile: apps/web/Dockerfile
-            image: ghcr.io/sidpalas/deputies-web
+            image: ghcr.io/volfco/deputies-web
             platforms: linux/amd64,linux/arm64
             provenance: true
           - name: control-plane
             input: control_plane
             dockerfile: apps/control-plane/Dockerfile
-            image: ghcr.io/sidpalas/deputies-control-plane
+            image: ghcr.io/volfco/deputies-control-plane
             platforms: linux/amd64,linux/arm64
             provenance: true
           - name: daytona-sandbox
             input: sandbox_images
             dockerfile: deploy/sandboxes/daytona/Dockerfile
-            image: ghcr.io/sidpalas/deputies-daytona-sandbox
+            image: ghcr.io/volfco/deputies-daytona-sandbox
             platforms: linux/amd64
             provenance: false
           - name: docker-sandbox
             input: sandbox_images
             dockerfile: deploy/sandboxes/docker/Dockerfile
-            image: ghcr.io/sidpalas/deputies-docker-sandbox
+            image: ghcr.io/volfco/deputies-docker-sandbox
             platforms: linux/amd64
             provenance: false
 
